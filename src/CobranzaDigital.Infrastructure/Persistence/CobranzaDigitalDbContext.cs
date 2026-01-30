@@ -1,9 +1,12 @@
 using CobranzaDigital.Domain.Entities;
+using CobranzaDigital.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace CobranzaDigital.Infrastructure.Persistence;
 
-public sealed class CobranzaDigitalDbContext : DbContext
+public sealed class CobranzaDigitalDbContext
+    : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>
 {
     public CobranzaDigitalDbContext(DbContextOptions<CobranzaDigitalDbContext> options)
         : base(options)
@@ -14,7 +17,7 @@ public sealed class CobranzaDigitalDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(CobranzaDigitalDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(CobranzaDigitalDbContext).Assembly);
     }
 }
