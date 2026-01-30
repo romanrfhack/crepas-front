@@ -1,9 +1,6 @@
 using CobranzaDigital.Application;
 using CobranzaDigital.Infrastructure;
-using CobranzaDigital.Infrastructure.Options;
-using CobranzaDigital.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
+using CobranzaDigital.Infrastructure.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,33 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure();
-builder.Services.AddOptions<DatabaseOptions>()
-    .BindConfiguration(DatabaseOptions.SectionName)
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-builder.Services.AddDbContext<CobranzaDigitalDbContext>((serviceProvider, options) =>
-{
-    var databaseOptions = serviceProvider.GetRequiredService<IOptions<DatabaseOptions>>().Value;
-    var connectionString = builder.Configuration.GetConnectionString(databaseOptions.ConnectionStringName);
-
-    if (string.IsNullOrWhiteSpace(connectionString))
-    {
-        throw new InvalidOperationException(
-            $"Connection string '{databaseOptions.ConnectionStringName}' was not found.");
-    }
-
-    options.UseSqlServer(connectionString, sqlOptions =>
-    {
-        sqlOptions.EnableRetryOnFailure();
-        sqlOptions.MigrationsAssembly(typeof(CobranzaDigitalDbContext).Assembly.FullName);
-    });
-
-    if (databaseOptions.EnableSensitiveDataLogging)
-    {
-        options.EnableSensitiveDataLogging();
-    }
-});
+builder.Services.AddInfrastructure(builder.Configuration);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
@@ -46,11 +17,13 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
+    await app.Services.SeedIdentityAsync(builder.Configuration);
     app.MapOpenApi();
 }
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
