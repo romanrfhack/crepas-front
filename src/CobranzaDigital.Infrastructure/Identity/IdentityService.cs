@@ -48,7 +48,7 @@ public sealed class IdentityService : IIdentityService
 
         var roles = await _userManager.GetRolesAsync(user);
 
-        return new IdentityUserInfo(user.Id.ToString(), user.Email ?? string.Empty, roles);
+        return new IdentityUserInfo(user.Id.ToString(), user.Email ?? string.Empty, (IReadOnlyCollection<string>)roles);
     }
 
     public async Task<IdentityUserInfo?> GetUserByIdAsync(string userId)
@@ -65,6 +65,6 @@ public sealed class IdentityService : IIdentityService
         }
 
         var roles = await _userManager.GetRolesAsync(user);
-        return new IdentityUserInfo(user.Id.ToString(), user.Email ?? string.Empty, roles);
+        return new IdentityUserInfo(user.Id.ToString(), user.Email ?? string.Empty, (IReadOnlyCollection<string>)roles);
     }
 }
