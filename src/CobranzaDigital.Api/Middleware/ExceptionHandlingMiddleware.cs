@@ -1,9 +1,7 @@
-using CobranzaDigital.Api.Middleware;
 using CobranzaDigital.Application.Common.Exceptions;
 
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 
 using System.Diagnostics;
 
@@ -32,25 +30,25 @@ public sealed class ExceptionHandlingMiddleware
     {
         try
         {
-            await _next(context);
+            await _next(context).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
             var correlationId = GetCorrelationId(context);
 
-            _logger.LogError(
-                exception,
-                "Unhandled exception while processing {Method} {Path}. CorrelationId={CorrelationId}",
+                LogUnhandledException(
+                _logger,
                 context.Request.Method,
-                context.Request.Path,
-                correlationId);
+                context.Request.Path.ToString(),
+                correlationId,
+                exception);
 
             var problemDetails = CreateProblemDetails(context, exception, correlationId);
 
             context.Response.StatusCode = problemDetails.Status ?? StatusCodes.Status500InternalServerError;
             context.Response.ContentType = "application/problem+json";
 
-            await context.Response.WriteAsJsonAsync(problemDetails);
+            await context.Response.WriteAsJsonAsync(problemDetails).ConfigureAwait(false);
         }
     }
 
@@ -94,11 +92,11 @@ public sealed class ExceptionHandlingMiddleware
         return problemDetails;
     }
 
-    private ProblemDetails CreateValidationProblemDetails(HttpContext context, ValidationException exception)
+    private ValidationProblemDetails CreateValidationProblemDetails(HttpContext context, ValidationException exception)
     {
         var validationProblem = _problemDetailsFactory.CreateValidationProblemDetails(
             context,
-            exception.Errors,
+            (Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary)exception.Errors,
             StatusCodes.Status400BadRequest,
             "Validation failed");
 
@@ -115,5 +113,21 @@ public sealed class ExceptionHandlingMiddleware
         return context.Items.TryGetValue(CorrelationIdMiddleware.ItemKey, out var value) && value is string id
             ? id
             : Activity.Current?.Id ?? context.TraceIdentifier;
+    }
+
+    private static readonly Action<ILogger, string, string, string, Exception> _logUnhandledException =
+        LoggerMessage.Define<string, string, string>(
+            LogLevel.Error,
+            new EventId(1, nameof(LogUnhandledException)),
+            "Unhandled exception for {Method} {Path} [CorrelationId: {CorrelationId}]");
+
+    private static void LogUnhandledException(
+        ILogger logger,
+        string method,
+        string path,
+        string correlationId,
+        Exception exception)
+    {
+        _logUnhandledException(logger, method, path, correlationId, exception);
     }
 }
