@@ -1,7 +1,10 @@
+using CobranzaDigital.Application.Contracts.Auth;
+
 namespace CobranzaDigital.Application.Interfaces;
 
 public interface IIdentityService
 {
-    Task<(bool Success, string UserId, IEnumerable<string> Errors)> CreateUserAsync(string userName, string password);
-    Task<bool> CheckPasswordAsync(string userName, string password);
+    Task<(bool Success, string UserId, IEnumerable<string> Errors)> CreateUserAsync(string email, string password);
+    Task<IdentityUserInfo?> ValidateUserAsync(string email, string password);
+    Task<IdentityUserInfo?> GetUserByIdAsync(string userId);
 }

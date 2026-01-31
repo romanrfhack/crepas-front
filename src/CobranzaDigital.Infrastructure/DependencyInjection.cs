@@ -62,6 +62,8 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<CobranzaDigitalDbContext>()
             .AddDefaultTokenProviders();
 
+        services.AddScoped<IIdentityService, IdentityService>();
+        services.AddScoped<ITokenService, JwtTokenService>();
         services.AddTransient<IDateTime, SystemDateTime>();
 
         return services;
