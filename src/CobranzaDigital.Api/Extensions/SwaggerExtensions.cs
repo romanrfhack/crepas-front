@@ -1,9 +1,9 @@
-using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
-using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Asp.Versioning;
 
 namespace CobranzaDigital.Api.Extensions;
 
@@ -84,7 +84,11 @@ public static class SwaggerExtensions
 
             options.DocInclusionPredicate((docName, apiDescription) =>
             {
-                var apiVersionModel = apiDescription.ActionDescriptor?.GetApiVersionModel();
+                var controllerActionDescriptor = apiDescription.ActionDescriptor as ControllerActionDescriptor;                
+                var apiVersionModel = apiDescription.ActionDescriptor?.EndpointMetadata
+                    .OfType<ApiVersionModel>()
+                    .FirstOrDefault();
+
                 if (apiVersionModel is null)
                 {
                     return false;
