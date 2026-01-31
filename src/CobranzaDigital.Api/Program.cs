@@ -1,4 +1,5 @@
 using CobranzaDigital.Api.Middleware;
+using CobranzaDigital.Api.Extensions;
 using CobranzaDigital.Application;
 using CobranzaDigital.Application.Options;
 using CobranzaDigital.Infrastructure;
@@ -8,6 +9,7 @@ using CobranzaDigital.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging.Console;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 
@@ -18,11 +20,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
-builder.Logging.AddJsonConsole(options =>
-{
-    options.IncludeScopes = true;
-    options.TimestampFormat = "O";
-});
+builder.Services.Configure<JsonConsoleFormatterOptions>(
+    builder.Configuration.GetSection("Logging:JsonConsole"));
+builder.Logging.AddJsonConsole();
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails(options =>
@@ -129,6 +129,7 @@ else
     app.UseHsts();
 }
 
+app.UseCorrelationId();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseHttpsRedirection();
@@ -136,6 +137,7 @@ app.UseHttpsRedirection();
 app.UseCors("DefaultCors");
 
 app.UseAuthentication();
+app.UseRequestLogging();
 app.UseAuthorization();
 
 app.MapControllers();
