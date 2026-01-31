@@ -11,8 +11,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
-
 using System.Diagnostics;
 using System.Text;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
@@ -68,6 +66,7 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddApiVersioningWithExplorer();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("DefaultCors", policy =>
@@ -96,30 +95,7 @@ builder.Services.AddHealthChecks()
         "database",
         failureStatus: HealthStatus.Unhealthy,
         tags: ["db", "sql"]);
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "CobranzaDigital API",
-        Version = "v1"
-    });
-
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        In = ParameterLocation.Header,
-        Description = "JWT Authorization header using the Bearer scheme. Example: \"Bearer {token}\"",
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT"
-    });
-
-    // .NET 10 / OpenAPI.NET 2.3+: requirement via delegate + reference helper
-    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-    {
-        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
-    });
-});
+builder.Services.AddSwaggerWithJwt();
 
 builder.Services.AddOptions<JwtOptions>()
     .BindConfiguration(JwtOptions.SectionName)
@@ -153,8 +129,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     await app.Services.SeedIdentityAsync(builder.Configuration).ConfigureAwait(false);
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerWithApiVersioning();
 }
 else
 {
