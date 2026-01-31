@@ -30,6 +30,37 @@ builder.Services.AddProblemDetails(options =>
     {
         context.ProblemDetails.Extensions["traceId"] =
             Activity.Current?.Id ?? context.HttpContext.TraceIdentifier;
+        if (context.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.ItemKey, out var value)
+            && value is string correlationId)
+        {
+            context.ProblemDetails.Extensions["correlationId"] = correlationId;
+        }
+    };
+});
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var problemDetailsFactory = context.HttpContext.RequestServices.GetRequiredService<ProblemDetailsFactory>();
+        var problemDetails = problemDetailsFactory.CreateValidationProblemDetails(
+            context.HttpContext,
+            context.ModelState,
+            StatusCodes.Status400BadRequest,
+            "Validation failed");
+
+        problemDetails.Extensions["traceId"] =
+            Activity.Current?.Id ?? context.HttpContext.TraceIdentifier;
+
+        if (context.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.ItemKey, out var value)
+            && value is string correlationId)
+        {
+            problemDetails.Extensions["correlationId"] = correlationId;
+        }
+
+        return new BadRequestObjectResult(problemDetails)
+        {
+            ContentTypes = { "application/problem+json" }
+        };
     };
 });
 builder.Services.AddApplication();
