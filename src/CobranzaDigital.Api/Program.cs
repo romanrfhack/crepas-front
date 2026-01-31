@@ -7,7 +7,6 @@ using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.IdentityModel.Tokens;
@@ -120,7 +119,7 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    await app.Services.SeedIdentityAsync(builder.Configuration);
+    await app.Services.SeedIdentityAsync(builder.Configuration).ConfigureAwait(false);
     app.UseSwagger();
     app.UseSwaggerUI();
 }
