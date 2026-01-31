@@ -3,6 +3,10 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
 
+		<ItemGroup>
+				<FrameworkReference Include="Microsoft.AspNetCore.App" />
+		</ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\\CobranzaDigital.Application\\CobranzaDigital.Application.csproj" />
     <ProjectReference Include="..\\CobranzaDigital.Domain\\CobranzaDigital.Domain.csproj" />
@@ -15,8 +19,6 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.1" />
+    </PackageReference>        
   </ItemGroup>
 </Project>
