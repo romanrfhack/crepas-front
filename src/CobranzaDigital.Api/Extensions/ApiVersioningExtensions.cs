@@ -1,5 +1,4 @@
 using Asp.Versioning;
-using Asp.Versioning.ApiExplorer;
 
 namespace CobranzaDigital.Api.Extensions;
 
@@ -9,7 +8,7 @@ public static class ApiVersioningExtensions
     {
         services.AddApiVersioning(options =>
             {
-                options.AssumeDefaultVersionWhenUnspecified = true;
+                options.AssumeDefaultVersionWhenUnspecified = true;                                
                 options.DefaultApiVersion = new ApiVersion(1, 0);
                 options.ReportApiVersions = true;
                 options.ApiVersionReader = ApiVersionReader.Combine(

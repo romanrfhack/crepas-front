@@ -1,4 +1,5 @@
 using Asp.Versioning.ApiExplorer;
+using Asp.Versioning;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -22,11 +23,13 @@ public static class SwaggerExtensions
                 BearerFormat = "JWT"
             });
 
-            // .NET 10 / OpenAPI.NET 2.3+: requirement via delegate + reference helper
             options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
             {
                 [new OpenApiSecuritySchemeReference("Bearer", document)] = []
             });
+
+            // IMPORTANTE: Para que funcione con versionado de API
+            //options.EnableAnnotations();
         });
 
         return services;
@@ -69,32 +72,68 @@ public static class SwaggerExtensions
                 var info = new OpenApiInfo
                 {
                     Title = "CobranzaDigital API",
-                    Version = description.ApiVersion.ToString()
+                    Version = description.ApiVersion.ToString(),
+                    Description = description.IsDeprecated
+                        ? "This API version has been deprecated."
+                        : "CobranzaDigital API"
                 };
-
-                if (description.IsDeprecated)
-                {
-                    info.Description = "This API version has been deprecated.";
-                }
 
                 options.SwaggerDoc(description.GroupName, info);
             }
 
+            // FIX: Corregir el DocInclusionPredicate para Asp.Versioning 8.x
             options.DocInclusionPredicate((docName, apiDescription) =>
             {
-                var apiVersionModel = apiDescription.GetApiVersionModel();
-                if (apiVersionModel is null)
+                // OPCIÓN 1: Usar el GroupName ya asignado por ApiExplorer (RECOMENDADO)
+                if (!string.IsNullOrEmpty(apiDescription.GroupName))
                 {
-                    return false;
+                    return apiDescription.GroupName.Equals(docName, StringComparison.OrdinalIgnoreCase);
                 }
 
-                if (apiVersionModel.DeclaredApiVersions.Count > 0)
+                // OPCIÓN 2: Obtener la versión de los metadatos del endpoint
+                var endpointMetadata = apiDescription.ActionDescriptor.EndpointMetadata;
+
+                // Buscar atributos ApiVersion y MapToApiVersion
+                var apiVersions = new List<ApiVersion>();
+
+                // Buscar [ApiVersion]
+                var apiVersionAttributes = endpointMetadata
+                    .OfType<ApiVersionAttribute>()
+                    .SelectMany(attr => attr.Versions);
+
+                // Buscar [MapToApiVersion]
+                var mapToApiVersionAttributes = endpointMetadata
+                    .OfType<MapToApiVersionAttribute>()
+                    .SelectMany(attr => attr.Versions);
+
+                apiVersions.AddRange(apiVersionAttributes);
+                apiVersions.AddRange(mapToApiVersionAttributes);
+
+                // Si no hay versiones específicas, intentar obtener de la ruta/controlador
+                if (apiVersions.Count == 0)
                 {
-                    return apiVersionModel.DeclaredApiVersions.Any(version => $"v{version}" == docName);
+                    // Intentar parsear el docName para obtener la versión
+                    if (docName.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var versionString = docName[1..];                        
+                            // Verificar si este endpoint acepta esta versión
+                            // (esto es una simplificación - en producción necesitarías más lógica)
+                            return true;                        
+                    }
+                }
+                else
+                {
+                    // Verificar si alguna de las versiones coincide con el docName
+                    return apiVersions.Any(v =>
+                        $"v{v}" == docName || v.ToString() == docName);
                 }
 
-                return apiVersionModel.ImplementedApiVersions.Any(version => $"v{version}" == docName);
+                return false;
             });
+
+            // FIX: Asegurar que se respeten las rutas con versiones
+            options.OrderActionsBy((apiDesc) =>
+                $"{apiDesc.RelativePath}");
         }
     }
 }
