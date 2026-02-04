@@ -18,3 +18,6 @@
 *.jpeg binary
 *.ico binary
 *.pdf binary
+
+# Husky hooks must be LF (Git Bash)
+.husky/* text eol=lf

@@ -10,11 +10,11 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) =>
           url: req.url,
           status: err.status,
           message: err.message,
-          error: err.error
+          error: err.error,
         });
       } else {
         console.error('[UNKNOWN ERROR]', err);
       }
       return throwError(() => err);
-    })
+    }),
   );
