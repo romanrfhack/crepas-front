@@ -1,17 +1,20 @@
+# Normaliza a LF en repo; en Windows se convierte según autocrlf
 * text=auto
 
-*.ts    text eol=lf
-*.js    text eol=lf
-*.json  text eol=lf
-*.html  text eol=lf
-*.scss  text eol=lf
-*.css   text eol=lf
-*.md    text eol=lf
-*.yml   text eol=lf
-*.yaml  text eol=lf
+# Archivos que deben mantenerse en LF
+*.ts  text eol=lf
+*.js  text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.scss text eol=lf
+*.css text eol=lf
+*.md  text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
 
-*.png   binary
-*.jpg   binary
-*.jpeg  binary
-*.ico   binary
-*.pdf   binary
+# Binarios
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.pdf binary
