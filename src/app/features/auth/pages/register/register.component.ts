@@ -29,7 +29,7 @@ interface RegisterModel {
               [formField]="fieldTree.email"
               autocomplete="email"
               [attr.aria-invalid]="emailInvalid()"
-              required
+              aria-required="true"
             />
             @if (emailInvalid()) {
               <p class="field-error" role="alert">{{ emailErrorMessage() }}</p>
@@ -43,9 +43,8 @@ interface RegisterModel {
               type="password"
               [formField]="fieldTree.password"
               autocomplete="new-password"
-              minlength="6"
               [attr.aria-invalid]="passwordInvalid()"
-              required
+              aria-required="true"
             />
             @if (passwordInvalid()) {
               <p class="field-error" role="alert">

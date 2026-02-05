@@ -29,7 +29,7 @@ interface LoginModel {
               [formField]="fieldTree.email"
               autocomplete="email"
               [attr.aria-invalid]="emailInvalid()"
-              required
+              [attr.aria-required]="true"
             />
             @if (emailInvalid()) {
               <p class="field-error" role="alert">{{ emailErrorMessage() }}</p>
@@ -43,9 +43,8 @@ interface LoginModel {
               type="password"
               [formField]="fieldTree.password"
               autocomplete="current-password"
-              minlength="6"
               [attr.aria-invalid]="passwordInvalid()"
-              required
+              [attr.aria-required]="true"
             />
             @if (passwordInvalid()) {
               <p class="field-error" role="alert">
