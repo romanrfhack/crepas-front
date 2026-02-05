@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { FormField, email, form, minLength, required } from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -20,7 +28,7 @@ interface LoginModel {
           <p>Ingresa con tus credenciales para continuar.</p>
         </header>
 
-        <form (submit)="onSubmit($event)" class="auth-form">
+        <form (submit)="onSubmit($event)" class="auth-form" novalidate>
           <div class="field">
             <label for="login-email">Correo</label>
             <input
@@ -184,6 +192,14 @@ export class LoginComponent {
     () => this.fieldTree.email().valid() && this.fieldTree.password().valid(),
   );
   readonly submitDisabled = computed(() => this.isSubmitting() || !this.formValid());
+
+  private readonly clearErrorOnModelChange = effect(() => {
+    this.model();
+    const shouldClear = !untracked(() => this.isSubmitting());
+    if (shouldClear && untracked(() => this.errorMessage())) {
+      this.errorMessage.set('');
+    }
+  });
 
   readonly emailInvalid = computed(() => {
     const control = this.fieldTree.email();
