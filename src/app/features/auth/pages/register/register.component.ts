@@ -1,12 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormField, email, form, minLength, required } from '@angular/forms/signals';
 import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
 
+interface RegisterModel {
+  email: string;
+  password: string;
+}
+
 @Component({
   selector: 'app-register',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [FormField, RouterLink],
   template: `
     <main class="auth-container">
       <section class="auth-card" aria-labelledby="register-title">
@@ -15,19 +20,19 @@ import { AuthService } from '../../services/auth.service';
           <p>Completa los datos para registrarte.</p>
         </header>
 
-        <form [formGroup]="form" (ngSubmit)="onSubmit()" class="auth-form">
+        <form (submit)="onSubmit($event)" class="auth-form">
           <div class="field">
             <label for="register-email">Correo</label>
             <input
               id="register-email"
               type="email"
-              formControlName="email"
+              [formField]="fieldTree.email"
               autocomplete="email"
               [attr.aria-invalid]="emailInvalid()"
               required
             />
             @if (emailInvalid()) {
-              <p class="field-error" role="alert">Ingresa un correo válido.</p>
+              <p class="field-error" role="alert">{{ emailErrorMessage() }}</p>
             }
           </div>
 
@@ -36,7 +41,7 @@ import { AuthService } from '../../services/auth.service';
             <input
               id="register-password"
               type="password"
-              formControlName="password"
+              [formField]="fieldTree.password"
               autocomplete="new-password"
               minlength="6"
               [attr.aria-invalid]="passwordInvalid()"
@@ -44,7 +49,7 @@ import { AuthService } from '../../services/auth.service';
             />
             @if (passwordInvalid()) {
               <p class="field-error" role="alert">
-                La contraseña debe tener al menos 6 caracteres.
+                {{ passwordErrorMessage() }}
               </p>
             }
           </div>
@@ -159,35 +164,67 @@ import { AuthService } from '../../services/auth.service';
 export class RegisterComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
-  private readonly formBuilder = inject(FormBuilder);
   readonly isSubmitting = signal(false);
   readonly errorMessage = signal('');
-  readonly form = this.formBuilder.nonNullable.group({
-    email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required, Validators.minLength(6)]],
+  readonly submitted = signal(false);
+  readonly model = signal<RegisterModel>({
+    email: '',
+    password: '',
+  });
+  // Signal Forms is experimental; this new app benefits from native reactive state and validation.
+  readonly fieldTree = form(this.model, (schemaPath) => {
+    required(schemaPath.email, { message: 'Ingresa un correo.' });
+    email(schemaPath.email, { message: 'Ingresa un correo válido.' });
+    required(schemaPath.password, { message: 'Ingresa tu contraseña.' });
+    minLength(schemaPath.password, 6, {
+      message: 'La contraseña debe tener al menos 6 caracteres.',
+    });
   });
 
-  readonly submitDisabled = computed(() => this.isSubmitting() || this.form.invalid);
+  readonly formValid = computed(
+    () => this.fieldTree.email().valid() && this.fieldTree.password().valid(),
+  );
+  readonly submitDisabled = computed(() => this.isSubmitting() || !this.formValid());
 
   readonly emailInvalid = computed(() => {
-    const control = this.form.controls.email;
-    return control.invalid && (control.touched || control.dirty);
+    const control = this.fieldTree.email();
+    const errors = control.errors();
+    return (this.submitted() || control.touched()) && !control.valid() && errors.length > 0;
   });
 
   readonly passwordInvalid = computed(() => {
-    const control = this.form.controls.password;
-    return control.invalid && (control.touched || control.dirty);
+    const control = this.fieldTree.password();
+    const errors = control.errors();
+    return (this.submitted() || control.touched()) && !control.valid() && errors.length > 0;
   });
 
-  onSubmit() {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
+  readonly emailErrorMessage = computed(() => {
+    if (!this.emailInvalid()) {
+      return '';
+    }
+    return this.fieldTree.email().errors()[0]?.message ?? 'Ingresa un correo válido.';
+  });
+
+  readonly passwordErrorMessage = computed(() => {
+    if (!this.passwordInvalid()) {
+      return '';
+    }
+    return (
+      this.fieldTree.password().errors()[0]?.message ??
+      'La contraseña debe tener al menos 6 caracteres.'
+    );
+  });
+
+  onSubmit(event: Event) {
+    event.preventDefault();
+    this.submitted.set(true);
+    if (!this.formValid()) {
       return;
     }
 
     this.errorMessage.set('');
     this.isSubmitting.set(true);
-    const payload = this.form.getRawValue();
+    const payload = this.model();
     this.authService
       .register(payload)
       .pipe(finalize(() => this.isSubmitting.set(false)))
