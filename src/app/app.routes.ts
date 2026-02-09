@@ -20,6 +20,7 @@ export const routes: Routes = [
   {
     path: 'app',
     canMatch: [authGuard],
+    canActivate: [authGuard],
     loadChildren: () =>
       import('./features/app-shell/app-shell.routes').then((m) => m.appShellRoutes),
   },
