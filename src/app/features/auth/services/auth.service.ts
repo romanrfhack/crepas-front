@@ -18,6 +18,7 @@ export class AuthService {
   private readonly accessToken = signal<string | null>(localStorage.getItem(ACCESS_TOKEN_KEY));
   private readonly refreshToken = signal<string | null>(localStorage.getItem(REFRESH_TOKEN_KEY));
   readonly authenticated = computed(() => Boolean(this.accessToken()));
+  readonly isAuthenticatedSig = computed(() => this.authenticated());
 
   login(payload: AuthLoginRequest) {
     return this.apiClient

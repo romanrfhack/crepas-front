@@ -14,7 +14,10 @@ import { AuthService } from '../auth/services/auth.service';
         </div>
         <nav class="nav-actions" aria-label="Acciones principales">
           <a routerLink="/app/dashboard" class="nav-link">Dashboard</a>
-          <button type="button" class="ghost-button" (click)="onLogout()">Cerrar sesión</button>
+          @if (isAuthenticatedSig()) {
+            <span class="session-status" aria-live="polite">Sesión iniciada</span>
+            <button type="button" class="ghost-button" (click)="onLogout()">Cerrar sesión</button>
+          }
         </nav>
       </header>
 
@@ -78,6 +81,11 @@ import { AuthService } from '../auth/services/auth.service';
       font-weight: 600;
       cursor: pointer;
     }
+    .session-status {
+      font-size: 0.95rem;
+      color: #0f172a;
+      font-weight: 600;
+    }
     .app-main {
       flex: 1;
       padding: 2rem;
@@ -90,6 +98,7 @@ import { AuthService } from '../auth/services/auth.service';
 export class AppShellComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  readonly isAuthenticatedSig = this.authService.isAuthenticatedSig;
 
   onLogout() {
     this.authService.logout();
