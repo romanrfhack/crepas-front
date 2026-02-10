@@ -61,14 +61,17 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
         });
     }
 
-    public Task InitializeAsync()
+    public async Task InitializeAsync()
     {
+        _ = Services;
+
         using var scope = Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-        dbContext.Database.EnsureDeleted();
-        dbContext.Database.EnsureCreated();
+        await dbContext.Database.EnsureDeletedAsync();
+        await dbContext.Database.EnsureCreatedAsync();
 
-        return Task.CompletedTask;
+        var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+        await IdentitySeeder.SeedAsync(scope.ServiceProvider, config);
     }
 
     public Task DisposeAsync()
