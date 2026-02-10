@@ -15,6 +15,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Diagnostics;
 using System.Text;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
+using CobranzaDigital.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -123,7 +124,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(AuthorizationPolicies.AdminOnly, policy =>
+        policy.RequireRole("Admin"));
+    options.AddPolicy(AuthorizationPolicies.RequireScope, policy =>
+        policy.RequireClaim("scope", AuthorizationPolicies.RequiredScopeValue));
+});
 
 var app = builder.Build();
 
