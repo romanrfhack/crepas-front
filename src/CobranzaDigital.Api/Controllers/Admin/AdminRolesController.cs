@@ -43,10 +43,10 @@ public sealed class AdminRolesController : ControllerBase
         var roleName = request.Name.Trim();
         if (string.IsNullOrWhiteSpace(roleName))
         {
-            return ValidationProblem(new Dictionary<string, string[]>
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
             {
                 ["name"] = ["Role name is required."]
-            });
+            }));
         }
 
         await _userAdminService.CreateRoleAsync(roleName, cancellationToken);

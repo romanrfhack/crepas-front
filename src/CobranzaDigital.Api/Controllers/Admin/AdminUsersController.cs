@@ -35,10 +35,10 @@ public sealed class AdminUsersController : ControllerBase
     {
         if (page <= 0 || pageSize <= 0)
         {
-            return ValidationProblem(new Dictionary<string, string[]>
+            return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
             {
                 ["pagination"] = ["page and pageSize must be greater than 0."]
-            });
+            }));
         }
 
         var result = await _userAdminService.GetUsersAsync(search, page, pageSize, cancellationToken);
