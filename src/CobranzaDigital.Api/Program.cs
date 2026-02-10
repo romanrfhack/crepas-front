@@ -232,7 +232,10 @@ app.Use(async (context, next) =>
     await next().ConfigureAwait(false);
 });
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("DefaultCors");
 
