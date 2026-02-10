@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import { AuthService } from '../auth/services/auth.service';
 import { GlobalErrorService } from '../../core/services/global-error.service';
@@ -15,6 +15,9 @@ import { GlobalErrorService } from '../../core/services/global-error.service';
         </div>
         <nav class="nav-actions" aria-label="Acciones principales">
           <a routerLink="/app/dashboard" class="nav-link">Dashboard</a>
+          @if (hasAdminRole()) {
+            <a routerLink="/app/admin/users" class="nav-link">Admin</a>
+          }
           @if (isAuthenticatedSig()) {
             <span class="session-status" aria-live="polite">Sesión iniciada</span>
             <button type="button" class="ghost-button" (click)="onLogout()">Cerrar sesión</button>
@@ -143,6 +146,7 @@ export class AppShellComponent {
   private readonly router = inject(Router);
   private readonly globalErrorService = inject(GlobalErrorService);
   readonly isAuthenticatedSig = this.authService.isAuthenticatedSig;
+  readonly hasAdminRole = computed(() => this.authService.hasRole('Admin'));
   readonly globalErrorMessage = this.globalErrorService.message;
 
   onLogout() {

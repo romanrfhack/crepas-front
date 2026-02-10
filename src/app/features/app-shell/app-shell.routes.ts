@@ -14,6 +14,10 @@ export const appShellRoutes: Routes = [
           ),
       },
       {
+        path: 'admin',
+        loadChildren: () => import('../admin/admin.routes').then((m) => m.adminRoutes),
+      },
+      {
         path: '',
         pathMatch: 'full',
         redirectTo: 'dashboard',
