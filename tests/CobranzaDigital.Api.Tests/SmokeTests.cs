@@ -5,6 +5,7 @@ using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,7 +15,7 @@ namespace CobranzaDigital.Api.Tests;
 
 public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly string _sqliteConnectionString = $"Data Source={Path.Combine(Path.GetTempPath(), $"cobranza-tests-{Guid.NewGuid():N}.db")}";
+    private SqliteConnection? _sqliteConnection;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -23,7 +24,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
         {
             var settings = new Dictionary<string, string?>
             {
-                ["ConnectionStrings:SqlServer"] = _sqliteConnectionString,
+                ["ConnectionStrings:SqlServer"] = "DataSource=:memory:;Cache=Shared",
                 ["DatabaseOptions:ConnectionStringName"] = "SqlServer",
                 ["Features:UserAdmin"] = "true",
                 ["IdentitySeed:AdminEmail"] = "admin@test.local",
@@ -38,10 +39,16 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
         {
             services.RemoveAll<DbContextOptions<CobranzaDigitalDbContext>>();
             services.RemoveAll<CobranzaDigitalDbContext>();
+            services.RemoveAll<IDbContextFactory<CobranzaDigitalDbContext>>();
+
+            _sqliteConnection = new SqliteConnection("DataSource=:memory:;Cache=Shared");
+            _sqliteConnection.Open();
+
+            services.AddSingleton(_sqliteConnection);
 
             services.AddDbContext<CobranzaDigitalDbContext>(options =>
             {
-                options.UseSqlite(_sqliteConnectionString);
+                options.UseSqlite(_sqliteConnection);
             });
 
             var serviceProvider = services.BuildServiceProvider();
@@ -56,10 +63,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
     public Task DisposeAsync()
     {
-        if (File.Exists(_sqliteConnectionString.Replace("Data Source=", string.Empty, StringComparison.Ordinal)))
-        {
-            File.Delete(_sqliteConnectionString.Replace("Data Source=", string.Empty, StringComparison.Ordinal));
-        }
+        _sqliteConnection?.Dispose();
 
         return Task.CompletedTask;
     }
