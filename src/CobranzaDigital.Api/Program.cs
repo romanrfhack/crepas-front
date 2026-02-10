@@ -17,7 +17,6 @@ using System.Diagnostics;
 using System.Text;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using CobranzaDigital.Api;
-using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -184,7 +183,7 @@ app.Use(async (context, next) =>
     context.Response.Headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()";
     context.Response.Headers["Content-Security-Policy"] = "frame-ancestors 'none';";
 
-    await next();
+    await next().ConfigureAwait(false);
 });
 
 app.UseHttpsRedirection();

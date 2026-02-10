@@ -28,7 +28,7 @@ public sealed class AdminRolesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetRoles(CancellationToken cancellationToken)
     {
-        var roles = await _userAdminService.GetRolesAsync(cancellationToken);
+        IReadOnlyCollection<string> roles = await _userAdminService.GetRolesAsync(cancellationToken).ConfigureAwait(false);
         return Ok(roles);
     }
 
@@ -49,7 +49,7 @@ public sealed class AdminRolesController : ControllerBase
             }));
         }
 
-        await _userAdminService.CreateRoleAsync(roleName, cancellationToken);
+        await _userAdminService.CreateRoleAsync(roleName, cancellationToken).ConfigureAwait(false);
 
         return CreatedAtAction(nameof(GetRoles), new { }, new { name = roleName });
     }
@@ -63,7 +63,7 @@ public sealed class AdminRolesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeleteRole(string name, CancellationToken cancellationToken)
     {
-        await _userAdminService.DeleteRoleAsync(name, cancellationToken);
+        await _userAdminService.DeleteRoleAsync(name, cancellationToken).ConfigureAwait(false);
         return NoContent();
     }
 }

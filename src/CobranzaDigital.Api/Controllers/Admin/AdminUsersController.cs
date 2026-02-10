@@ -41,7 +41,7 @@ public sealed class AdminUsersController : ControllerBase
             }));
         }
 
-        var result = await _userAdminService.GetUsersAsync(search, page, pageSize, cancellationToken);
+        var result = await _userAdminService.GetUsersAsync(search, page, pageSize, cancellationToken).ConfigureAwait(false);
         return Ok(result);
     }
 
@@ -52,7 +52,7 @@ public sealed class AdminUsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUserById(string id, CancellationToken cancellationToken)
     {
-        var result = await _userAdminService.GetUserByIdAsync(id, cancellationToken);
+        var result = await _userAdminService.GetUserByIdAsync(id, cancellationToken).ConfigureAwait(false);
         return Ok(result);
     }
 
@@ -67,7 +67,7 @@ public sealed class AdminUsersController : ControllerBase
         [FromBody] UpdateUserRolesRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await _userAdminService.ReplaceUserRolesAsync(id, request.Roles, cancellationToken);
+        var result = await _userAdminService.ReplaceUserRolesAsync(id, request.Roles, cancellationToken).ConfigureAwait(false);
         return Ok(result);
     }
 
@@ -81,7 +81,7 @@ public sealed class AdminUsersController : ControllerBase
         [FromBody] SetUserLockRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await _userAdminService.SetUserLockAsync(id, request.Lock, cancellationToken);
+        var result = await _userAdminService.SetUserLockAsync(id, request.Lock, cancellationToken).ConfigureAwait(false);
         return Ok(result);
     }
 }
