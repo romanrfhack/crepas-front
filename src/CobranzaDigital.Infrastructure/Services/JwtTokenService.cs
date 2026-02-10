@@ -43,7 +43,7 @@ public sealed class JwtTokenService : ITokenService
     {
         var now = _dateTime.UtcNow;
         var accessTokenExpiresAt = now.AddMinutes(_jwtOptions.AccessTokenMinutes);
-        var accessToken = await CreateAccessTokenAsync(user, accessTokenExpiresAt, cancellationToken);
+        var accessToken = await CreateAccessTokenAsync(user, accessTokenExpiresAt, cancellationToken).ConfigureAwait(false);
 
         var refreshToken = GenerateRefreshToken();
         var refreshTokenHash = HashToken(refreshToken);
@@ -58,7 +58,7 @@ public sealed class JwtTokenService : ITokenService
         };
 
         _dbContext.RefreshTokens.Add(refreshEntity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return new AuthResponse(accessToken, refreshToken, accessTokenExpiresAt);
     }
@@ -69,7 +69,7 @@ public sealed class JwtTokenService : ITokenService
     {
         var tokenHash = HashToken(refreshToken);
         var storedToken = await _dbContext.RefreshTokens
-            .FirstOrDefaultAsync(token => token.TokenHash == tokenHash, cancellationToken);
+            .FirstOrDefaultAsync(token => token.TokenHash == tokenHash, cancellationToken).ConfigureAwait(false);
 
         if (storedToken is null || storedToken.RevokedAt is not null)
         {
@@ -82,14 +82,14 @@ public sealed class JwtTokenService : ITokenService
             return null;
         }
 
-        var user = await _identityService.GetUserByIdAsync(storedToken.UserId.ToString());
+        var user = await _identityService.GetUserByIdAsync(storedToken.UserId.ToString()).ConfigureAwait(false);
         if (user is null)
         {
             return null;
         }
 
         var accessTokenExpiresAt = now.AddMinutes(_jwtOptions.AccessTokenMinutes);
-        var accessToken = await CreateAccessTokenAsync(user, accessTokenExpiresAt, cancellationToken);
+        var accessToken = await CreateAccessTokenAsync(user, accessTokenExpiresAt, cancellationToken).ConfigureAwait(false);
 
         var newRefreshToken = GenerateRefreshToken();
         var newRefreshTokenHash = HashToken(newRefreshToken);
@@ -107,7 +107,7 @@ public sealed class JwtTokenService : ITokenService
         };
 
         _dbContext.RefreshTokens.Add(refreshEntity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return new AuthResponse(accessToken, newRefreshToken, accessTokenExpiresAt);
     }
@@ -119,7 +119,7 @@ public sealed class JwtTokenService : ITokenService
     {
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.SigningKey));
         var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
-        var roles = await ResolveRolesAsync(user, cancellationToken);
+        var roles = await ResolveRolesAsync(user, cancellationToken).ConfigureAwait(false);
 
         var claims = new List<Claim>
         {
@@ -157,14 +157,14 @@ public sealed class JwtTokenService : ITokenService
             return user.Roles;
         }
 
-        var applicationUser = await _userManager.FindByIdAsync(parsedUserId.ToString());
+        var applicationUser = await _userManager.FindByIdAsync(parsedUserId.ToString()).ConfigureAwait(false);
         if (applicationUser is null)
         {
             return user.Roles;
         }
 
-        var roles = await _userManager.GetRolesAsync(applicationUser);
-        return roles;
+        var roles = await _userManager.GetRolesAsync(applicationUser).ConfigureAwait(false);
+        return (IReadOnlyCollection<string>)roles;
     }
 
     private static string GenerateRefreshToken()
