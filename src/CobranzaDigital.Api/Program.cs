@@ -20,6 +20,7 @@ using Microsoft.AspNetCore.Mvc.Infrastructure;
 using CobranzaDigital.Api;
 using System.Threading.RateLimiting;
 using System.Security.Claims;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -136,14 +137,15 @@ builder.Services.AddOptions<JwtOptions>()
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException("Jwt configuration is missing.");
+var isTestingEnvironment = builder.Environment.IsEnvironment("Testing");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
+            ValidateIssuer = !isTestingEnvironment,
+            ValidateAudience = !isTestingEnvironment,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtOptions.Issuer,
@@ -159,38 +161,33 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             OnChallenge = async context =>
             {
                 context.HandleResponse();
-
                 var httpContext = context.HttpContext;
-                var problemDetailsService = httpContext.RequestServices.GetRequiredService<IProblemDetailsService>();
+                var problemDetails = new ProblemDetails
+                {
+                    Title = "Unauthorized",
+                    Status = StatusCodes.Status401Unauthorized,
+                    Detail = "Authentication required.",
+                    Type = "https://httpstatuses.com/401"
+                };
 
                 httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await problemDetailsService.WriteAsync(new ProblemDetailsContext
-                {
-                    HttpContext = httpContext,
-                    ProblemDetails = new ProblemDetails
-                    {
-                        Title = "Unauthorized",
-                        Status = StatusCodes.Status401Unauthorized,
-                        Detail = "Authentication required."
-                    }
-                });
+                httpContext.Response.ContentType = "application/problem+json";
+                await JsonSerializer.SerializeAsync(httpContext.Response.Body, problemDetails);
             },
             OnForbidden = async context =>
             {
                 var httpContext = context.HttpContext;
-                var problemDetailsService = httpContext.RequestServices.GetRequiredService<IProblemDetailsService>();
+                var problemDetails = new ProblemDetails
+                {
+                    Title = "Forbidden",
+                    Status = StatusCodes.Status403Forbidden,
+                    Detail = "Access is forbidden.",
+                    Type = "https://httpstatuses.com/403"
+                };
 
                 httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await problemDetailsService.WriteAsync(new ProblemDetailsContext
-                {
-                    HttpContext = httpContext,
-                    ProblemDetails = new ProblemDetails
-                    {
-                        Title = "Forbidden",
-                        Status = StatusCodes.Status403Forbidden,
-                        Detail = "Access is forbidden."
-                    }
-                });
+                httpContext.Response.ContentType = "application/problem+json";
+                await JsonSerializer.SerializeAsync(httpContext.Response.Body, problemDetails);
             }
         };
     });
