@@ -1,0 +1,8 @@
+namespace CobranzaDigital.Api;
+
+public static class AuthorizationPolicies
+{
+    public const string AdminOnly = "AdminOnly";
+    public const string RequireScope = "RequireScope";
+    public const string RequiredScopeValue = "cobranza.read";
+}

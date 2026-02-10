@@ -120,6 +120,10 @@ public sealed class JwtTokenService : ITokenService
         };
 
         claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        if (user.Roles.Any(role => string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)))
+        {
+            claims.Add(new Claim("scope", "cobranza.read"));
+        }
 
         var token = new JwtSecurityToken(
             issuer: _jwtOptions.Issuer,
