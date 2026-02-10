@@ -1,0 +1,14 @@
+using CobranzaDigital.Application.Contracts.Admin;
+
+namespace CobranzaDigital.Application.Interfaces;
+
+public interface IUserAdminService
+{
+    Task<PagedResult<AdminUserDto>> GetUsersAsync(string? search, int page, int pageSize, CancellationToken cancellationToken);
+    Task<AdminUserDto> GetUserByIdAsync(string userId, CancellationToken cancellationToken);
+    Task<AdminUserDto> ReplaceUserRolesAsync(string userId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken);
+    Task<AdminUserDto> SetUserLockAsync(string userId, bool lockUser, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<string>> GetRolesAsync(CancellationToken cancellationToken);
+    Task CreateRoleAsync(string roleName, CancellationToken cancellationToken);
+    Task DeleteRoleAsync(string roleName, CancellationToken cancellationToken);
+}

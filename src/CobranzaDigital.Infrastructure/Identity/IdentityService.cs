@@ -6,11 +6,15 @@ namespace CobranzaDigital.Infrastructure.Identity;
 
 public sealed class IdentityService : IIdentityService
 {
-    private readonly UserManager<ApplicationUser> _userManager;
+    private const string DefaultUserRole = "User";
 
-    public IdentityService(UserManager<ApplicationUser> userManager)
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly RoleManager<ApplicationRole> _roleManager;
+
+    public IdentityService(UserManager<ApplicationUser> userManager, RoleManager<ApplicationRole> roleManager)
     {
         _userManager = userManager;
+        _roleManager = roleManager;
     }
 
     public async Task<(bool Success, string UserId, IEnumerable<string> Errors)> CreateUserAsync(
@@ -26,9 +30,30 @@ public sealed class IdentityService : IIdentityService
 
         var result = await _userManager.CreateAsync(user, password);
 
-        return result.Succeeded
-            ? (true, user.Id.ToString(), Array.Empty<string>())
-            : (false, string.Empty, result.Errors.Select(error => error.Description));
+        if (!result.Succeeded)
+        {
+            return (false, string.Empty, result.Errors.Select(error => error.Description));
+        }
+
+        if (!await _roleManager.RoleExistsAsync(DefaultUserRole))
+        {
+            var createRoleResult = await _roleManager.CreateAsync(new ApplicationRole { Name = DefaultUserRole });
+            if (!createRoleResult.Succeeded)
+            {
+                return (false, string.Empty, createRoleResult.Errors.Select(error => error.Description));
+            }
+        }
+
+        if (!await _userManager.IsInRoleAsync(user, DefaultUserRole))
+        {
+            var addRoleResult = await _userManager.AddToRoleAsync(user, DefaultUserRole);
+            if (!addRoleResult.Succeeded)
+            {
+                return (false, string.Empty, addRoleResult.Errors.Select(error => error.Description));
+            }
+        }
+
+        return (true, user.Id.ToString(), Array.Empty<string>());
     }
 
     public async Task<IdentityUserInfo?> ValidateUserAsync(string email, string password)

@@ -1,5 +1,6 @@
 using CobranzaDigital.Api.Middleware;
 using CobranzaDigital.Api.Extensions;
+using CobranzaDigital.Api.FeatureManagement;
 using CobranzaDigital.Application;
 using CobranzaDigital.Application.Options;
 using CobranzaDigital.Infrastructure;
@@ -27,7 +28,11 @@ builder.Services.Configure<JsonConsoleFormatterOptions>(
     builder.Configuration.GetSection("Logging:JsonConsole"));
 builder.Logging.AddJsonConsole();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApplicationPartManager(manager =>
+    {
+        manager.FeatureProviders.Add(new FeatureFlagControllerFeatureProvider(builder.Configuration));
+    });
 builder.Services.AddProblemDetails(options =>
 {
     options.CustomizeProblemDetails = context =>
@@ -158,9 +163,10 @@ builder.Services.AddAuthorization(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+await app.Services.SeedIdentityAsync(builder.Configuration).ConfigureAwait(false);
+
 if (app.Environment.IsDevelopment())
 {
-    await app.Services.SeedIdentityAsync(builder.Configuration).ConfigureAwait(false);
     app.UseSwaggerWithApiVersioning();
 }
 else

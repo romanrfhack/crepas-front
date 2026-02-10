@@ -63,6 +63,7 @@ public static class DependencyInjection
             .AddDefaultTokenProviders();
 
         services.AddScoped<IIdentityService, IdentityService>();
+        services.AddScoped<IUserAdminService, UserAdminService>();
         services.AddScoped<ITokenService, JwtTokenService>();
         services.AddTransient<IDateTime, SystemDateTime>();
 
