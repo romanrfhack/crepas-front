@@ -18,6 +18,7 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using CobranzaDigital.Api;
 using System.Threading.RateLimiting;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -147,7 +148,49 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtOptions.Issuer,
             ValidAudience = jwtOptions.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
-            ClockSkew = TimeSpan.FromSeconds(30)
+            RoleClaimType = ClaimTypes.Role,
+            NameClaimType = JwtRegisteredClaimNames.Sub,
+            ClockSkew = TimeSpan.Zero
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+
+                var httpContext = context.HttpContext;
+                var problemDetailsService = httpContext.RequestServices.GetRequiredService<IProblemDetailsService>();
+
+                httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await problemDetailsService.WriteAsync(new ProblemDetailsContext
+                {
+                    HttpContext = httpContext,
+                    ProblemDetails = new ProblemDetails
+                    {
+                        Title = "Unauthorized",
+                        Status = StatusCodes.Status401Unauthorized,
+                        Detail = "Authentication required."
+                    }
+                });
+            },
+            OnForbidden = async context =>
+            {
+                var httpContext = context.HttpContext;
+                var problemDetailsService = httpContext.RequestServices.GetRequiredService<IProblemDetailsService>();
+
+                httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+                await problemDetailsService.WriteAsync(new ProblemDetailsContext
+                {
+                    HttpContext = httpContext,
+                    ProblemDetails = new ProblemDetails
+                    {
+                        Title = "Forbidden",
+                        Status = StatusCodes.Status403Forbidden,
+                        Detail = "Access is forbidden."
+                    }
+                });
+            }
         };
     });
 
@@ -195,6 +238,7 @@ app.UseCors("DefaultCors");
 
 app.UseRateLimiter();
 
+app.UseRouting();
 app.UseAuthentication();
 app.UseRequestLogging();
 app.UseAuthorization();
