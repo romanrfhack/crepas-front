@@ -8,13 +8,17 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace CobranzaDigital.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment? environment = null)
     {
         services.AddOptions<DatabaseOptions>()
             .BindConfiguration(DatabaseOptions.SectionName)
@@ -24,6 +28,7 @@ public static class DependencyInjection
         services.AddDbContext<CobranzaDigitalDbContext>((serviceProvider, options) =>
         {
             var databaseOptions = serviceProvider.GetRequiredService<IOptions<DatabaseOptions>>().Value;
+            var provider = ResolveProvider(databaseOptions, environment);
             var connectionString = configuration.GetConnectionString(databaseOptions.ConnectionStringName);
 
             if (string.IsNullOrWhiteSpace(connectionString))
@@ -32,11 +37,21 @@ public static class DependencyInjection
                     $"Connection string '{databaseOptions.ConnectionStringName}' was not found.");
             }
 
-            options.UseSqlServer(connectionString, sqlOptions =>
+            if (provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
             {
-                sqlOptions.EnableRetryOnFailure();
-                sqlOptions.MigrationsAssembly(typeof(CobranzaDigitalDbContext).Assembly.FullName);
-            });
+                options.UseSqlite(connectionString, sqliteOptions =>
+                {
+                    sqliteOptions.MigrationsAssembly(typeof(CobranzaDigitalDbContext).Assembly.FullName);
+                });
+            }
+            else
+            {
+                options.UseSqlServer(connectionString, sqlOptions =>
+                {
+                    sqlOptions.EnableRetryOnFailure();
+                    sqlOptions.MigrationsAssembly(typeof(CobranzaDigitalDbContext).Assembly.FullName);
+                });
+            }
 
             if (databaseOptions.EnableSensitiveDataLogging)
             {
@@ -68,5 +83,17 @@ public static class DependencyInjection
         services.AddTransient<IDateTime, SystemDateTime>();
 
         return services;
+    }
+
+    private static string ResolveProvider(DatabaseOptions databaseOptions, IHostEnvironment? environment)
+    {
+        if (environment is not null && environment.IsEnvironment("Testing"))
+        {
+            return "Sqlite";
+        }
+
+        return string.IsNullOrWhiteSpace(databaseOptions.Provider)
+            ? "SqlServer"
+            : databaseOptions.Provider;
     }
 }

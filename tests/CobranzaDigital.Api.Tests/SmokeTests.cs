@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -15,6 +17,7 @@ namespace CobranzaDigital.Api.Tests;
 
 public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    private const string TestSqliteConnectionString = "Data Source=file:cobranzadigital_test?mode=memory&cache=shared";
     private SqliteConnection? _sqliteConnection;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -24,8 +27,9 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
         {
             var settings = new Dictionary<string, string?>
             {
-                ["ConnectionStrings:SqlServer"] = "DataSource=:memory:;Cache=Shared",
-                ["DatabaseOptions:ConnectionStringName"] = "SqlServer",
+                ["ConnectionStrings:Sqlite"] = TestSqliteConnectionString,
+                ["DatabaseOptions:Provider"] = "Sqlite",
+                ["DatabaseOptions:ConnectionStringName"] = "Sqlite",
                 ["Features:UserAdmin"] = "true",
                 ["IdentitySeed:AdminEmail"] = "admin@test.local",
                 ["IdentitySeed:AdminPassword"] = "Admin1234!",
@@ -40,26 +44,32 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             services.RemoveAll<DbContextOptions<CobranzaDigitalDbContext>>();
             services.RemoveAll<CobranzaDigitalDbContext>();
             services.RemoveAll<IDbContextFactory<CobranzaDigitalDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<CobranzaDigitalDbContext>>();
+            services.RemoveAll<DbConnection>();
+            services.RemoveAll<SqliteConnection>();
 
-            _sqliteConnection = new SqliteConnection("DataSource=:memory:;Cache=Shared");
+            _sqliteConnection = new SqliteConnection(TestSqliteConnectionString);
             _sqliteConnection.Open();
 
             services.AddSingleton(_sqliteConnection);
+            services.AddSingleton<DbConnection>(_sqliteConnection);
 
             services.AddDbContext<CobranzaDigitalDbContext>(options =>
             {
                 options.UseSqlite(_sqliteConnection);
             });
-
-            var serviceProvider = services.BuildServiceProvider();
-            using var scope = serviceProvider.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-            dbContext.Database.EnsureDeleted();
-            dbContext.Database.EnsureCreated();
         });
     }
 
-    public Task InitializeAsync() => Task.CompletedTask;
+    public Task InitializeAsync()
+    {
+        using var scope = Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        dbContext.Database.EnsureDeleted();
+        dbContext.Database.EnsureCreated();
+
+        return Task.CompletedTask;
+    }
 
     public Task DisposeAsync()
     {
