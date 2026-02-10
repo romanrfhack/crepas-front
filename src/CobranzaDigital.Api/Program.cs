@@ -7,6 +7,7 @@ using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging.Console;
@@ -91,10 +92,11 @@ builder.Services.AddHsts(options =>
     options.MaxAge = TimeSpan.FromDays(60);
 });
 builder.Services.AddHealthChecks()
+    .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
     .AddDbContextCheck<CobranzaDigitalDbContext>(
         "database",
         failureStatus: HealthStatus.Unhealthy,
-        tags: ["db", "sql"]);
+        tags: ["ready", "db", "sql"]);
 builder.Services.AddSwaggerWithJwt();
 
 builder.Services.AddOptions<JwtOptions>()
@@ -149,5 +151,13 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("live")
+});
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
 
 app.Run();
