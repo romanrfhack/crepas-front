@@ -162,7 +162,10 @@ builder.Services.AddAuthorization(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-await app.Services.SeedIdentityAsync(builder.Configuration).ConfigureAwait(false);
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    await app.Services.SeedIdentityAsync(builder.Configuration).ConfigureAwait(false);
+}
 
 if (app.Environment.IsDevelopment())
 {
