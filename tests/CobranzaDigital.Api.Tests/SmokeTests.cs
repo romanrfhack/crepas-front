@@ -1,7 +1,10 @@
 using System.Data.Common;
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text.Json;
 using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
@@ -112,12 +115,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task AdminUsers_WithNormalUserToken_ReturnsForbidden()
     {
-        var token = await RegisterAndGetAccessTokenAsync("normal.user@test.local", "User1234!");
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/users");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        var response = await _client.SendAsync(request);
+        var accessToken = await RegisterAndGetAccessTokenAsync("normal.user@test.local", "User1234!");
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -125,12 +124,10 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task AdminUsers_WithAdminToken_ReturnsOk()
     {
-        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var accessToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        AssertTokenHasRole(accessToken, "Admin");
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/users");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        var response = await _client.SendAsync(request);
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -140,11 +137,9 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     {
         var _ = await RegisterAndGetAccessTokenAsync("role.check@test.local", "User1234!");
         var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        AssertTokenHasRole(adminToken, "Admin");
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/admin/users?search=role.check@test.local");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
-
-        var response = await _client.SendAsync(request);
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users?search=role.check@test.local", adminToken);
         var payload = await response.Content.ReadFromJsonAsync<PagedResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -160,15 +155,17 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
         Assert.False(string.IsNullOrWhiteSpace(userToken));
 
         var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        AssertTokenHasRole(adminToken, "Admin");
         var userId = await GetUserIdByEmailAsync(adminToken, "empty.roles@test.local");
 
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/admin/users/{userId}/roles")
         {
             Content = JsonContent.Create(new { roles = Array.Empty<string>() })
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        SetBearerAuthorization(adminToken);
 
         var response = await _client.SendAsync(request);
+        _client.DefaultRequestHeaders.Authorization = null;
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -176,10 +173,17 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
     {
         var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        var body = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
+        var rawBody = await response.Content.ReadAsStringAsync();
+
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Expected register to return 200 for {email} but got {(int)response.StatusCode} ({response.StatusCode}). Body: {rawBody}");
+
+        var body = JsonSerializer.Deserialize<AuthTokensResponse>(rawBody, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(body);
+        Assert.False(body!.AccessToken.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase));
 
         return body!.AccessToken;
     }
@@ -187,26 +191,54 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
     {
         var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
-        var body = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
+        var rawBody = await response.Content.ReadAsStringAsync();
+
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"Expected login to return 200 for {email} but got {(int)response.StatusCode} ({response.StatusCode}). Body: {rawBody}");
+
+        var body = JsonSerializer.Deserialize<AuthTokensResponse>(rawBody, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(body);
+        Assert.False(body!.AccessToken.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase));
 
         return body!.AccessToken;
     }
 
     private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/admin/users?search={Uri.EscapeDataString(email)}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
-
-        var response = await _client.SendAsync(request);
+        var response = await GetWithBearerTokenAsync($"/api/v1/admin/users?search={Uri.EscapeDataString(email)}", adminToken);
         var payload = await response.Content.ReadFromJsonAsync<PagedResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
 
         return payload!.Items.Single().Id;
+    }
+
+    private async Task<HttpResponseMessage> GetWithBearerTokenAsync(string uri, string accessToken)
+    {
+        SetBearerAuthorization(accessToken);
+        var response = await _client.GetAsync(uri);
+        _client.DefaultRequestHeaders.Authorization = null;
+
+        return response;
+    }
+
+    private void SetBearerAuthorization(string accessToken)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(accessToken));
+        Assert.False(accessToken.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase));
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+    }
+
+    private static void AssertTokenHasRole(string accessToken, string role)
+    {
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(accessToken);
+        var hasRole = jwt.Claims.Any(claim => claim.Type == ClaimTypes.Role && string.Equals(claim.Value, role, StringComparison.Ordinal));
+
+        Assert.True(hasRole, $"Expected admin JWT to contain role claim '{ClaimTypes.Role}={role}'.");
     }
 
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
