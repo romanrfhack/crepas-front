@@ -16,6 +16,8 @@ using System.Diagnostics;
 using System.Text;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using CobranzaDigital.Api;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -92,6 +94,27 @@ builder.Services.AddHsts(options =>
     options.IncludeSubDomains = true;
     options.MaxAge = TimeSpan.FromDays(60);
 });
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    var permitLimit = builder.Configuration.GetValue<int>("RateLimiting:PermitLimit", 100);
+    var windowSeconds = builder.Configuration.GetValue<int>("RateLimiting:WindowSeconds", 60);
+    var queueLimit = builder.Configuration.GetValue<int>("RateLimiting:QueueLimit", 0);
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var partitionKey = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = permitLimit,
+            Window = TimeSpan.FromSeconds(windowSeconds),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = queueLimit
+        });
+    });
+});
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
     .AddDbContextCheck<CobranzaDigitalDbContext>(
@@ -147,10 +170,22 @@ else
 
 app.UseCorrelationId();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    context.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()";
+    context.Response.Headers["Content-Security-Policy"] = "frame-ancestors 'none';";
+
+    await next();
+});
 
 app.UseHttpsRedirection();
 
 app.UseCors("DefaultCors");
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseRequestLogging();
