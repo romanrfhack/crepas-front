@@ -7,6 +7,8 @@ using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Options;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
+using CobranzaDigital.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -18,17 +20,20 @@ public sealed class JwtTokenService : ITokenService
     private readonly CobranzaDigitalDbContext _dbContext;
     private readonly IDateTime _dateTime;
     private readonly IIdentityService _identityService;
+    private readonly UserManager<ApplicationUser> _userManager;
     private readonly JwtOptions _jwtOptions;
 
     public JwtTokenService(
         CobranzaDigitalDbContext dbContext,
         IDateTime dateTime,
         IIdentityService identityService,
+        UserManager<ApplicationUser> userManager,
         IOptions<JwtOptions> jwtOptions)
     {
         _dbContext = dbContext;
         _dateTime = dateTime;
         _identityService = identityService;
+        _userManager = userManager;
         _jwtOptions = jwtOptions.Value;
     }
 
@@ -38,7 +43,7 @@ public sealed class JwtTokenService : ITokenService
     {
         var now = _dateTime.UtcNow;
         var accessTokenExpiresAt = now.AddMinutes(_jwtOptions.AccessTokenMinutes);
-        var accessToken = CreateAccessToken(user, accessTokenExpiresAt);
+        var accessToken = await CreateAccessTokenAsync(user, accessTokenExpiresAt, cancellationToken);
 
         var refreshToken = GenerateRefreshToken();
         var refreshTokenHash = HashToken(refreshToken);
@@ -84,7 +89,7 @@ public sealed class JwtTokenService : ITokenService
         }
 
         var accessTokenExpiresAt = now.AddMinutes(_jwtOptions.AccessTokenMinutes);
-        var accessToken = CreateAccessToken(user, accessTokenExpiresAt);
+        var accessToken = await CreateAccessTokenAsync(user, accessTokenExpiresAt, cancellationToken);
 
         var newRefreshToken = GenerateRefreshToken();
         var newRefreshTokenHash = HashToken(newRefreshToken);
@@ -107,20 +112,25 @@ public sealed class JwtTokenService : ITokenService
         return new AuthResponse(accessToken, newRefreshToken, accessTokenExpiresAt);
     }
 
-    private string CreateAccessToken(IdentityUserInfo user, DateTime expiresAt)
+    private async Task<string> CreateAccessTokenAsync(
+        IdentityUserInfo user,
+        DateTime expiresAt,
+        CancellationToken cancellationToken)
     {
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.SigningKey));
         var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
+        var roles = await ResolveRolesAsync(user, cancellationToken);
 
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.UserId),
             new(JwtRegisteredClaimNames.Email, user.Email),
+            new(ClaimTypes.NameIdentifier, user.UserId),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
-        claims.AddRange(user.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
-        if (user.Roles.Any(role => string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)))
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        if (roles.Any(role => string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)))
         {
             claims.Add(new Claim("scope", "cobranza.read"));
         }
@@ -134,6 +144,27 @@ public sealed class JwtTokenService : ITokenService
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private async Task<IReadOnlyCollection<string>> ResolveRolesAsync(
+        IdentityUserInfo user,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!Guid.TryParse(user.UserId, out var parsedUserId))
+        {
+            return user.Roles;
+        }
+
+        var applicationUser = await _userManager.FindByIdAsync(parsedUserId.ToString());
+        if (applicationUser is null)
+        {
+            return user.Roles;
+        }
+
+        var roles = await _userManager.GetRolesAsync(applicationUser);
+        return roles;
     }
 
     private static string GenerateRefreshToken()
