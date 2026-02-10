@@ -207,12 +207,13 @@ public sealed class UserAdminService : IUserAdminService
     private async Task<AdminUserDto> MapUserAsync(ApplicationUser user)
     {
         var roles = await _userManager.GetRolesAsync(user);
+        var rolesRo = roles?.ToArray() ?? Array.Empty<string>();
 
         return new AdminUserDto(
             user.Id.ToString(),
             user.Email ?? string.Empty,
             user.UserName ?? string.Empty,
-            roles,
+            rolesRo,
             user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTimeOffset.UtcNow,
             user.LockoutEnd);
     }
