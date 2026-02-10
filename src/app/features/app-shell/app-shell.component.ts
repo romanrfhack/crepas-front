@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import { AuthService } from '../auth/services/auth.service';
+import { GlobalErrorService } from '../../core/services/global-error.service';
 
 @Component({
   selector: 'app-shell',
@@ -21,7 +22,19 @@ import { AuthService } from '../auth/services/auth.service';
         </nav>
       </header>
 
-      <main class="app-main">
+      @if (globalErrorMessage()) {
+        <section class="global-error" role="alert" aria-live="assertive">
+          <div class="global-error__content">
+            <strong>Algo salió mal.</strong>
+            <span>{{ globalErrorMessage() }}</span>
+          </div>
+          <button type="button" class="global-error__dismiss" (click)="onDismissError()">
+            Cerrar
+          </button>
+        </section>
+      }
+
+      <main class="app-main" aria-live="polite">
         <router-outlet />
       </main>
     </div>
@@ -92,16 +105,52 @@ import { AuthService } from '../auth/services/auth.service';
       display: flex;
       justify-content: center;
     }
+    .global-error {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin: 1.5rem 2rem 0;
+      padding: 1rem 1.5rem;
+      border-radius: 0.75rem;
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      color: #7f1d1d;
+      font-weight: 600;
+    }
+    .global-error__content {
+      display: grid;
+      gap: 0.25rem;
+    }
+    .global-error__dismiss {
+      border: 1px solid #fca5a5;
+      background: #ffffff;
+      color: #7f1d1d;
+      border-radius: 999px;
+      padding: 0.4rem 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .global-error__dismiss:focus-visible {
+      outline: 3px solid #f87171;
+      outline-offset: 2px;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AppShellComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly globalErrorService = inject(GlobalErrorService);
   readonly isAuthenticatedSig = this.authService.isAuthenticatedSig;
+  readonly globalErrorMessage = this.globalErrorService.message;
 
   onLogout() {
     this.authService.logout();
     void this.router.navigateByUrl('/login');
+  }
+
+  onDismissError() {
+    this.globalErrorService.clear();
   }
 }
