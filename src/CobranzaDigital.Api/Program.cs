@@ -7,20 +7,14 @@ using CobranzaDigital.Infrastructure;
 using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging.Console;
-using Microsoft.IdentityModel.Tokens;
 using System.Diagnostics;
-using System.Text;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using CobranzaDigital.Api;
 using System.Threading.RateLimiting;
-using System.Security.Claims;
-using System.Text.Json;
-using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -130,79 +124,7 @@ builder.Services.AddHealthChecks()
         tags: ["ready", "db", "sql"]);
 builder.Services.AddSwaggerWithJwt();
 
-builder.Services.AddOptions<JwtOptions>()
-    .BindConfiguration(JwtOptions.SectionName)
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-
-var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
-    ?? throw new InvalidOperationException("Jwt configuration is missing.");
-var isTestingEnvironment = builder.Environment.IsEnvironment("Testing");
-
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = !isTestingEnvironment,
-            ValidateAudience = !isTestingEnvironment,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtOptions.Issuer,
-            ValidAudience = jwtOptions.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
-            RoleClaimType = ClaimTypes.Role,
-            NameClaimType = ClaimTypes.NameIdentifier,
-            ClockSkew = TimeSpan.FromMinutes(1)
-        };
-
-        options.Events = new JwtBearerEvents
-        {
-            OnChallenge = async context =>
-            {
-                context.HandleResponse();
-                var httpContext = context.HttpContext;
-                var problemDetails = new ProblemDetails
-                {
-                    Title = "Unauthorized",
-                    Status = StatusCodes.Status401Unauthorized,
-                    Detail = "Authentication required.",
-                    Type = "https://httpstatuses.com/401"
-                };
-
-                httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                httpContext.Response.ContentType = "application/problem+json";
-                await JsonSerializer.SerializeAsync(httpContext.Response.Body, problemDetails).ConfigureAwait(false);
-            },
-            OnForbidden = async context =>
-            {
-                var httpContext = context.HttpContext;
-                var problemDetails = new ProblemDetails
-                {
-                    Title = "Forbidden",
-                    Status = StatusCodes.Status403Forbidden,
-                    Detail = "Access is forbidden.",
-                    Type = "https://httpstatuses.com/403"
-                };
-
-                httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
-                httpContext.Response.ContentType = "application/problem+json";
-                await JsonSerializer.SerializeAsync(httpContext.Response.Body, problemDetails).ConfigureAwait(false);
-            }
-        };
-    });
-
-builder.Services.PostConfigure<AuthenticationOptions>(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-});
+builder.Services.AddJwtConfiguration(builder.Configuration, builder.Environment);
 
 builder.Services.AddAuthorization(options =>
 {
@@ -213,6 +135,19 @@ builder.Services.AddAuthorization(options =>
 });
 
 var app = builder.Build();
+
+var jwtLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("JwtStartup");
+if (app.Environment.IsEnvironment("Testing") || jwtLogger.IsEnabled(LogLevel.Debug))
+{
+    var effectiveJwtOptions = app.Services.GetRequiredService<IOptions<JwtOptions>>().Value;
+    jwtLogger.LogDebug(
+        "Effective JWT options. Issuer='{Issuer}', Audience='{Audience}', SigningKeyLength={SigningKeyLength}, AccessTokenMinutes={AccessTokenMinutes}, RefreshTokenDays={RefreshTokenDays}",
+        effectiveJwtOptions.Issuer,
+        effectiveJwtOptions.Audience,
+        effectiveJwtOptions.SigningKey.Length,
+        effectiveJwtOptions.AccessTokenMinutes,
+        effectiveJwtOptions.RefreshTokenDays);
+}
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsEnvironment("Testing"))

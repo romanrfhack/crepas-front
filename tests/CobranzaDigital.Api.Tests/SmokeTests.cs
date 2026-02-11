@@ -6,6 +6,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Options;
 using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
@@ -305,6 +306,27 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
+
+    [Fact]
+    public async Task TokenIssuedByJwtTokenServiceIsAcceptedByJwtBearer()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var tokenService = scope.ServiceProvider.GetRequiredService<ITokenService>();
+        var adminUser = await dbContext.Users
+            .AsNoTracking()
+            .SingleAsync(user => user.Email == "admin@test.local")
+            .ConfigureAwait(false);
+
+        var authResponse = await tokenService.CreateTokensAsync(
+            new IdentityUserInfo(adminUser.Id.ToString(), adminUser.Email!, Array.Empty<string>()))
+            .ConfigureAwait(false);
+
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", authResponse.AccessToken).ConfigureAwait(false);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
 
     [Fact]
     public void AuthEndpointsAreAllowAnonymousAndNoFallbackPolicy()
