@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Security.Claims;
 
-using Microsoft.Extensions.Logging;
 
 namespace CobranzaDigital.Api.Middleware;
 
@@ -23,11 +22,7 @@ public sealed class RequestLoggingMiddleware
         var path = context.Request.Path.HasValue ? context.Request.Path.Value : "/";
         var userId = GetUserId(context.User);
 
-        _logger.LogInformation(
-            "Request started {Method} {Path} UserId={UserId}",
-            method,
-            path,
-            userId ?? "anonymous");
+        LogMessages.RequestStarted(_logger, method, path, userId ?? "anonymous");
 
         try
         {
@@ -40,13 +35,7 @@ public sealed class RequestLoggingMiddleware
 
             userId = GetUserId(context.User);
 
-            _logger.LogInformation(
-                "Request finished {Method} {Path} StatusCode={StatusCode} DurationMs={DurationMs} UserId={UserId}",
-                method,
-                path,
-                statusCode,
-                stopwatch.ElapsedMilliseconds,
-                userId ?? "anonymous");
+            LogMessages.RequestFinished(_logger, method, path, statusCode, stopwatch.ElapsedMilliseconds, userId ?? "anonymous");
         }
     }
 
@@ -54,5 +43,14 @@ public sealed class RequestLoggingMiddleware
     {
         return user?.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? user?.FindFirst("sub")?.Value;
+    }
+
+    private static partial class LogMessages
+    {
+        [LoggerMessage(Level = LogLevel.Information, Message = "Request started {Method} {Path} UserId={UserId}")]
+        public static partial void RequestStarted(ILogger logger, string method, string? path, string userId);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "Request finished {Method} {Path} StatusCode={StatusCode} DurationMs={DurationMs} UserId={UserId}")]
+        public static partial void RequestFinished(ILogger logger, string method, string? path, int? statusCode, long durationMs, string userId);
     }
 }

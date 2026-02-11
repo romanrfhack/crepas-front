@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace CobranzaDigital.Api.Middleware;
 
 public sealed class CorrelationIdMiddleware
