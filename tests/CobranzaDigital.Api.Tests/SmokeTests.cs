@@ -171,11 +171,16 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
         }
     }
 
-    public override ValueTask DisposeAsync()
+    public override async ValueTask DisposeAsync()
     {
         _sqliteConnection?.Dispose();
 
-        return base.DisposeAsync();
+        await base.DisposeAsync();
+    }
+
+    async Task IAsyncLifetime.DisposeAsync()
+    {
+        await DisposeAsync();
     }
 }
 
