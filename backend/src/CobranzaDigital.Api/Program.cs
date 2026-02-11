@@ -15,6 +15,7 @@ using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using CobranzaDigital.Api;
+using CobranzaDigital.Api.Observability;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -126,6 +127,9 @@ builder.Services.AddHealthChecks()
 builder.Services.AddSwaggerWithJwt();
 
 builder.Services.AddJwtConfiguration(builder.Configuration, builder.Environment);
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IAuditRequestContextAccessor, HttpAuditRequestContextAccessor>();
 
 builder.Services.AddAuthorization(options =>
 {

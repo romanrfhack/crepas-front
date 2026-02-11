@@ -1,4 +1,6 @@
+using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Interfaces;
+using CobranzaDigital.Infrastructure.Auditing;
 using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Options;
 using CobranzaDigital.Infrastructure.Persistence;
@@ -78,6 +80,7 @@ public static class DependencyInjection
             .AddDefaultTokenProviders();
 
         services.AddScoped<IIdentityService, IdentityService>();
+        services.AddScoped<IAuditLogger, AuditLogger>();
         services.AddScoped<IUserAdminService, UserAdminService>();
         services.AddScoped<ITokenService, JwtTokenService>();
         services.AddTransient<IDateTime, SystemDateTime>();
