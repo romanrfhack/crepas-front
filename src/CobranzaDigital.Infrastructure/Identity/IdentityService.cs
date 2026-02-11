@@ -28,25 +28,25 @@ public sealed class IdentityService : IIdentityService
             Email = email
         };
 
-        var result = await _userManager.CreateAsync(user, password);
+        var result = await _userManager.CreateAsync(user, password).ConfigureAwait(false);
 
         if (!result.Succeeded)
         {
             return (false, string.Empty, result.Errors.Select(error => error.Description));
         }
 
-        if (!await _roleManager.RoleExistsAsync(DefaultUserRole))
+        if (!await _roleManager.RoleExistsAsync(DefaultUserRole).ConfigureAwait(false))
         {
-            var createRoleResult = await _roleManager.CreateAsync(new ApplicationRole { Name = DefaultUserRole });
+            var createRoleResult = await _roleManager.CreateAsync(new ApplicationRole { Name = DefaultUserRole }).ConfigureAwait(false);
             if (!createRoleResult.Succeeded)
             {
                 return (false, string.Empty, createRoleResult.Errors.Select(error => error.Description));
             }
         }
 
-        if (!await _userManager.IsInRoleAsync(user, DefaultUserRole))
+        if (!await _userManager.IsInRoleAsync(user, DefaultUserRole).ConfigureAwait(false))
         {
-            var addRoleResult = await _userManager.AddToRoleAsync(user, DefaultUserRole);
+            var addRoleResult = await _userManager.AddToRoleAsync(user, DefaultUserRole).ConfigureAwait(false);
             if (!addRoleResult.Succeeded)
             {
                 return (false, string.Empty, addRoleResult.Errors.Select(error => error.Description));
@@ -58,20 +58,20 @@ public sealed class IdentityService : IIdentityService
 
     public async Task<IdentityUserInfo?> ValidateUserAsync(string email, string password)
     {
-        var user = await _userManager.FindByEmailAsync(email);
+        var user = await _userManager.FindByEmailAsync(email).ConfigureAwait(false);
 
         if (user is null)
         {
             return null;
         }
 
-        var isValid = await _userManager.CheckPasswordAsync(user, password);
+        var isValid = await _userManager.CheckPasswordAsync(user, password).ConfigureAwait(false);
         if (!isValid)
         {
             return null;
         }
 
-        var roles = await _userManager.GetRolesAsync(user);
+        var roles = await _userManager.GetRolesAsync(user).ConfigureAwait(false);
 
         return new IdentityUserInfo(user.Id.ToString(), user.Email ?? string.Empty, (IReadOnlyCollection<string>)roles);
     }
@@ -83,13 +83,13 @@ public sealed class IdentityService : IIdentityService
             return null;
         }
 
-        var user = await _userManager.FindByIdAsync(id.ToString());
+        var user = await _userManager.FindByIdAsync(id.ToString()).ConfigureAwait(false);
         if (user is null)
         {
             return null;
         }
 
-        var roles = await _userManager.GetRolesAsync(user);
+        var roles = await _userManager.GetRolesAsync(user).ConfigureAwait(false);
         return new IdentityUserInfo(user.Id.ToString(), user.Email ?? string.Empty, (IReadOnlyCollection<string>)roles);
     }
 }

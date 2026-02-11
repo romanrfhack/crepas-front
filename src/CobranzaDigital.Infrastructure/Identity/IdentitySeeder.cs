@@ -19,9 +19,9 @@ public static class IdentitySeeder
 
         foreach (var roleName in DefaultRoles)
         {
-            if (!await roleManager.RoleExistsAsync(roleName))
+            if (!await roleManager.RoleExistsAsync(roleName).ConfigureAwait(false))
             {
-                var roleResult = await roleManager.CreateAsync(new ApplicationRole { Name = roleName });
+                var roleResult = await roleManager.CreateAsync(new ApplicationRole { Name = roleName }).ConfigureAwait(false);
                 if (!roleResult.Succeeded)
                 {
                     logger.LogWarning("Failed to create role {RoleName}: {Errors}", roleName, roleResult.Errors);
@@ -39,7 +39,7 @@ public static class IdentitySeeder
             return;
         }
 
-        var adminUser = await userManager.FindByEmailAsync(adminEmail);
+        var adminUser = await userManager.FindByEmailAsync(adminEmail).ConfigureAwait(false);
         if (adminUser is null)
         {
             adminUser = new ApplicationUser
@@ -49,7 +49,7 @@ public static class IdentitySeeder
                 EmailConfirmed = true
             };
 
-            var createResult = await userManager.CreateAsync(adminUser, adminPassword);
+            var createResult = await userManager.CreateAsync(adminUser, adminPassword).ConfigureAwait(false);
             if (!createResult.Succeeded)
             {
                 logger.LogWarning("Failed to create admin user: {Errors}", createResult.Errors);
@@ -57,9 +57,9 @@ public static class IdentitySeeder
             }
         }
 
-        if (!await userManager.IsInRoleAsync(adminUser, "Admin"))
+        if (!await userManager.IsInRoleAsync(adminUser, "Admin").ConfigureAwait(false))
         {
-            var addRoleResult = await userManager.AddToRoleAsync(adminUser, "Admin");
+            var addRoleResult = await userManager.AddToRoleAsync(adminUser, "Admin").ConfigureAwait(false);
             if (!addRoleResult.Succeeded)
             {
                 logger.LogWarning("Failed to add admin user to Admin role: {Errors}", addRoleResult.Errors);

@@ -124,16 +124,16 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
         using var scope = Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-        await dbContext.Database.EnsureDeletedAsync();
-        await dbContext.Database.EnsureCreatedAsync();
+        await dbContext.Database.EnsureDeletedAsync().ConfigureAwait(false);
+        await dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
 
         var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-        await IdentitySeeder.SeedAsync(scope.ServiceProvider, config);
+        await IdentitySeeder.SeedAsync(scope.ServiceProvider, config).ConfigureAwait(false);
 
         var jwtOptions = scope.ServiceProvider.GetRequiredService<IOptions<JwtOptions>>().Value;
         var schemeProvider = scope.ServiceProvider.GetRequiredService<IAuthenticationSchemeProvider>();
-        var defaultAuthenticate = await schemeProvider.GetDefaultAuthenticateSchemeAsync();
-        var defaultChallenge = await schemeProvider.GetDefaultChallengeSchemeAsync();
+        var defaultAuthenticate = await schemeProvider.GetDefaultAuthenticateSchemeAsync().ConfigureAwait(false);
+        var defaultChallenge = await schemeProvider.GetDefaultChallengeSchemeAsync().ConfigureAwait(false);
 
         Console.WriteLine(
             $"[test-host] Jwt effective config: Issuer='{jwtOptions.Issuer}', Audience='{jwtOptions.Audience}', SigningKeyLength={jwtOptions.SigningKey.Length}, AccessTokenMinutes={jwtOptions.AccessTokenMinutes}, RefreshTokenDays={jwtOptions.RefreshTokenDays}");
@@ -193,7 +193,7 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task LiveHealth_ReturnsOk()
     {
-        var response = await _client.GetAsync("/health/live");
+        var response = await _client.GetAsync("/health/live").ConfigureAwait(false);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -201,8 +201,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task AdminUsers_WithoutToken_ReturnsUnauthorized()
     {
-        var response = await _client.GetAsync("/api/v1/admin/users");
-        await LogUnauthorizedResponseAsync(response, "/api/v1/admin/users", authorizationHeader: null);
+        var response = await _client.GetAsync("/api/v1/admin/users").ConfigureAwait(false);
+        await LogUnauthorizedResponseAsync(response, "/api/v1/admin/users", authorizationHeader: null).ConfigureAwait(false);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -259,8 +259,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task AdminUsers_WithNormalUserToken_ReturnsForbidden()
     {
-        var accessToken = await RegisterAndGetAccessTokenAsync("normal.user@test.local", "User1234!");
-        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken);
+        var accessToken = await RegisterAndGetAccessTokenAsync("normal.user@test.local", "User1234!").ConfigureAwait(false);
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken).ConfigureAwait(false);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -268,10 +268,10 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task AdminUsers_WithAdminToken_ReturnsOk()
     {
-        var accessToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var accessToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
         AssertTokenHasRole(accessToken, "Admin");
 
-        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken);
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken).ConfigureAwait(false);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -279,12 +279,12 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task Register_AssignsUserRole()
     {
-        var _ = await RegisterAndGetAccessTokenAsync("role.check@test.local", "User1234!");
-        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var _ = await RegisterAndGetAccessTokenAsync("role.check@test.local", "User1234!").ConfigureAwait(false);
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
         AssertTokenHasRole(adminToken, "Admin");
 
-        var response = await GetWithBearerTokenAsync("/api/v1/admin/users?search=role.check@test.local", adminToken);
-        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>();
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users?search=role.check@test.local", adminToken).ConfigureAwait(false);
+        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>().ConfigureAwait(false);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
@@ -295,12 +295,12 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task PutRoles_WithEmptyRoles_ReturnsBadRequest()
     {
-        var userToken = await RegisterAndGetAccessTokenAsync("empty.roles@test.local", "User1234!");
+        var userToken = await RegisterAndGetAccessTokenAsync("empty.roles@test.local", "User1234!").ConfigureAwait(false);
         Assert.False(string.IsNullOrWhiteSpace(userToken));
 
-        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
         AssertTokenHasRole(adminToken, "Admin");
-        var userId = await GetUserIdByEmailAsync(adminToken, "empty.roles@test.local");
+        var userId = await GetUserIdByEmailAsync(adminToken, "empty.roles@test.local").ConfigureAwait(false);
 
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/admin/users/{userId}/roles")
         {
@@ -309,8 +309,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
         SetBearerAuthorization(adminToken);
         var authorizationHeader = _client.DefaultRequestHeaders.Authorization?.ToString();
 
-        var response = await _client.SendAsync(request);
-        await LogUnauthorizedResponseAsync(response, $"/api/v1/admin/users/{userId}/roles", authorizationHeader);
+        var response = await _client.SendAsync(request).ConfigureAwait(false);
+        await LogUnauthorizedResponseAsync(response, $"/api/v1/admin/users/{userId}/roles", authorizationHeader).ConfigureAwait(false);
         _client.DefaultRequestHeaders.Authorization = null;
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -318,9 +318,9 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        await LogUnauthorizedResponseAsync(response, "/api/v1/auth/register", authorizationHeader: null);
-        var rawBody = await response.Content.ReadAsStringAsync();
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password }).ConfigureAwait(false);
+        await LogUnauthorizedResponseAsync(response, "/api/v1/auth/register", authorizationHeader: null).ConfigureAwait(false);
+        var rawBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
         Assert.True(
             response.IsSuccessStatusCode,
@@ -337,9 +337,9 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
-        await LogUnauthorizedResponseAsync(response, "/api/v1/auth/login", authorizationHeader: null);
-        var rawBody = await response.Content.ReadAsStringAsync();
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password }).ConfigureAwait(false);
+        await LogUnauthorizedResponseAsync(response, "/api/v1/auth/login", authorizationHeader: null).ConfigureAwait(false);
+        var rawBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
         Assert.True(
             response.IsSuccessStatusCode,
@@ -356,8 +356,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 
     private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)
     {
-        var response = await GetWithBearerTokenAsync($"/api/v1/admin/users?search={Uri.EscapeDataString(email)}", adminToken);
-        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>();
+        var response = await GetWithBearerTokenAsync($"/api/v1/admin/users?search={Uri.EscapeDataString(email)}", adminToken).ConfigureAwait(false);
+        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>().ConfigureAwait(false);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
@@ -369,8 +369,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     {
         SetBearerAuthorization(accessToken);
         var authorizationHeader = _client.DefaultRequestHeaders.Authorization?.ToString();
-        var response = await _client.GetAsync(uri);
-        await LogUnauthorizedResponseAsync(response, uri, authorizationHeader);
+        var response = await _client.GetAsync(uri).ConfigureAwait(false);
+        await LogUnauthorizedResponseAsync(response, uri, authorizationHeader).ConfigureAwait(false);
         _client.DefaultRequestHeaders.Authorization = null;
 
         return response;
@@ -390,7 +390,7 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
             return;
         }
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         var wwwAuthenticate = string.Join(" | ", response.Headers.WwwAuthenticate.Select(value => value.ToString()));
 
         var authSummary = authorizationHeader is null

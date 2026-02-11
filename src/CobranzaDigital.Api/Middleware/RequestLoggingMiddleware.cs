@@ -31,7 +31,7 @@ public sealed class RequestLoggingMiddleware
 
         try
         {
-            await _next(context);
+            await _next(context).ConfigureAwait(false);
         }
         finally
         {
