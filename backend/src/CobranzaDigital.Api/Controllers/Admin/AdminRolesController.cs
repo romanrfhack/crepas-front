@@ -22,6 +22,11 @@ public sealed class AdminRolesController : ControllerBase
     private readonly IAuditLogger _auditLogger;
     private readonly IAuditRequestContextAccessor _auditRequestContextAccessor;
     private readonly ILogger<AdminRolesController> _logger;
+    private static readonly Action<ILogger, string, string, string, string?, Guid?, Exception?> _logAuditWritten =
+        LoggerMessage.Define<string, string, string, string, Guid?>(
+            LogLevel.Information,
+            new EventId(1, nameof(LogAuditWritten)),
+            "audit_log_written action={Action} entity={EntityType} entityId={EntityId} correlationId={CorrelationId} userId={UserId}");
 
     public AdminRolesController(
         IUserAdminService userAdminService,
@@ -80,13 +85,7 @@ public sealed class AdminRolesController : ControllerBase
                 Notes: null),
             cancellationToken).ConfigureAwait(false);
 
-        _logger.LogInformation(
-            "audit_log_written action={Action} entity={EntityType} entityId={EntityId} correlationId={CorrelationId} userId={UserId}",
-            AuditActions.CreateRole,
-            "Role",
-            roleName,
-            correlationId,
-            userId);
+        LogAuditWritten(_logger, AuditActions.CreateRole, "Role", roleName, correlationId, userId);
 
         return CreatedAtAction(nameof(GetRoles), new { }, new { name = roleName });
     }
@@ -118,16 +117,21 @@ public sealed class AdminRolesController : ControllerBase
                 Notes: null),
             cancellationToken).ConfigureAwait(false);
 
-        _logger.LogInformation(
-            "audit_log_written action={Action} entity={EntityType} entityId={EntityId} correlationId={CorrelationId} userId={UserId}",
-            AuditActions.DeleteRole,
-            "Role",
-            roleName,
-            correlationId,
-            userId);
+        LogAuditWritten(_logger, AuditActions.DeleteRole, "Role", roleName, correlationId, userId);
 
         return NoContent();
     }
+    private static void LogAuditWritten(
+        ILogger logger,
+        string action,
+        string entityType,
+        string entityId,
+        string correlationId,
+        Guid? userId)
+    {
+        _logAuditWritten(logger, action, entityType, entityId, correlationId, userId, null);
+    }
+
 }
 
 public sealed class CreateRoleRequest

@@ -145,8 +145,8 @@ var jwtLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("
 if (app.Environment.IsEnvironment("Testing") || jwtLogger.IsEnabled(LogLevel.Debug))
 {
     var effectiveJwtOptions = app.Services.GetRequiredService<IOptions<JwtOptions>>().Value;
-    jwtLogger.LogDebug(
-        "Effective JWT options. Issuer='{Issuer}', Audience='{Audience}', SigningKeyLength={SigningKeyLength}, AccessTokenMinutes={AccessTokenMinutes}, RefreshTokenDays={RefreshTokenDays}",
+    Program.LogEffectiveJwtOptions(
+        jwtLogger,
         effectiveJwtOptions.Issuer,
         effectiveJwtOptions.Audience,
         effectiveJwtOptions.SigningKey.Length,
@@ -209,6 +209,30 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 
 app.Run();
 
+
 public partial class Program
 {
+    private static readonly Action<ILogger, string, string, int, int, int, Exception?> LogEffectiveJwtOptionsMessage =
+        LoggerMessage.Define<string, string, int, int, int>(
+            LogLevel.Debug,
+            new EventId(1, nameof(LogEffectiveJwtOptions)),
+            "Effective JWT options. Issuer='{Issuer}', Audience='{Audience}', SigningKeyLength={SigningKeyLength}, AccessTokenMinutes={AccessTokenMinutes}, RefreshTokenDays={RefreshTokenDays}");
+
+    internal static void LogEffectiveJwtOptions(
+        ILogger logger,
+        string issuer,
+        string audience,
+        int signingKeyLength,
+        int accessTokenMinutes,
+        int refreshTokenDays)
+    {
+        LogEffectiveJwtOptionsMessage(
+            logger,
+            issuer,
+            audience,
+            signingKeyLength,
+            accessTokenMinutes,
+            refreshTokenDays,
+            null);
+    }
 }
