@@ -3,7 +3,11 @@ import { Observable, of } from 'rxjs';
 import { ApiClient } from '../../../../core/services/api-client';
 import { PosCatalogApiService } from './pos-catalog-api.service';
 
-type ApiCall = { method: 'get' | 'post' | 'put' | 'delete'; path: string; body?: unknown };
+interface ApiCall {
+  method: 'get' | 'post' | 'put' | 'delete';
+  path: string;
+  body?: unknown;
+}
 
 describe('PosCatalogApiService', () => {
   it('should build expected URLs for CRUD endpoints', async () => {

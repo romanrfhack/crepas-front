@@ -1,0 +1,76 @@
+.app-nav {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.app-nav__section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.app-nav__section-toggle {
+  width: 100%;
+  border: 0;
+  background: #f8fafc;
+  color: #0f172a;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-nav__section-toggle:hover {
+  background: #eff6ff;
+}
+
+.app-nav__section-toggle:focus-visible,
+.app-nav__link:focus-visible {
+  outline: 3px solid #94a3ff;
+  outline-offset: 1px;
+}
+
+.app-nav__list,
+.app-nav__sublist {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.app-nav__sublist {
+  margin-left: 0.8rem;
+  padding-top: 0;
+}
+
+.app-nav__link {
+  display: block;
+  text-decoration: none;
+  color: #1d4ed8;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.app-nav__link:hover {
+  background: #dbeafe;
+}
+
+.app-nav__link--active,
+.app-nav__link--parent-active {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.app-nav__link--child {
+  font-weight: 500;
+  color: #1e40af;
+}
+
+.app-nav__section-toggle-icon {
+  font-size: 0.95rem;
+}
