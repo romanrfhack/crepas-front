@@ -17,6 +17,7 @@ import { GlobalErrorService } from '../../core/services/global-error.service';
           <a routerLink="/app/dashboard" class="nav-link">Dashboard</a>
           @if (hasAdminRole()) {
             <a routerLink="/app/admin/users" class="nav-link">Admin</a>
+            <a routerLink="/app/admin/pos/catalog/categories" class="nav-link">POS Catálogo</a>
           }
           @if (isAuthenticatedSig()) {
             <span class="session-status" aria-live="polite">Sesión iniciada</span>
