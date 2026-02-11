@@ -1,0 +1,23 @@
+# Normaliza a LF en repo; en Windows se convierte según autocrlf
+* text=auto
+
+# Archivos que deben mantenerse en LF
+*.ts  text eol=lf
+*.js  text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.scss text eol=lf
+*.css text eol=lf
+*.md  text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Binarios
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.pdf binary
+
+# Husky hooks must be LF (Git Bash)
+.husky/* text eol=lf
