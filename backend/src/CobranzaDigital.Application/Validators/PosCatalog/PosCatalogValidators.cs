@@ -81,6 +81,6 @@ public static class ValidationExtensions
             .GroupBy(x => x.PropertyName)
             .ToDictionary(x => x.Key, x => x.Select(e => e.ErrorMessage).ToArray());
 
-        throw new ValidationException(errors);
+        throw new Common.Exceptions.ValidationException(errors);
     }
 }
