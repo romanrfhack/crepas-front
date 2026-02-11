@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CobranzaDigital.Infrastructure.Identity;
 
-public static class IdentitySeeder
+public static partial class IdentitySeeder
 {
     private static readonly string[] DefaultRoles = ["Admin", "User", "Manager", "Collector"];
 
@@ -24,7 +24,7 @@ public static class IdentitySeeder
                 var roleResult = await roleManager.CreateAsync(new ApplicationRole { Name = roleName }).ConfigureAwait(false);
                 if (!roleResult.Succeeded)
                 {
-                    logger.LogWarning("Failed to create role {RoleName}: {Errors}", roleName, roleResult.Errors);
+                    LogMessages.FailedToCreateRole(logger, roleName, roleResult.Errors);
                 }
             }
         }
@@ -34,8 +34,7 @@ public static class IdentitySeeder
 
         if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
         {
-            logger.LogInformation(
-                "Skipping admin user seeding because IdentitySeed:AdminEmail or IdentitySeed:AdminPassword is missing.");
+            LogMessages.SkippingAdminSeed(logger);
             return;
         }
 
@@ -52,7 +51,7 @@ public static class IdentitySeeder
             var createResult = await userManager.CreateAsync(adminUser, adminPassword).ConfigureAwait(false);
             if (!createResult.Succeeded)
             {
-                logger.LogWarning("Failed to create admin user: {Errors}", createResult.Errors);
+                LogMessages.FailedToCreateAdminUser(logger, createResult.Errors);
                 return;
             }
         }
@@ -62,8 +61,23 @@ public static class IdentitySeeder
             var addRoleResult = await userManager.AddToRoleAsync(adminUser, "Admin").ConfigureAwait(false);
             if (!addRoleResult.Succeeded)
             {
-                logger.LogWarning("Failed to add admin user to Admin role: {Errors}", addRoleResult.Errors);
+                LogMessages.FailedToAddAdminRole(logger, addRoleResult.Errors);
             }
         }
+    }
+
+    private static partial class LogMessages
+    {
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to create role {RoleName}: {Errors}")]
+        public static partial void FailedToCreateRole(ILogger logger, string roleName, IEnumerable<IdentityError> errors);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "Skipping admin user seeding because IdentitySeed:AdminEmail or IdentitySeed:AdminPassword is missing.")]
+        public static partial void SkippingAdminSeed(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to create admin user: {Errors}")]
+        public static partial void FailedToCreateAdminUser(ILogger logger, IEnumerable<IdentityError> errors);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to add admin user to Admin role: {Errors}")]
+        public static partial void FailedToAddAdminRole(ILogger logger, IEnumerable<IdentityError> errors);
     }
 }
