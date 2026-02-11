@@ -4,7 +4,7 @@ using System.Security.Claims;
 
 namespace CobranzaDigital.Api.Middleware;
 
-public sealed class RequestLoggingMiddleware
+public sealed partial class RequestLoggingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<RequestLoggingMiddleware> _logger;
