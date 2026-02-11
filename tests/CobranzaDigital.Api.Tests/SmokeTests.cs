@@ -110,6 +110,14 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             $"Unable to locate API content root from '{AppContext.BaseDirectory}'. Expected 'src/CobranzaDigital.Api/Program.cs' near CobranzaDigital.sln.");
     }
 
+    private static string FormatRouteEndpoint(RouteEndpoint endpoint)
+    {
+        var routePattern = endpoint.RoutePattern.RawText ?? "<null>";
+        var displayName = string.IsNullOrWhiteSpace(endpoint.DisplayName) ? "<null>" : endpoint.DisplayName;
+
+        return $"- RoutePattern='{routePattern}', DisplayName='{displayName}'";
+    }
+
     public async Task InitializeAsync()
     {
         _ = Services;
@@ -140,11 +148,24 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             "/api/v{version:apiVersion}/auth/refresh"
         };
 
+        var routeEndpoints = endpointDataSource.Endpoints.OfType<RouteEndpoint>().ToArray();
+
         foreach (var route in authEndpoints)
         {
-            var endpoint = endpointDataSource.Endpoints
-                .OfType<RouteEndpoint>()
-                .Single(e => string.Equals(e.RoutePattern.RawText, route, StringComparison.Ordinal));
+            var endpoint = routeEndpoints.FirstOrDefault(e =>
+                string.Equals(e.RoutePattern.RawText, route, StringComparison.Ordinal));
+
+            if (endpoint is null)
+            {
+                var availableEndpoints = routeEndpoints.Length == 0
+                    ? "<none>"
+                    : string.Join(Environment.NewLine, routeEndpoints.Select(FormatRouteEndpoint));
+
+                throw new InvalidOperationException(
+                    $"Could not find auth route endpoint with RoutePattern.RawText '{route}' while initializing smoke tests.{Environment.NewLine}" +
+                    $"Available route endpoints ({routeEndpoints.Length}):{Environment.NewLine}{availableEndpoints}");
+            }
+
             var hasAllowAnonymous = endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null;
             Console.WriteLine($"[test-host] Endpoint '{route}' has [AllowAnonymous]: {hasAllowAnonymous}");
         }
@@ -205,10 +226,12 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
         {
             var endpoint = endpointDataSource.Endpoints
                 .OfType<RouteEndpoint>()
-                .Single(e => string.Equals(e.RoutePattern.RawText, route, StringComparison.Ordinal));
+                .FirstOrDefault(e => string.Equals(e.RoutePattern.RawText, route, StringComparison.Ordinal));
+
+            Assert.NotNull(endpoint);
 
             Assert.True(
-                endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null,
+                endpoint!.Metadata.GetMetadata<IAllowAnonymous>() is not null,
                 $"Endpoint '{route}' must be [AllowAnonymous] in tests to keep login/register/refresh public.");
         }
     }
