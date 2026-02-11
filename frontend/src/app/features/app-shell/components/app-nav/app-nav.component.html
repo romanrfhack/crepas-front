@@ -1,0 +1,53 @@
+<nav class="app-nav" aria-label="Navegación principal de la aplicación">
+  @for (section of visibleSections(); track section.label) {
+    <section class="app-nav__section" [attr.aria-label]="section.label">
+      <button
+        type="button"
+        class="app-nav__section-toggle"
+        [class.app-nav__section-toggle--expanded]="isSectionExpanded(section.label)"
+        [attr.aria-expanded]="isSectionExpanded(section.label)"
+        (click)="toggleSection(section.label)"
+      >
+        <span>{{ section.label }}</span>
+        <span class="app-nav__section-toggle-icon" aria-hidden="true">
+          {{ isSectionExpanded(section.label) ? '▾' : '▸' }}
+        </span>
+      </button>
+
+      @if (isSectionExpanded(section.label)) {
+        <ul class="app-nav__list">
+          @for (item of section.children; track item.path) {
+            <li class="app-nav__item">
+              <a
+                [routerLink]="item.path"
+                routerLinkActive="app-nav__link--active"
+                [routerLinkActiveOptions]="{ exact: !item.children?.length }"
+                #itemLinkActive="routerLinkActive"
+                class="app-nav__link"
+                [class.app-nav__link--parent-active]="itemLinkActive.isActive && !!item.children?.length"
+              >
+                {{ item.label }}
+              </a>
+              @if (item.children?.length) {
+                <ul class="app-nav__sublist">
+                  @for (child of item.children; track child.path) {
+                    <li class="app-nav__subitem">
+                      <a
+                        [routerLink]="child.path"
+                        routerLinkActive="app-nav__link--active"
+                        [routerLinkActiveOptions]="{ exact: true }"
+                        class="app-nav__link app-nav__link--child"
+                      >
+                        {{ child.label }}
+                      </a>
+                    </li>
+                  }
+                </ul>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+</nav>

@@ -57,3 +57,9 @@ Angular CLI does not come with an end-to-end testing framework by default. You c
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+
+## Deep links in production (`/app/...`)
+
+The Angular router handles URLs like `/app/admin/pos/catalog/categories` on the client side.
+In production hosting, configure a SPA fallback so unknown paths rewrite to `index.html`.
+Without this rewrite, refreshing or opening a deep link directly can return 404 even when routing is correct in the app.

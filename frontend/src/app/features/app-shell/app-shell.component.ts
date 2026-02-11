@@ -1,11 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
-import { AuthService } from '../auth/services/auth.service';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { Router, RouterOutlet } from '@angular/router';
 import { GlobalErrorService } from '../../core/services/global-error.service';
+import { AuthService } from '../auth/services/auth.service';
+import { AppNavComponent } from './components/app-nav/app-nav.component';
+import { APP_NAV_CONFIG } from './navigation/app-nav.config';
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterOutlet, RouterLink],
+  imports: [RouterOutlet, AppNavComponent],
   template: `
     <div class="app-shell">
       <header class="app-header">
@@ -13,17 +15,12 @@ import { GlobalErrorService } from '../../core/services/global-error.service';
           <span class="brand-title">Cobranza Digital</span>
           <span class="brand-subtitle">Panel protegido</span>
         </div>
-        <nav class="nav-actions" aria-label="Acciones principales">
-          <a routerLink="/app/dashboard" class="nav-link">Dashboard</a>
-          @if (hasAdminRole()) {
-            <a routerLink="/app/admin/users" class="nav-link">Admin</a>
-            <a routerLink="/app/admin/pos/catalog/categories" class="nav-link">POS Catálogo</a>
-          }
+        <div class="header-actions">
           @if (isAuthenticatedSig()) {
             <span class="session-status" aria-live="polite">Sesión iniciada</span>
             <button type="button" class="ghost-button" (click)="onLogout()">Cerrar sesión</button>
           }
-        </nav>
+        </div>
       </header>
 
       @if (globalErrorMessage()) {
@@ -38,9 +35,17 @@ import { GlobalErrorService } from '../../core/services/global-error.service';
         </section>
       }
 
-      <main class="app-main" aria-live="polite">
-        <router-outlet />
-      </main>
+      <div class="app-content-layout">
+        @if (isAuthenticatedSig()) {
+          <aside class="app-sidebar">
+            <app-nav [navItems]="appNavItems" [userRoles]="rolesSig()" />
+          </aside>
+        }
+
+        <main class="app-main" aria-live="polite">
+          <router-outlet />
+        </main>
+      </div>
     </div>
   `,
   styles: `
@@ -73,18 +78,12 @@ import { GlobalErrorService } from '../../core/services/global-error.service';
       font-size: 0.9rem;
       color: #64748b;
     }
-    .nav-actions {
+    .header-actions {
       display: flex;
       gap: 0.75rem;
       align-items: center;
       flex-wrap: wrap;
     }
-    .nav-link {
-      color: #1d4ed8;
-      font-weight: 600;
-      text-decoration: none;
-    }
-    .nav-link:focus-visible,
     .ghost-button:focus-visible {
       outline: 3px solid #94a3ff;
       outline-offset: 2px;
@@ -103,9 +102,21 @@ import { GlobalErrorService } from '../../core/services/global-error.service';
       color: #0f172a;
       font-weight: 600;
     }
-    .app-main {
+    .app-content-layout {
+      display: grid;
+      grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+      gap: 1.5rem;
       flex: 1;
-      padding: 2rem;
+      padding: 1.5rem 2rem 2rem;
+      align-items: start;
+    }
+    .app-sidebar {
+      position: sticky;
+      top: 1.5rem;
+      align-self: start;
+    }
+    .app-main {
+      min-width: 0;
       display: flex;
       justify-content: center;
     }
@@ -139,6 +150,16 @@ import { GlobalErrorService } from '../../core/services/global-error.service';
       outline: 3px solid #f87171;
       outline-offset: 2px;
     }
+
+    @media (max-width: 1024px) {
+      .app-content-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .app-sidebar {
+        position: static;
+      }
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -146,8 +167,9 @@ export class AppShellComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly globalErrorService = inject(GlobalErrorService);
+  readonly appNavItems = APP_NAV_CONFIG;
   readonly isAuthenticatedSig = this.authService.isAuthenticatedSig;
-  readonly hasAdminRole = computed(() => this.authService.hasRole('Admin'));
+  readonly rolesSig = this.authService.rolesSig;
   readonly globalErrorMessage = this.globalErrorService.message;
 
   onLogout() {
