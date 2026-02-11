@@ -227,7 +227,16 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
             using var scope = Services.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-            await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+            
+            if (dbContext.Database.IsSqlite())
+            {
+                await dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+            }
+
 
             var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
             await IdentitySeeder.SeedAsync(scope.ServiceProvider, config).ConfigureAwait(false);
