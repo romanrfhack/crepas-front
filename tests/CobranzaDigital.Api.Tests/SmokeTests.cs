@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using CobranzaDigital.Application.Options;
 using CobranzaDigital.Infrastructure.Identity;
@@ -96,6 +97,13 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             services.PostConfigureAll<JwtBearerOptions>(options =>
             {
                 options.IncludeErrorDetails = true;
+                options.TokenValidationParameters ??= new TokenValidationParameters();
+                options.TokenValidationParameters.ValidateIssuer = true;
+                options.TokenValidationParameters.ValidIssuer = TestJwtIssuer;
+                options.TokenValidationParameters.ValidateAudience = true;
+                options.TokenValidationParameters.ValidAudience = TestJwtAudience;
+                options.TokenValidationParameters.ValidateIssuerSigningKey = true;
+                options.TokenValidationParameters.IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSigningKey));
 
                 var previousEvents = options.Events ?? new JwtBearerEvents();
                 var previousOnAuthenticationFailed = previousEvents.OnAuthenticationFailed;
