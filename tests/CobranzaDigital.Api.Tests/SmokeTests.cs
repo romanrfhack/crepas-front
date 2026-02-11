@@ -10,6 +10,7 @@ using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Authentication;
@@ -20,6 +21,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 
 namespace CobranzaDigital.Api.Tests;
 
@@ -55,8 +57,17 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
                 ["Jwt:Issuer"] = TestJwtIssuer,
                 ["Jwt:Audience"] = TestJwtAudience,
                 ["Jwt:SigningKey"] = TestJwtSigningKey,
+                ["Jwt:Key"] = TestJwtSigningKey,
                 ["Jwt:AccessTokenMinutes"] = "15",
-                ["Jwt:RefreshTokenDays"] = "7"
+                ["Jwt:RefreshTokenDays"] = "7",
+                ["JwtSettings:Issuer"] = TestJwtIssuer,
+                ["JwtSettings:Audience"] = TestJwtAudience,
+                ["JwtSettings:SigningKey"] = TestJwtSigningKey,
+                ["JwtSettings:Key"] = TestJwtSigningKey,
+                ["Authentication:Jwt:Issuer"] = TestJwtIssuer,
+                ["Authentication:Jwt:Audience"] = TestJwtAudience,
+                ["Authentication:Jwt:SigningKey"] = TestJwtSigningKey,
+                ["Authentication:Jwt:Key"] = TestJwtSigningKey
             };
 
             config.AddInMemoryCollection(settings);
@@ -81,7 +92,78 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             {
                 options.UseSqlite(_sqliteConnection);
             });
+
+            services.PostConfigureAll<JwtBearerOptions>(options =>
+            {
+                options.IncludeErrorDetails = true;
+
+                var previousEvents = options.Events ?? new JwtBearerEvents();
+                var previousOnAuthenticationFailed = previousEvents.OnAuthenticationFailed;
+                var previousOnChallenge = previousEvents.OnChallenge;
+
+                options.Events = new JwtBearerEvents
+                {
+                    OnAuthenticationFailed = async context =>
+                    {
+                        Console.WriteLine($"[jwt-auth-failed] Exception while validating bearer token: {context.Exception}");
+                        Console.WriteLine($"[jwt-auth-failed] {DescribeTokenValidationParameters(context.Options.TokenValidationParameters)}");
+
+                        if (previousOnAuthenticationFailed is not null)
+                        {
+                            await previousOnAuthenticationFailed(context).ConfigureAwait(false);
+                        }
+                    },
+                    OnChallenge = async context =>
+                    {
+                        if (context.AuthenticateFailure is not null)
+                        {
+                            Console.WriteLine($"[jwt-challenge] AuthenticateFailure detected: {context.AuthenticateFailure}");
+                        }
+                        else
+                        {
+                            Console.WriteLine("[jwt-challenge] Challenge emitted without AuthenticateFailure (likely missing/invalid token). ");
+                        }
+
+                        Console.WriteLine($"[jwt-challenge] {DescribeTokenValidationParameters(context.Options.TokenValidationParameters)}");
+
+                        if (previousOnChallenge is not null)
+                        {
+                            await previousOnChallenge(context).ConfigureAwait(false);
+                        }
+                    },
+                    OnForbidden = previousEvents.OnForbidden,
+                    OnMessageReceived = previousEvents.OnMessageReceived,
+                    OnTokenValidated = previousEvents.OnTokenValidated
+                };
+
+                Console.WriteLine($"[jwt-post-configure] {DescribeTokenValidationParameters(options.TokenValidationParameters)}");
+            });
         });
+    }
+
+    private static string DescribeTokenValidationParameters(TokenValidationParameters? parameters)
+    {
+        if (parameters is null)
+        {
+            return "TokenValidationParameters=<null>";
+        }
+
+        static string JoinValues(IEnumerable<string>? values) => values is null ? "<null>" : string.Join(",", values);
+
+        var signingKeyDescription = parameters.IssuerSigningKey switch
+        {
+            null => "<null>",
+            SymmetricSecurityKey symmetricKey =>
+                $"{nameof(SymmetricSecurityKey)}(KeySize={symmetricKey.KeySize}, Bytes={symmetricKey.Key?.Length ?? 0})",
+            _ => $"{parameters.IssuerSigningKey.GetType().Name}(KeyId='{parameters.IssuerSigningKey.KeyId ?? "<null>"}')"
+        };
+
+        return
+            $"TVP ValidateIssuer={parameters.ValidateIssuer}, ValidIssuer='{parameters.ValidIssuer ?? "<null>"}', ValidIssuers='{JoinValues(parameters.ValidIssuers)}', " +
+            $"ValidateAudience={parameters.ValidateAudience}, ValidAudience='{parameters.ValidAudience ?? "<null>"}', ValidAudiences='{JoinValues(parameters.ValidAudiences)}', " +
+            $"ValidateLifetime={parameters.ValidateLifetime}, ClockSkew={parameters.ClockSkew}, " +
+            $"ValidateIssuerSigningKey={parameters.ValidateIssuerSigningKey}, IssuerSigningKey={signingKeyDescription}, " +
+            $"RoleClaimType='{parameters.RoleClaimType}', NameClaimType='{parameters.NameClaimType}'";
     }
 
     private static string ResolveApiContentRoot()
@@ -137,6 +219,8 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
         Console.WriteLine(
             $"[test-host] Jwt effective config: Issuer='{jwtOptions.Issuer}', Audience='{jwtOptions.Audience}', SigningKeyLength={jwtOptions.SigningKey.Length}, AccessTokenMinutes={jwtOptions.AccessTokenMinutes}, RefreshTokenDays={jwtOptions.RefreshTokenDays}");
+        Console.WriteLine(
+            $"[test-host] Raw config keys: Jwt:Issuer='{config["Jwt:Issuer"]}', JwtSettings:Issuer='{config["JwtSettings:Issuer"]}', Authentication:Jwt:Issuer='{config["Authentication:Jwt:Issuer"]}', Jwt:Audience='{config["Jwt:Audience"]}', JwtSettings:Audience='{config["JwtSettings:Audience"]}', Authentication:Jwt:Audience='{config["Authentication:Jwt:Audience"]}', Jwt:SigningKey.Length={config["Jwt:SigningKey"]?.Length ?? 0}, JwtSettings:SigningKey.Length={config["JwtSettings:SigningKey"]?.Length ?? 0}, Authentication:Jwt:SigningKey.Length={config["Authentication:Jwt:SigningKey"]?.Length ?? 0}");
         Console.WriteLine(
             $"[test-host] Auth schemes: DefaultAuthenticate='{defaultAuthenticate?.Name ?? "<null>"}', DefaultChallenge='{defaultChallenge?.Name ?? "<null>"}'");
 
@@ -373,6 +457,11 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 
     private async Task<HttpResponseMessage> GetWithBearerTokenAsync(string uri, string accessToken)
     {
+        if (uri.Contains("/api/v1/admin/users", StringComparison.OrdinalIgnoreCase))
+        {
+            LogJwtPayloadWithoutValidation(accessToken, uri);
+        }
+
         SetBearerAuthorization(accessToken);
         var authorizationHeader = _client.DefaultRequestHeaders.Authorization?.ToString();
         var response = await _client.GetAsync(uri).ConfigureAwait(false);
@@ -380,6 +469,22 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
         _client.DefaultRequestHeaders.Authorization = null;
 
         return response;
+    }
+
+    private static void LogJwtPayloadWithoutValidation(string accessToken, string endpoint)
+    {
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(accessToken);
+        var exp = token.Payload.Exp is long expValue
+            ? DateTimeOffset.FromUnixTimeSeconds(expValue).ToString("O")
+            : "<missing>";
+        var nbf = token.Payload.Nbf is long nbfValue
+            ? DateTimeOffset.FromUnixTimeSeconds(nbfValue).ToString("O")
+            : "<missing>";
+        var audience = token.Audiences.Any() ? string.Join(",", token.Audiences) : "<missing>";
+        var claimTypes = string.Join(",", token.Claims.Select(claim => claim.Type).Distinct().OrderBy(type => type));
+
+        Console.WriteLine(
+            $"[jwt-decoded] Endpoint='{endpoint}', alg='{token.Header.Alg ?? "<missing>"}', iss='{token.Issuer ?? "<missing>"}', aud='{audience}', exp='{exp}', nbf='{nbf}', claimTypes='{claimTypes}'");
     }
 
     private void SetBearerAuthorization(string accessToken)
