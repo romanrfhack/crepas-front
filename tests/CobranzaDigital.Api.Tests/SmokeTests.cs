@@ -30,13 +30,16 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
     private const string TestJwtAudience = "CobranzaDigital.Tests.Api";
     private const string TestJwtSigningKey = "THIS_IS_A_SECURE_TEST_SIGNING_KEY_123456";
     private SqliteConnection? _sqliteConnection;
+    private static readonly string ApiContentRoot = ResolveApiContentRoot();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseSolutionRelativeContentRoot("src/CobranzaDigital.Api");
+        builder.UseContentRoot(ApiContentRoot);
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((context, config) =>
         {
+            config.Sources.Clear();
+            config.SetBasePath(ApiContentRoot);
             config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: false);
             config.AddJsonFile("appsettings.Testing.json", optional: true, reloadOnChange: false);
 
@@ -79,6 +82,32 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
                 options.UseSqlite(_sqliteConnection);
             });
         });
+    }
+
+    private static string ResolveApiContentRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (current is not null)
+        {
+            var candidate = Path.Combine(current.FullName, "src", "CobranzaDigital.Api");
+            var programPath = Path.Combine(candidate, "Program.cs");
+            if (File.Exists(programPath))
+            {
+                return candidate;
+            }
+
+            var solutionPath = Path.Combine(current.FullName, "CobranzaDigital.sln");
+            if (File.Exists(solutionPath))
+            {
+                break;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException(
+            $"Unable to locate API content root from '{AppContext.BaseDirectory}'. Expected 'src/CobranzaDigital.Api/Program.cs' near CobranzaDigital.sln.");
     }
 
     public async Task InitializeAsync()
