@@ -71,11 +71,11 @@ public static class SwaggerExtensions
             {
                 var info = new OpenApiInfo
                 {
-                    Title = "CobranzaDigital API",
+                    Title = "CREPAS API",
                     Version = description.ApiVersion.ToString(),
                     Description = description.IsDeprecated
                         ? "This API version has been deprecated."
-                        : "CobranzaDigital API"
+                        : "Crepas API"
                 };
 
                 options.SwaggerDoc(description.GroupName, info);
