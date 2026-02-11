@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Auditing;
 using CobranzaDigital.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -92,10 +93,8 @@ public sealed class AdminAuditIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         using var scope = _factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-        var audit = await dbContext.AuditLogs
-            .OrderByDescending(x => x.OccurredAt)
-            .FirstAsync(x => x.Action == "CreateRole" && x.EntityId == roleName)
-            .ConfigureAwait(false);
+        var audit = await GetLatestAuditEventAsync(dbContext, "CreateRole", roleName).ConfigureAwait(false);
+        Assert.NotNull(audit);
 
         Assert.Equal("Role", audit.EntityType);
         Assert.Equal(correlationId, audit.CorrelationId);
@@ -120,10 +119,8 @@ public sealed class AdminAuditIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         using var scope = _factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-        var audit = await dbContext.AuditLogs
-            .OrderByDescending(x => x.OccurredAt)
-            .FirstAsync(x => x.Action == "LockUser" && x.EntityId == userId)
-            .ConfigureAwait(false);
+        var audit = await GetLatestAuditEventAsync(dbContext, "LockUser", userId).ConfigureAwait(false);
+        Assert.NotNull(audit);
 
         Assert.Equal("User", audit.EntityType);
         Assert.Equal(correlationId, audit.CorrelationId);
@@ -164,6 +161,21 @@ public sealed class AdminAuditIntegrationTests : IClassFixture<CobranzaDigitalAp
         var request = new HttpRequestMessage(method, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return request;
+    }
+
+    private static async Task<AuditLog?> GetLatestAuditEventAsync(
+        CobranzaDigitalDbContext dbContext,
+        string action,
+        string entityId)
+    {
+        var matchingEvents = await dbContext.AuditLogs
+            .Where(x => x.Action == action && x.EntityId == entityId)
+            .ToListAsync()
+            .ConfigureAwait(false);
+
+        return matchingEvents
+            .OrderByDescending(x => x.OccurredAt)
+            .FirstOrDefault();
     }
 
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken);
