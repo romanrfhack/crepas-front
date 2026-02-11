@@ -22,6 +22,23 @@ public sealed class AdminUsersController : ControllerBase
     private readonly IAuditLogger _auditLogger;
     private readonly IAuditRequestContextAccessor _auditRequestContextAccessor;
     private readonly ILogger<AdminUsersController> _logger;
+    private static readonly Action<ILogger, int, Exception?> _logLegacyPaginationUsage =
+        LoggerMessage.Define<int>(
+            LogLevel.Information,
+            new EventId(1, nameof(LogLegacyPaginationUsage)),
+            "Using legacy pagination query parameter 'pageNumber' with value {PageNumber}.");
+
+    private static readonly Action<ILogger, string, Exception?> _logCompatibilityEndpointUsage =
+        LoggerMessage.Define<string>(
+            LogLevel.Information,
+            new EventId(2, nameof(LogCompatibilityEndpointUsage)),
+            "Using compatibility endpoint PUT /admin/users/{UserId}/lock.");
+
+    private static readonly Action<ILogger, string, string, string, string?, Guid?, Exception?> _logAuditWritten =
+        LoggerMessage.Define<string, string, string, string, Guid?>(
+            LogLevel.Information,
+            new EventId(3, nameof(LogAuditWritten)),
+            "audit_log_written action={Action} entity={EntityType} entityId={EntityId} correlationId={CorrelationId} userId={UserId}");
 
     public AdminUsersController(
         IUserAdminService userAdminService,
@@ -49,7 +66,7 @@ public sealed class AdminUsersController : ControllerBase
         var effectivePage = pageNumber ?? page;
         if (pageNumber.HasValue)
         {
-            _logger.LogInformation("Using legacy pagination query parameter 'pageNumber' with value {PageNumber}.", pageNumber.Value);
+            LogLegacyPaginationUsage(_logger, pageNumber.Value);
         }
 
         if (effectivePage <= 0 || pageSize <= 0)
@@ -113,7 +130,7 @@ public sealed class AdminUsersController : ControllerBase
         [FromBody] SetUserLockRequest request,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Using compatibility endpoint PUT /admin/users/{UserId}/lock.", id);
+        LogCompatibilityEndpointUsage(_logger, id);
         return await SetLockInternal(id, request, cancellationToken).ConfigureAwait(false);
     }
 
@@ -140,16 +157,31 @@ public sealed class AdminUsersController : ControllerBase
                 Notes: null),
             cancellationToken).ConfigureAwait(false);
 
-        _logger.LogInformation(
-            "audit_log_written action={Action} entity={EntityType} entityId={EntityId} correlationId={CorrelationId} userId={UserId}",
-            action,
-            "User",
-            id,
-            correlationId,
-            userId);
+        LogAuditWritten(_logger, action, "User", id, correlationId, userId);
 
         return Ok(result);
     }
+    private static void LogLegacyPaginationUsage(ILogger logger, int pageNumber)
+    {
+        _logLegacyPaginationUsage(logger, pageNumber, null);
+    }
+
+    private static void LogCompatibilityEndpointUsage(ILogger logger, string userId)
+    {
+        _logCompatibilityEndpointUsage(logger, userId, null);
+    }
+
+    private static void LogAuditWritten(
+        ILogger logger,
+        string action,
+        string entityType,
+        string entityId,
+        string correlationId,
+        Guid? userId)
+    {
+        _logAuditWritten(logger, action, entityType, entityId, correlationId, userId, null);
+    }
+
 }
 
 public sealed class UpdateUserRolesRequest

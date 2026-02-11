@@ -13,7 +13,7 @@ namespace CobranzaDigital.Api.Tests;
 public sealed class ExceptionHandlingMiddlewareTests
 {
     [Fact]
-    public async Task ValidationException_DoesNotThrowSecondaryException_AndReturnsValidationProblem()
+    public async Task ValidationExceptionDoesNotThrowSecondaryExceptionAndReturnsValidationProblem()
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Response.Body = new MemoryStream();
@@ -28,12 +28,12 @@ public sealed class ExceptionHandlingMiddlewareTests
             new TestHostEnvironment(),
             new TestProblemDetailsFactory());
 
-        await middleware.InvokeAsync(httpContext).ConfigureAwait(false);
+        await middleware.InvokeAsync(httpContext);
 
         Assert.Equal(StatusCodes.Status400BadRequest, httpContext.Response.StatusCode);
 
         httpContext.Response.Body.Position = 0;
-        using var json = await JsonDocument.ParseAsync(httpContext.Response.Body).ConfigureAwait(false);
+        using var json = await JsonDocument.ParseAsync(httpContext.Response.Body);
 
         Assert.Equal("Validation failed", json.RootElement.GetProperty("title").GetString());
         Assert.True(json.RootElement.TryGetProperty("errors", out var errors));

@@ -16,6 +16,12 @@ public sealed class AuditLogger : IAuditLogger
     private readonly CobranzaDigitalDbContext _dbContext;
     private readonly ILogger<AuditLogger> _logger;
 
+    private static readonly Action<ILogger, string?, string, string?, string?, Exception> _logAuditWriteFailed =
+        LoggerMessage.Define<string?, string, string?, string?>(
+            LogLevel.Warning,
+            new EventId(1, nameof(LogAuditWriteFailed)),
+            "audit_log_write_failed correlationId={CorrelationId} action={Action} entity={EntityType} entityId={EntityId}");
+
     public AuditLogger(CobranzaDigitalDbContext dbContext, ILogger<AuditLogger> logger)
     {
         _dbContext = dbContext;
@@ -49,14 +55,19 @@ public sealed class AuditLogger : IAuditLogger
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
-                ex,
-                "audit_log_write_failed correlationId={CorrelationId} action={Action} entity={EntityType} entityId={EntityId}",
-                entry.CorrelationId,
-                entry.Action,
-                entry.EntityType,
-                entry.EntityId);
+            LogAuditWriteFailed(_logger, entry.CorrelationId, entry.Action, entry.EntityType, entry.EntityId, ex);
         }
+    }
+
+    private static void LogAuditWriteFailed(
+        ILogger logger,
+        string? correlationId,
+        string action,
+        string? entityType,
+        string? entityId,
+        Exception exception)
+    {
+        _logAuditWriteFailed(logger, correlationId, action, entityType, entityId, exception);
     }
 
     private static string? Serialize(object? data)

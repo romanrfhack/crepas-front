@@ -30,11 +30,13 @@ namespace CobranzaDigital.Api.Tests;
 
 public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private const string TestSqliteConnectionString = "Data Source=file:cobranzadigital_test?mode=memory&cache=shared";
     private const string TestJwtIssuer = "CobranzaDigital.Tests";
     private const string TestJwtAudience = "CobranzaDigital.Tests.Api";
     private const string TestJwtSigningKey = "THIS_IS_A_SECURE_TEST_SIGNING_KEY_123456";
+    private readonly string _sqliteConnectionString = $"Data Source=file:{Guid.NewGuid():N}?mode=memory&cache=shared";
+    private readonly SemaphoreSlim _initializationLock = new(1, 1);
     private SqliteConnection? _sqliteConnection;
+    private bool _isInitialized;
     private static readonly string ApiContentRoot = ResolveApiContentRoot();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -50,7 +52,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
             var settings = new Dictionary<string, string?>
             {
-                ["ConnectionStrings:Sqlite"] = TestSqliteConnectionString,
+                ["ConnectionStrings:Sqlite"] = _sqliteConnectionString,
                 ["DatabaseOptions:Provider"] = "Sqlite",
                 ["DatabaseOptions:ConnectionStringName"] = "Sqlite",
                 ["Features:UserAdmin"] = "true",
@@ -85,7 +87,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             services.RemoveAll<DbConnection>();
             services.RemoveAll<SqliteConnection>();
 
-            _sqliteConnection = new SqliteConnection(TestSqliteConnectionString);
+            _sqliteConnection = new SqliteConnection(_sqliteConnectionString);
             _sqliteConnection.Open();
 
             services.AddSingleton(_sqliteConnection);
@@ -213,56 +215,70 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
     public async Task InitializeAsync()
     {
-        _ = Services;
-
-        using var scope = Services.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-        await dbContext.Database.EnsureDeletedAsync().ConfigureAwait(false);
-        await dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
-
-        var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-        await IdentitySeeder.SeedAsync(scope.ServiceProvider, config).ConfigureAwait(false);
-
-        var jwtOptions = scope.ServiceProvider.GetRequiredService<IOptions<JwtOptions>>().Value;
-        var schemeProvider = scope.ServiceProvider.GetRequiredService<IAuthenticationSchemeProvider>();
-        var defaultAuthenticate = await schemeProvider.GetDefaultAuthenticateSchemeAsync().ConfigureAwait(false);
-        var defaultChallenge = await schemeProvider.GetDefaultChallengeSchemeAsync().ConfigureAwait(false);
-
-        Console.WriteLine(
-            $"[test-host] Jwt effective config: Issuer='{jwtOptions.Issuer}', Audience='{jwtOptions.Audience}', SigningKeyLength={jwtOptions.SigningKey.Length}, AccessTokenMinutes={jwtOptions.AccessTokenMinutes}, RefreshTokenDays={jwtOptions.RefreshTokenDays}");
-        Console.WriteLine(
-            $"[test-host] Raw config keys: Jwt:Issuer='{config["Jwt:Issuer"]}', JwtSettings:Issuer='{config["JwtSettings:Issuer"]}', Authentication:Jwt:Issuer='{config["Authentication:Jwt:Issuer"]}', Jwt:Audience='{config["Jwt:Audience"]}', JwtSettings:Audience='{config["JwtSettings:Audience"]}', Authentication:Jwt:Audience='{config["Authentication:Jwt:Audience"]}', Jwt:SigningKey.Length={config["Jwt:SigningKey"]?.Length ?? 0}, JwtSettings:SigningKey.Length={config["JwtSettings:SigningKey"]?.Length ?? 0}, Authentication:Jwt:SigningKey.Length={config["Authentication:Jwt:SigningKey"]?.Length ?? 0}");
-        Console.WriteLine(
-            $"[test-host] Auth schemes: DefaultAuthenticate='{defaultAuthenticate?.Name ?? "<null>"}', DefaultChallenge='{defaultChallenge?.Name ?? "<null>"}'");
-
-        var endpointDataSource = scope.ServiceProvider.GetRequiredService<EndpointDataSource>();
-        var authEndpoints = new[]
+        await _initializationLock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            "api/v{version:apiVersion}/auth/login",
-            "api/v{version:apiVersion}/auth/register",
-            "api/v{version:apiVersion}/auth/refresh"
-        };
-
-        var routeEndpoints = endpointDataSource.Endpoints.OfType<RouteEndpoint>().ToArray();
-
-        foreach (var route in authEndpoints)
-        {
-            var endpoint = routeEndpoints.FirstOrDefault(e =>
-                string.Equals(e.RoutePattern.RawText, route, StringComparison.Ordinal));
-
-            if (endpoint is null)
+            if (_isInitialized)
             {
-                var availableEndpoints = routeEndpoints.Length == 0
-                    ? "<none>"
-                    : string.Join(Environment.NewLine, routeEndpoints.Select(FormatRouteEndpoint));
-
-                throw new InvalidOperationException(
-                    $"Could not find auth route endpoint with RoutePattern.RawText '{route}' while initializing smoke tests.{Environment.NewLine}" +
-                    $"Available route endpoints ({routeEndpoints.Length}):{Environment.NewLine}{availableEndpoints}");
+                return;
             }
 
-            var hasAllowAnonymous = endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null;
-            Console.WriteLine($"[test-host] Endpoint '{route}' has [AllowAnonymous]: {hasAllowAnonymous}");
+            _ = Services;
+
+            using var scope = Services.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+            await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+
+            var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+            await IdentitySeeder.SeedAsync(scope.ServiceProvider, config).ConfigureAwait(false);
+
+            var jwtOptions = scope.ServiceProvider.GetRequiredService<IOptions<JwtOptions>>().Value;
+            var schemeProvider = scope.ServiceProvider.GetRequiredService<IAuthenticationSchemeProvider>();
+            var defaultAuthenticate = await schemeProvider.GetDefaultAuthenticateSchemeAsync().ConfigureAwait(false);
+            var defaultChallenge = await schemeProvider.GetDefaultChallengeSchemeAsync().ConfigureAwait(false);
+
+            Console.WriteLine(
+                $"[test-host] Jwt effective config: Issuer='{jwtOptions.Issuer}', Audience='{jwtOptions.Audience}', SigningKeyLength={jwtOptions.SigningKey.Length}, AccessTokenMinutes={jwtOptions.AccessTokenMinutes}, RefreshTokenDays={jwtOptions.RefreshTokenDays}");
+            Console.WriteLine(
+                $"[test-host] Raw config keys: Jwt:Issuer='{config["Jwt:Issuer"]}', JwtSettings:Issuer='{config["JwtSettings:Issuer"]}', Authentication:Jwt:Issuer='{config["Authentication:Jwt:Issuer"]}', Jwt:Audience='{config["Jwt:Audience"]}', JwtSettings:Audience='{config["JwtSettings:Audience"]}', Authentication:Jwt:Audience='{config["Authentication:Jwt:Audience"]}', Jwt:SigningKey.Length={config["Jwt:SigningKey"]?.Length ?? 0}, JwtSettings:SigningKey.Length={config["JwtSettings:SigningKey"]?.Length ?? 0}, Authentication:Jwt:SigningKey.Length={config["Authentication:Jwt:SigningKey"]?.Length ?? 0}");
+            Console.WriteLine(
+                $"[test-host] Auth schemes: DefaultAuthenticate='{defaultAuthenticate?.Name ?? "<null>"}', DefaultChallenge='{defaultChallenge?.Name ?? "<null>"}'");
+
+            var endpointDataSource = scope.ServiceProvider.GetRequiredService<EndpointDataSource>();
+            var authEndpoints = new[]
+            {
+                "api/v{version:apiVersion}/auth/login",
+                "api/v{version:apiVersion}/auth/register",
+                "api/v{version:apiVersion}/auth/refresh"
+            };
+
+            var routeEndpoints = endpointDataSource.Endpoints.OfType<RouteEndpoint>().ToArray();
+
+            foreach (var route in authEndpoints)
+            {
+                var endpoint = routeEndpoints.FirstOrDefault(e =>
+                    string.Equals(e.RoutePattern.RawText, route, StringComparison.Ordinal));
+
+                if (endpoint is null)
+                {
+                    var availableEndpoints = routeEndpoints.Length == 0
+                        ? "<none>"
+                        : string.Join(Environment.NewLine, routeEndpoints.Select(FormatRouteEndpoint));
+
+                    throw new InvalidOperationException(
+                        $"Could not find auth route endpoint with RoutePattern.RawText '{route}' while initializing smoke tests.{Environment.NewLine}" +
+                        $"Available route endpoints ({routeEndpoints.Length}):{Environment.NewLine}{availableEndpoints}");
+                }
+
+                var hasAllowAnonymous = endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null;
+                Console.WriteLine($"[test-host] Endpoint '{route}' has [AllowAnonymous]: {hasAllowAnonymous}");
+            }
+
+            _isInitialized = true;
+        }
+        finally
+        {
+            _initializationLock.Release();
         }
     }
 
