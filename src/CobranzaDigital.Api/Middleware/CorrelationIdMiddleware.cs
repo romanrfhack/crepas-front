@@ -37,6 +37,6 @@ public sealed class CorrelationIdMiddleware
             return Task.CompletedTask;
         });
 
-        await _next(context);
+        await _next(context).ConfigureAwait(false);
     }
 }

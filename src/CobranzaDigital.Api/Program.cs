@@ -178,7 +178,7 @@ builder.Services.AddAuthentication(options =>
 
                 httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 httpContext.Response.ContentType = "application/problem+json";
-                await JsonSerializer.SerializeAsync(httpContext.Response.Body, problemDetails);
+                await JsonSerializer.SerializeAsync(httpContext.Response.Body, problemDetails).ConfigureAwait(false);
             },
             OnForbidden = async context =>
             {
@@ -193,7 +193,7 @@ builder.Services.AddAuthentication(options =>
 
                 httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
                 httpContext.Response.ContentType = "application/problem+json";
-                await JsonSerializer.SerializeAsync(httpContext.Response.Body, problemDetails);
+                await JsonSerializer.SerializeAsync(httpContext.Response.Body, problemDetails).ConfigureAwait(false);
             }
         };
     });

@@ -26,7 +26,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
-        var result = await _identityService.CreateUserAsync(request.Email, request.Password);
+        var result = await _identityService.CreateUserAsync(request.Email, request.Password).ConfigureAwait(false);
         if (!result.Success)
         {
             return Problem(
@@ -35,7 +35,7 @@ public sealed class AuthController : ControllerBase
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var user = await _identityService.GetUserByIdAsync(result.UserId);
+        var user = await _identityService.GetUserByIdAsync(result.UserId).ConfigureAwait(false);
         if (user is null)
         {
             return Problem(
@@ -44,7 +44,7 @@ public sealed class AuthController : ControllerBase
                 statusCode: StatusCodes.Status500InternalServerError);
         }
 
-        var tokens = await _tokenService.CreateTokensAsync(user, cancellationToken);
+        var tokens = await _tokenService.CreateTokensAsync(user, cancellationToken).ConfigureAwait(false);
         return Ok(tokens);
     }
 
@@ -54,7 +54,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        var user = await _identityService.ValidateUserAsync(request.Email, request.Password);
+        var user = await _identityService.ValidateUserAsync(request.Email, request.Password).ConfigureAwait(false);
         if (user is null)
         {
             return Problem(
@@ -63,7 +63,7 @@ public sealed class AuthController : ControllerBase
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
-        var tokens = await _tokenService.CreateTokensAsync(user, cancellationToken);
+        var tokens = await _tokenService.CreateTokensAsync(user, cancellationToken).ConfigureAwait(false);
         return Ok(tokens);
     }
 
@@ -73,7 +73,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh(RefreshTokenRequest request, CancellationToken cancellationToken)
     {
-        var tokens = await _tokenService.RefreshTokensAsync(request.RefreshToken, cancellationToken);
+        var tokens = await _tokenService.RefreshTokensAsync(request.RefreshToken, cancellationToken).ConfigureAwait(false);
         if (tokens is null)
         {
             return Problem(
