@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="src/CobranzaDigital.Api/CobranzaDigital.Api.csproj" />
+  <Project Path="src/CobranzaDigital.Application/CobranzaDigital.Application.csproj" />
+  <Project Path="src/CobranzaDigital.Domain/CobranzaDigital.Domain.csproj" />
+  <Project Path="src/CobranzaDigital.Infrastructure/CobranzaDigital.Infrastructure.csproj" />
+  <Project Path="tests/CobranzaDigital.Api.Tests/CobranzaDigital.Api.Tests.csproj" />
+</Solution>

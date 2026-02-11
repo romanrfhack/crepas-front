@@ -1,0 +1,13 @@
+@CobranzaDigital_HostAddress = http://localhost:5077
+
+GET {{CobranzaDigital_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+# Protected endpoint (requires Admin role + scope=cobranza.read)
+GET {{CobranzaDigital_HostAddress}}/api/v1/authorization/protected
+Accept: application/json
+Authorization: Bearer {{access_token}}
+
+###
