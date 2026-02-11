@@ -27,7 +27,7 @@ import { RoleDto } from '../../models/admin.models';
         <p>Cargando roles...</p>
       } @else {
         <ul class="roles-list" aria-label="Listado de roles">
-          @for (role of roles(); track role.id) {
+          @for (role of roles(); track role.name) {
             <li>
               <span>{{ role.name }}</span>
               <button type="button" (click)="onDeleteRole(role)">Eliminar</button>
@@ -141,8 +141,8 @@ export class RolesAdminPage {
   async onDeleteRole(role: RoleDto) {
     this.errorMessage.set('');
     try {
-      await this.adminRolesService.deleteRole(role.id);
-      this.roles.update((current) => current.filter((currentRole) => currentRole.id !== role.id));
+      await this.adminRolesService.deleteRole(role.name);
+      this.roles.update((current) => current.filter((currentRole) => currentRole.name !== role.name));
     } catch {
       this.errorMessage.set('No fue posible eliminar el rol.');
     }

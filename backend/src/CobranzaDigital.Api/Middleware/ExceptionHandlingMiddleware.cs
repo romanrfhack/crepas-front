@@ -2,6 +2,7 @@ using CobranzaDigital.Application.Common.Exceptions;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 using System.Diagnostics;
 
@@ -94,9 +95,18 @@ public sealed class ExceptionHandlingMiddleware
 
     private ValidationProblemDetails CreateValidationProblemDetails(HttpContext context, ValidationException exception)
     {
+        var modelState = new ModelStateDictionary();
+        foreach (var error in exception.Errors)
+        {
+            foreach (var message in error.Value)
+            {
+                modelState.AddModelError(error.Key, message);
+            }
+        }
+
         var validationProblem = _problemDetailsFactory.CreateValidationProblemDetails(
             context,
-            (Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary)exception.Errors,
+            modelState,
             StatusCodes.Status400BadRequest,
             "Validation failed");
 

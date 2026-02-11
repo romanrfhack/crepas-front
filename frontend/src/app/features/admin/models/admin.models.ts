@@ -14,7 +14,6 @@ export interface PagedResult<T> {
 }
 
 export interface RoleDto {
-  id: string;
   name: string;
 }
 
