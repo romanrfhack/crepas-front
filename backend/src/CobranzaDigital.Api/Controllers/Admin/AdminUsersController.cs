@@ -1,5 +1,7 @@
 using Asp.Versioning;
 using CobranzaDigital.Api.FeatureManagement;
+using CobranzaDigital.Api.Observability;
+using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Contracts.Admin;
 using CobranzaDigital.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -17,11 +19,19 @@ namespace CobranzaDigital.Api.Controllers.Admin;
 public sealed class AdminUsersController : ControllerBase
 {
     private readonly IUserAdminService _userAdminService;
+    private readonly IAuditLogger _auditLogger;
+    private readonly IAuditRequestContextAccessor _auditRequestContextAccessor;
     private readonly ILogger<AdminUsersController> _logger;
 
-    public AdminUsersController(IUserAdminService userAdminService, ILogger<AdminUsersController> logger)
+    public AdminUsersController(
+        IUserAdminService userAdminService,
+        IAuditLogger auditLogger,
+        IAuditRequestContextAccessor auditRequestContextAccessor,
+        ILogger<AdminUsersController> logger)
     {
         _userAdminService = userAdminService;
+        _auditLogger = auditLogger;
+        _auditRequestContextAccessor = auditRequestContextAccessor;
         _logger = logger;
     }
 
@@ -113,6 +123,31 @@ public sealed class AdminUsersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _userAdminService.SetUserLockAsync(id, request.Lock, cancellationToken).ConfigureAwait(false);
+
+        var action = request.Lock ? AuditActions.LockUser : AuditActions.UnlockUser;
+        var correlationId = _auditRequestContextAccessor.GetCorrelationId();
+        var userId = _auditRequestContextAccessor.GetUserId();
+
+        await _auditLogger.LogAsync(new AuditEntry(
+                action,
+                userId,
+                correlationId,
+                EntityType: "User",
+                EntityId: id,
+                Before: new { locked = !request.Lock },
+                After: new { locked = request.Lock },
+                Source: "Api",
+                Notes: null),
+            cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "audit_log_written action={Action} entity={EntityType} entityId={EntityId} correlationId={CorrelationId} userId={UserId}",
+            action,
+            "User",
+            id,
+            correlationId,
+            userId);
+
         return Ok(result);
     }
 }
