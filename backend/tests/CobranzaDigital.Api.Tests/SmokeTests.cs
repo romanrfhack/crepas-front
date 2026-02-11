@@ -6,6 +6,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using CobranzaDigital.Application.Contracts.Auth;
 using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Options;
 using CobranzaDigital.Infrastructure.Identity;

@@ -80,11 +80,11 @@ namespace CobranzaDigital.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EntityType", "EntityId");
-
                     b.HasIndex("OccurredAtUtc");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("EntityType", "EntityId");
 
                     b.ToTable("AuditLogs", (string)null);
                 });

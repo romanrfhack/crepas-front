@@ -113,7 +113,7 @@ public sealed class AdminAuditIntegrationTests : IClassFixture<CobranzaDigitalAp
         const string correlationId = "test-correlation-lock";
         using var request = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/admin/users/{userId}/lock", adminToken);
         request.Headers.Add("X-Correlation-Id", correlationId);
-        request.Content = JsonContent.Create(new { lock = true });
+        request.Content = JsonContent.Create(new { @lock = true });
 
         using var response = await _client.SendAsync(request).ConfigureAwait(false);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

@@ -36,7 +36,7 @@ public sealed class AdminContractsTests : IClassFixture<CobranzaDigitalApiFactor
         var userId = await GetUserIdByEmailAsync(adminToken, userEmail).ConfigureAwait(false);
 
         using var request = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/admin/users/{userId}/lock", adminToken);
-        request.Content = JsonContent.Create(new { lock = true });
+        request.Content = JsonContent.Create(new { @lock = true });
 
         using var response = await _client.SendAsync(request).ConfigureAwait(false);
 

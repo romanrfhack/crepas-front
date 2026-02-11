@@ -1,9 +1,11 @@
 using System.Text.Json;
 using CobranzaDigital.Api.Middleware;
 using CobranzaDigital.Application.Common.Exceptions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CobranzaDigital.Api.Tests;
