@@ -1,4 +1,5 @@
 using CobranzaDigital;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CobranzaDigital.Api.Controllers
