@@ -1,5 +1,6 @@
 using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Interfaces;
+using CobranzaDigital.Application.Interfaces.PosCatalog;
 using CobranzaDigital.Infrastructure.Auditing;
 using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Options;
@@ -84,6 +85,7 @@ public static class DependencyInjection
         services.AddScoped<IUserAdminService, UserAdminService>();
         services.AddScoped<ITokenService, JwtTokenService>();
         services.AddTransient<IDateTime, SystemDateTime>();
+        services.AddScoped<IPosCatalogService, PosCatalogService>();
 
         return services;
     }
