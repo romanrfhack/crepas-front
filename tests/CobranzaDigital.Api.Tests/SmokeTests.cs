@@ -155,7 +155,8 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             null => "<null>",
             SymmetricSecurityKey symmetricKey =>
                 $"{nameof(SymmetricSecurityKey)}(KeySize={symmetricKey.KeySize}, Bytes={symmetricKey.Key?.Length ?? 0})",
-            _ => $"{parameters.IssuerSigningKey.GetType().Name}(KeyId='{parameters.IssuerSigningKey.KeyId ?? "<null>"}')"
+            _ => $"{parameters.IssuerSigningKey.GetType().Name}(KeyId='" +
+                 $"{parameters.IssuerSigningKey.KeyId ?? "<null>"}')"
         };
 
         return
@@ -283,7 +284,7 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task LiveHealthReturnsOk()
     {
-        var response = await _client.GetAsync("/health/live").ConfigureAwait(false);
+        var response = await _client.GetAsync("/health/live");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -291,8 +292,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task AdminUsersWithoutTokenReturnsUnauthorized()
     {
-        var response = await _client.GetAsync("/api/v1/admin/users").ConfigureAwait(false);
-        await LogUnauthorizedResponseAsync(response, "/api/v1/admin/users", authorizationHeader: null).ConfigureAwait(false);
+        var response = await _client.GetAsync("/api/v1/admin/users");
+        await LogUnauthorizedResponseAsync(response, "/api/v1/admin/users", authorizationHeader: null);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -349,8 +350,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task AdminUsersWithNormalUserTokenReturnsForbidden()
     {
-        var accessToken = await RegisterAndGetAccessTokenAsync("normal.user@test.local", "User1234!").ConfigureAwait(false);
-        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken).ConfigureAwait(false);
+        var accessToken = await RegisterAndGetAccessTokenAsync("normal.user@test.local", "User1234!");
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -358,10 +359,10 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task AdminUsersWithAdminTokenReturnsOk()
     {
-        var accessToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var accessToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         AssertTokenHasRole(accessToken, "Admin");
 
-        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken).ConfigureAwait(false);
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -369,12 +370,12 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task RegisterAssignsUserRole()
     {
-        var _ = await RegisterAndGetAccessTokenAsync("role.check@test.local", "User1234!").ConfigureAwait(false);
-        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var _ = await RegisterAndGetAccessTokenAsync("role.check@test.local", "User1234!");
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         AssertTokenHasRole(adminToken, "Admin");
 
-        var response = await GetWithBearerTokenAsync("/api/v1/admin/users?search=role.check@test.local", adminToken).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>().ConfigureAwait(false);
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users?search=role.check@test.local", adminToken);
+        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
@@ -385,12 +386,12 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     [Fact]
     public async Task PutRolesWithEmptyRolesReturnsBadRequest()
     {
-        var userToken = await RegisterAndGetAccessTokenAsync("empty.roles@test.local", "User1234!").ConfigureAwait(false);
+        var userToken = await RegisterAndGetAccessTokenAsync("empty.roles@test.local", "User1234!");
         Assert.False(string.IsNullOrWhiteSpace(userToken));
 
-        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         AssertTokenHasRole(adminToken, "Admin");
-        var userId = await GetUserIdByEmailAsync(adminToken, "empty.roles@test.local").ConfigureAwait(false);
+        var userId = await GetUserIdByEmailAsync(adminToken, "empty.roles@test.local");
 
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/admin/users/{userId}/roles")
         {
@@ -399,8 +400,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
         SetBearerAuthorization(adminToken);
         var authorizationHeader = _client.DefaultRequestHeaders.Authorization?.ToString();
 
-        var response = await _client.SendAsync(request).ConfigureAwait(false);
-        await LogUnauthorizedResponseAsync(response, $"/api/v1/admin/users/{userId}/roles", authorizationHeader).ConfigureAwait(false);
+        var response = await _client.SendAsync(request);
+        await LogUnauthorizedResponseAsync(response, $"/api/v1/admin/users/{userId}/roles", authorizationHeader);
         _client.DefaultRequestHeaders.Authorization = null;
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -474,10 +475,10 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
     private static void LogJwtPayloadWithoutValidation(string accessToken, string endpoint)
     {
         var token = new JwtSecurityTokenHandler().ReadJwtToken(accessToken);
-        var exp = token.Payload.Exp is long expValue
+        var exp = token.Payload.Expiration is long expValue
             ? DateTimeOffset.FromUnixTimeSeconds(expValue).ToString("O")
             : "<missing>";
-        var nbf = token.Payload.Nbf is long nbfValue
+        var nbf = token.Payload.NotBefore is long nbfValue
             ? DateTimeOffset.FromUnixTimeSeconds(nbfValue).ToString("O")
             : "<missing>";
         var audience = token.Audiences.Any() ? string.Join(",", token.Audiences) : "<missing>";
