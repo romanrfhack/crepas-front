@@ -143,9 +143,9 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
         var endpointDataSource = scope.ServiceProvider.GetRequiredService<EndpointDataSource>();
         var authEndpoints = new[]
         {
-            "/api/v{version:apiVersion}/auth/login",
-            "/api/v{version:apiVersion}/auth/register",
-            "/api/v{version:apiVersion}/auth/refresh"
+            "api/v{version:apiVersion}/auth/login",
+            "api/v{version:apiVersion}/auth/register",
+            "api/v{version:apiVersion}/auth/refresh"
         };
 
         var routeEndpoints = endpointDataSource.Endpoints.OfType<RouteEndpoint>().ToArray();
@@ -217,9 +217,9 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
         var endpointDataSource = scope.ServiceProvider.GetRequiredService<EndpointDataSource>();
         var authRoutes = new[]
         {
-            "/api/v{version:apiVersion}/auth/login",
-            "/api/v{version:apiVersion}/auth/register",
-            "/api/v{version:apiVersion}/auth/refresh"
+            "api/v{version:apiVersion}/auth/login",
+            "api/v{version:apiVersion}/auth/register",
+            "api/v{version:apiVersion}/auth/refresh"
         };
 
         foreach (var route in authRoutes)
