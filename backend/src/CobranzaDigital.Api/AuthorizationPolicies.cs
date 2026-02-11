@@ -4,5 +4,6 @@ public static class AuthorizationPolicies
 {
     public const string AdminOnly = "AdminOnly";
     public const string RequireScope = "RequireScope";
+    public const string PosAdmin = "PosAdmin";
     public const string RequiredScopeValue = "cobranza.read";
 }
