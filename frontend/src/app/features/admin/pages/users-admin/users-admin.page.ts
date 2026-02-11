@@ -65,7 +65,7 @@ import { RoleDto, UserSummary } from '../../models/admin.models';
       }
 
       <datalist id="available-role-options">
-        @for (role of availableRoles(); track role.id) {
+        @for (role of availableRoles(); track role.name) {
           <option [value]="role.name"></option>
         }
       </datalist>

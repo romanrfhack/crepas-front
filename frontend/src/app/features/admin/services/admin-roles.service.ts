@@ -15,7 +15,8 @@ export class AdminRolesService {
     return firstValueFrom(this.apiClient.post<RoleDto>('/v1/admin/roles', { name }));
   }
 
-  async deleteRole(roleId: string) {
-    return firstValueFrom(this.apiClient.delete<void>(`/v1/admin/roles/${roleId}`));
+  async deleteRole(roleName: string) {
+    const encodedRoleName = encodeURIComponent(roleName.trim());
+    return firstValueFrom(this.apiClient.delete<void>(`/v1/admin/roles/${encodedRoleName}`));
   }
 }

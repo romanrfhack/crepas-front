@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using CobranzaDigital.Api.FeatureManagement;
+using CobranzaDigital.Application.Contracts.Admin;
 using CobranzaDigital.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,13 +24,14 @@ public sealed class AdminRolesController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(IReadOnlyCollection<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IReadOnlyCollection<AdminRoleDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetRoles(CancellationToken cancellationToken)
     {
         IReadOnlyCollection<string> roles = await _userAdminService.GetRolesAsync(cancellationToken).ConfigureAwait(false);
-        return Ok(roles);
+        var roleDtos = roles.Select(roleName => new AdminRoleDto(roleName)).ToArray();
+        return Ok(roleDtos);
     }
 
     [HttpPost]

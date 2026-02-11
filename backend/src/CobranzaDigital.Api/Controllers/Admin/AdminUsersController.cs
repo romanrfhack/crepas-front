@@ -17,10 +17,12 @@ namespace CobranzaDigital.Api.Controllers.Admin;
 public sealed class AdminUsersController : ControllerBase
 {
     private readonly IUserAdminService _userAdminService;
+    private readonly ILogger<AdminUsersController> _logger;
 
-    public AdminUsersController(IUserAdminService userAdminService)
+    public AdminUsersController(IUserAdminService userAdminService, ILogger<AdminUsersController> logger)
     {
         _userAdminService = userAdminService;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -30,10 +32,17 @@ public sealed class AdminUsersController : ControllerBase
     public async Task<IActionResult> GetUsers(
         [FromQuery] string? search,
         [FromQuery] int page = 1,
+        [FromQuery] int? pageNumber = null,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        if (page <= 0 || pageSize <= 0)
+        var effectivePage = pageNumber ?? page;
+        if (pageNumber.HasValue)
+        {
+            _logger.LogInformation("Using legacy pagination query parameter 'pageNumber' with value {PageNumber}.", pageNumber.Value);
+        }
+
+        if (effectivePage <= 0 || pageSize <= 0)
         {
             return ValidationProblem(new ValidationProblemDetails(new Dictionary<string, string[]>
             {
@@ -41,7 +50,7 @@ public sealed class AdminUsersController : ControllerBase
             }));
         }
 
-        var result = await _userAdminService.GetUsersAsync(search, page, pageSize, cancellationToken).ConfigureAwait(false);
+        var result = await _userAdminService.GetUsersAsync(search, effectivePage, pageSize, cancellationToken).ConfigureAwait(false);
         return Ok(result);
     }
 
@@ -79,6 +88,28 @@ public sealed class AdminUsersController : ControllerBase
     public async Task<IActionResult> SetLock(
         string id,
         [FromBody] SetUserLockRequest request,
+        CancellationToken cancellationToken)
+    {
+        return await SetLockInternal(id, request, cancellationToken).ConfigureAwait(false);
+    }
+
+    [HttpPut("{id}/lock")]
+    [ProducesResponseType(typeof(AdminUserDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SetLockCompatibility(
+        string id,
+        [FromBody] SetUserLockRequest request,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Using compatibility endpoint PUT /admin/users/{UserId}/lock.", id);
+        return await SetLockInternal(id, request, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IActionResult> SetLockInternal(
+        string id,
+        SetUserLockRequest request,
         CancellationToken cancellationToken)
     {
         var result = await _userAdminService.SetUserLockAsync(id, request.Lock, cancellationToken).ConfigureAwait(false);
