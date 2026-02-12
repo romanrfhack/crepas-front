@@ -1,5 +1,12 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import {
   FormArray,
   FormBuilder,
@@ -48,7 +55,7 @@ import { PosShiftApiService } from '../services/pos-shift-api.service';
   styleUrl: './pos-caja.page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PosCajaPage {
+export class PosCajaPage implements OnDestroy {
   private readonly snapshotService = inject(PosCatalogSnapshotService);
   private readonly salesApi = inject(PosSalesApiService);
   private readonly shiftApi = inject(PosShiftApiService);
@@ -72,6 +79,9 @@ export class PosCajaPage {
   readonly showCloseShiftModal = signal(false);
   readonly closePreview = signal<ShiftClosePreviewDto | null>(null);
   readonly closeResult = signal<CloseShiftResultDto | null>(null);
+  readonly cartExpanded = signal(false);
+
+  private autoCollapseTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly correlationId = signal(crypto.randomUUID());
   readonly inProgressClientSaleId = signal<string | null>(null);
@@ -125,7 +135,9 @@ export class PosCajaPage {
     ),
   );
 
-  readonly closeDifference = computed(() => this.round2(this.countedTotal() - this.closeExpectedAmount()));
+  readonly closeDifference = computed(() =>
+    this.round2(this.countedTotal() - this.closeExpectedAmount()),
+  );
   readonly requiresDifferenceReason = computed(() => this.closeDifference() !== 0);
   readonly largeDifferenceWarning = computed(() => Math.abs(this.closeDifference()) >= 200);
 
@@ -276,7 +288,10 @@ export class PosCajaPage {
 
     try {
       const closeNotes = [reason, evidence].filter((value) => !!value?.trim()).join(' | ');
-      const result = await this.shiftApi.closeShift(this.buildCountedDenominations(), closeNotes || null);
+      const result = await this.shiftApi.closeShift(
+        this.buildCountedDenominations(),
+        closeNotes || null,
+      );
       this.closeResult.set(result);
       this.currentShift.set({
         ...shift,
@@ -290,6 +305,14 @@ export class PosCajaPage {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  ngOnDestroy() {
+    this.clearAutoCollapseTimer();
+  }
+
+  toggleCart() {
+    this.cartExpanded.update((prev) => !prev);
   }
 
   onProductSelected(product: ProductDto) {
@@ -408,6 +431,25 @@ export class PosCajaPage {
         extras: customization.extras,
       },
     ]);
+    this.cartExpanded.set(true);
+    this.scheduleAutoCollapse();
+  }
+
+  private scheduleAutoCollapse() {
+    this.clearAutoCollapseTimer();
+    this.autoCollapseTimer = setTimeout(() => {
+      this.cartExpanded.set(false);
+      this.autoCollapseTimer = null;
+    }, 3000);
+  }
+
+  private clearAutoCollapseTimer() {
+    if (!this.autoCollapseTimer) {
+      return;
+    }
+
+    clearTimeout(this.autoCollapseTimer);
+    this.autoCollapseTimer = null;
   }
 
   private async handleSaleError(error: unknown) {

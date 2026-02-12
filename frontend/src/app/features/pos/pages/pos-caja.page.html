@@ -48,7 +48,10 @@
 
   @if (closeResult(); as closeResult) {
     <p class="success" role="status">
-      Cierre registrado · Esperado: ${{ closeResult.expectedCashAmount.toFixed(2) }} · Contado: ${{ closeResult.countedCashAmount.toFixed(2) }} · Diferencia: ${{ closeResult.difference.toFixed(2) }}
+      Cierre registrado · Esperado: ${{ closeResult.expectedCashAmount.toFixed(2) }} · Contado: ${{
+        closeResult.countedCashAmount.toFixed(2)
+      }}
+      · Diferencia: ${{ closeResult.difference.toFixed(2) }}
     </p>
   }
 
@@ -62,14 +65,26 @@
     <div class="product-grid-container">
       <app-pos-product-grid [products]="products()" (addProduct)="onProductSelected($event)" />
     </div>
+  </div>
 
-    <details class="cart-details" open>
-      <summary class="cart-summary">
-        <span>🛒 Carrito</span>
-        <span class="cart-badge">{{ cartItems().length }} items</span>
-        <span class="cart-total">${{ estimatedTotal().toFixed(2) }}</span>
-      </summary>
+  @if (cartItems().length > 0) {
+    <button
+      type="button"
+      class="cart-floating-button"
+      [class.has-items]="cartItems().length > 0"
+      (click)="toggleCart()"
+      aria-label="Carrito de compras"
+    >
+      🛒 <span class="cart-floating-badge">{{ cartItems().length }}</span>
+    </button>
+  }
 
+  @if (cartExpanded() && cartItems().length > 0) {
+    <div class="cart-panel">
+      <div class="cart-panel-header">
+        <span>🛒 Tu pedido</span>
+        <button type="button" class="close-button" (click)="cartExpanded.set(false)">✕</button>
+      </div>
       <app-pos-cart
         [items]="cartItems()"
         [estimatedTotal]="estimatedTotal()"
@@ -77,10 +92,10 @@
         (increase)="increaseQty($event)"
         (decrease)="decreaseQty($event)"
         (remove)="removeFromCart($event)"
-        (checkout)="openPaymentModal()"
+        (checkout)="openPaymentModal(); cartExpanded.set(false)"
       />
-    </details>
-  </div>
+    </div>
+  }
 
   @if (activeCustomizationProduct(); as product) {
     <div class="customization-wrapper">
@@ -148,8 +163,12 @@
 
         @if (closePreview(); as preview) {
           <div class="close-summary">
-            <p>Apertura: <strong>${{ preview.openingCashAmount.toFixed(2) }}</strong></p>
-            <p>Ventas efectivo turno: <strong>${{ preview.salesCashTotal.toFixed(2) }}</strong></p>
+            <p>
+              Apertura: <strong>${{ preview.openingCashAmount.toFixed(2) }}</strong>
+            </p>
+            <p>
+              Ventas efectivo turno: <strong>${{ preview.salesCashTotal.toFixed(2) }}</strong>
+            </p>
           </div>
         }
 
