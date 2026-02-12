@@ -57,15 +57,23 @@
       <app-pos-product-grid [products]="products()" (addProduct)="onProductSelected($event)" />
     </div>
 
-    <app-pos-cart
-      [items]="cartItems()"
-      [estimatedTotal]="estimatedTotal()"
-      [checkoutDisabled]="!canCheckout()"
-      (increase)="increaseQty($event)"
-      (decrease)="decreaseQty($event)"
-      (remove)="removeFromCart($event)"
-      (checkout)="openPaymentModal()"
-    />
+    <details class="cart-details" open>
+      <summary class="cart-summary">
+        <span>🛒 Carrito</span>
+        <span class="cart-badge">{{ cartItems().length }} items</span>
+        <span class="cart-total">${{ estimatedTotal().toFixed(2) }}</span>
+      </summary>
+
+      <app-pos-cart
+        [items]="cartItems()"
+        [estimatedTotal]="estimatedTotal()"
+        [checkoutDisabled]="!canCheckout()"
+        (increase)="increaseQty($event)"
+        (decrease)="decreaseQty($event)"
+        (remove)="removeFromCart($event)"
+        (checkout)="openPaymentModal()"
+      />
+    </details>
   </div>
 
   @if (activeCustomizationProduct(); as product) {
