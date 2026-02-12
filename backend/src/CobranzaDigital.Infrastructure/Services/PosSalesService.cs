@@ -41,206 +41,211 @@ public sealed class PosSalesService : IPosSalesService
     {
         ValidateRequest(request);
 
-        var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
-        var correlationId = GetCorrelationId();
-
-        Guid? openShiftId = null;
-        if (_posOptions.RequireOpenShiftForSales)
+        // SQL Server retry strategies require user transactions to be created inside ExecuteAsync.
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            openShiftId = await _db.PosShifts.AsNoTracking()
-                .Where(x => x.ClosedAtUtc == null)
-                .Select(x => (Guid?)x.Id)
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
+            var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
+            var correlationId = GetCorrelationId();
 
-            if (!openShiftId.HasValue)
+            Guid? openShiftId = null;
+            if (_posOptions.RequireOpenShiftForSales)
             {
-                throw new ConflictException("Cannot register sale because there is no open shift.");
+                openShiftId = await _db.PosShifts.AsNoTracking()
+                    .Where(x => x.ClosedAtUtc == null)
+                    .Select(x => (Guid?)x.Id)
+                    .FirstOrDefaultAsync(ct)
+                    .ConfigureAwait(false);
+
+                if (!openShiftId.HasValue)
+                {
+                    throw new ConflictException("Cannot register sale because there is no open shift.");
+                }
             }
-        }
 
-        if (request.ClientSaleId.HasValue)
-        {
-            var existing = await _db.Sales.AsNoTracking()
-                .Where(x => x.ClientSaleId == request.ClientSaleId.Value)
-                .Select(x => new CreateSaleResponseDto(x.Id, x.Folio, x.OccurredAtUtc, x.Total))
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
-
-            if (existing is not null)
+            if (request.ClientSaleId.HasValue)
             {
-                LogAction("IdempotentHit", "Sale", existing.SaleId, correlationId);
-                return existing;
+                var existing = await _db.Sales.AsNoTracking()
+                    .Where(x => x.ClientSaleId == request.ClientSaleId.Value)
+                    .Select(x => new CreateSaleResponseDto(x.Id, x.Folio, x.OccurredAtUtc, x.Total))
+                    .FirstOrDefaultAsync(ct)
+                    .ConfigureAwait(false);
+
+                if (existing is not null)
+                {
+                    LogAction("IdempotentHit", "Sale", existing.SaleId, correlationId);
+                    return existing;
+                }
             }
-        }
 
-        var productIds = request.Items.Select(x => x.ProductId).Distinct().ToArray();
-        var products = await _db.Products.AsNoTracking()
-            .Where(x => productIds.Contains(x.Id) && x.IsActive)
-            .ToDictionaryAsync(x => x.Id, ct)
-            .ConfigureAwait(false);
-
-        if (products.Count != productIds.Length)
-        {
-            throw new NotFoundException("One or more products were not found or are inactive.");
-        }
-
-        var optionIds = request.Items
-            .SelectMany(x => x.Selections ?? [])
-            .Select(x => x.OptionItemId)
-            .Distinct()
-            .ToArray();
-        var options = optionIds.Length == 0
-            ? new Dictionary<Guid, OptionItem>()
-            : await _db.OptionItems.AsNoTracking()
-                .Where(x => optionIds.Contains(x.Id) && x.IsActive)
+            var productIds = request.Items.Select(x => x.ProductId).Distinct().ToArray();
+            var products = await _db.Products.AsNoTracking()
+                .Where(x => productIds.Contains(x.Id) && x.IsActive)
                 .ToDictionaryAsync(x => x.Id, ct)
                 .ConfigureAwait(false);
 
-        if (options.Count != optionIds.Length)
-        {
-            throw new NotFoundException("One or more option items were not found or are inactive.");
-        }
+            if (products.Count != productIds.Length)
+            {
+                throw new NotFoundException("One or more products were not found or are inactive.");
+            }
 
-        var extraIds = request.Items
-            .SelectMany(x => x.Extras ?? [])
-            .Select(x => x.ExtraId)
-            .Distinct()
-            .ToArray();
-        var extras = extraIds.Length == 0
-            ? new Dictionary<Guid, Extra>()
-            : await _db.Extras.AsNoTracking()
-                .Where(x => extraIds.Contains(x.Id) && x.IsActive)
-                .ToDictionaryAsync(x => x.Id, ct)
-                .ConfigureAwait(false);
+            var optionIds = request.Items
+                .SelectMany(x => x.Selections ?? [])
+                .Select(x => x.OptionItemId)
+                .Distinct()
+                .ToArray();
+            var options = optionIds.Length == 0
+                ? new Dictionary<Guid, OptionItem>()
+                : await _db.OptionItems.AsNoTracking()
+                    .Where(x => optionIds.Contains(x.Id) && x.IsActive)
+                    .ToDictionaryAsync(x => x.Id, ct)
+                    .ConfigureAwait(false);
 
-        if (extras.Count != extraIds.Length)
-        {
-            throw new NotFoundException("One or more extras were not found or are inactive.");
-        }
+            if (options.Count != optionIds.Length)
+            {
+                throw new NotFoundException("One or more option items were not found or are inactive.");
+            }
 
-        var saleId = Guid.NewGuid();
-        var occurredAtUtc = request.OccurredAtUtc ?? DateTimeOffset.UtcNow;
-        var sale = new Sale
-        {
-            Id = saleId,
-            Folio = GenerateFolio(occurredAtUtc),
-            OccurredAtUtc = occurredAtUtc,
-            Currency = "MXN",
-            CreatedByUserId = userId,
-            CorrelationId = correlationId,
-            ClientSaleId = request.ClientSaleId,
-            ShiftId = openShiftId,
-            Status = SaleStatus.Completed
-        };
+            var extraIds = request.Items
+                .SelectMany(x => x.Extras ?? [])
+                .Select(x => x.ExtraId)
+                .Distinct()
+                .ToArray();
+            var extras = extraIds.Length == 0
+                ? new Dictionary<Guid, Extra>()
+                : await _db.Extras.AsNoTracking()
+                    .Where(x => extraIds.Contains(x.Id) && x.IsActive)
+                    .ToDictionaryAsync(x => x.Id, ct)
+                    .ConfigureAwait(false);
 
-        decimal subtotal = 0m;
-        foreach (var requestItem in request.Items)
-        {
-            var product = products[requestItem.ProductId];
-            var selectionRows = requestItem.Selections ?? [];
-            var extraRows = requestItem.Extras ?? [];
+            if (extras.Count != extraIds.Length)
+            {
+                throw new NotFoundException("One or more extras were not found or are inactive.");
+            }
 
-            const decimal selectionUnitDelta = 0m;
-            var baseLineTotal = (product.BasePrice + selectionUnitDelta) * requestItem.Quantity;
+            var saleId = Guid.NewGuid();
+            var occurredAtUtc = request.OccurredAtUtc ?? DateTimeOffset.UtcNow;
+            var sale = new Sale
+            {
+                Id = saleId,
+                Folio = GenerateFolio(occurredAtUtc),
+                OccurredAtUtc = occurredAtUtc,
+                Currency = "MXN",
+                CreatedByUserId = userId,
+                CorrelationId = correlationId,
+                ClientSaleId = request.ClientSaleId,
+                ShiftId = openShiftId,
+                Status = SaleStatus.Completed
+            };
 
-            var saleItem = new SaleItem
+            decimal subtotal = 0m;
+            foreach (var requestItem in request.Items)
+            {
+                var product = products[requestItem.ProductId];
+                var selectionRows = requestItem.Selections ?? [];
+                var extraRows = requestItem.Extras ?? [];
+
+                const decimal selectionUnitDelta = 0m;
+                var baseLineTotal = (product.BasePrice + selectionUnitDelta) * requestItem.Quantity;
+
+                var saleItem = new SaleItem
+                {
+                    Id = Guid.NewGuid(),
+                    SaleId = sale.Id,
+                    ProductId = product.Id,
+                    ProductExternalCode = product.ExternalCode,
+                    ProductNameSnapshot = product.Name,
+                    UnitPriceSnapshot = product.BasePrice,
+                    Quantity = requestItem.Quantity,
+                    LineTotal = baseLineTotal
+                };
+                _db.SaleItems.Add(saleItem);
+
+                foreach (var selection in selectionRows)
+                {
+                    var option = options[selection.OptionItemId];
+                    _db.SaleItemSelections.Add(new SaleItemSelection
+                    {
+                        Id = Guid.NewGuid(),
+                        SaleItemId = saleItem.Id,
+                        GroupKey = selection.GroupKey,
+                        OptionItemId = option.Id,
+                        OptionItemNameSnapshot = option.Name,
+                        PriceDeltaSnapshot = 0m
+                    });
+                }
+
+                decimal extrasLineTotal = 0m;
+                foreach (var extraRow in extraRows)
+                {
+                    var extra = extras[extraRow.ExtraId];
+                    var lineTotal = extra.Price * extraRow.Quantity;
+                    extrasLineTotal += lineTotal;
+
+                    _db.SaleItemExtras.Add(new SaleItemExtra
+                    {
+                        Id = Guid.NewGuid(),
+                        SaleItemId = saleItem.Id,
+                        ExtraId = extra.Id,
+                        ExtraNameSnapshot = extra.Name,
+                        UnitPriceSnapshot = extra.Price,
+                        Quantity = extraRow.Quantity,
+                        LineTotal = lineTotal
+                    });
+                }
+
+                saleItem.LineTotal += extrasLineTotal;
+                subtotal += saleItem.LineTotal;
+            }
+
+            sale.Subtotal = subtotal;
+            sale.Total = subtotal;
+
+            if (request.Payment.Amount != sale.Total)
+            {
+                throw ValidationError("payment.amount", "Payment amount must match sale total.");
+            }
+
+            _db.Sales.Add(sale);
+            _db.Payments.Add(new Payment
             {
                 Id = Guid.NewGuid(),
                 SaleId = sale.Id,
-                ProductId = product.Id,
-                ProductExternalCode = product.ExternalCode,
-                ProductNameSnapshot = product.Name,
-                UnitPriceSnapshot = product.BasePrice,
-                Quantity = requestItem.Quantity,
-                LineTotal = baseLineTotal
-            };
-            _db.SaleItems.Add(saleItem);
+                Method = request.Payment.Method,
+                Amount = request.Payment.Amount,
+                Reference = request.Payment.Method == PaymentMethod.Cash
+                    ? null
+                    : request.Payment.Reference?.Trim()
+            });
 
-            foreach (var selection in selectionRows)
+            await using var tx = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            try
             {
-                var option = options[selection.OptionItemId];
-                _db.SaleItemSelections.Add(new SaleItemSelection
-                {
-                    Id = Guid.NewGuid(),
-                    SaleItemId = saleItem.Id,
-                    GroupKey = selection.GroupKey,
-                    OptionItemId = option.Id,
-                    OptionItemNameSnapshot = option.Name,
-                    PriceDeltaSnapshot = 0m
-                });
+                await _auditLogger.LogAsync(new AuditEntry(
+                    Action: "Create",
+                    UserId: userId,
+                    CorrelationId: correlationId,
+                    EntityType: "Sale",
+                    EntityId: sale.Id.ToString("D"),
+                    Before: null,
+                    After: new { sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Total, sale.ShiftId, Items = request.Items.Count },
+                    Source: "POS",
+                    Notes: "Sale created",
+                    OccurredAtUtc: DateTime.UtcNow), ct).ConfigureAwait(false);
+
+                await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+                await tx.CommitAsync(ct).ConfigureAwait(false);
+            }
+            catch (DbUpdateException) when (request.ClientSaleId.HasValue)
+            {
+                await tx.RollbackAsync(ct).ConfigureAwait(false);
+                LogAction("CreateConflict", "Sale", sale.Id, correlationId);
+                throw new ConflictException("A sale with the same clientSaleId already exists.");
             }
 
-            decimal extrasLineTotal = 0m;
-            foreach (var extraRow in extraRows)
-            {
-                var extra = extras[extraRow.ExtraId];
-                var lineTotal = extra.Price * extraRow.Quantity;
-                extrasLineTotal += lineTotal;
-
-                _db.SaleItemExtras.Add(new SaleItemExtra
-                {
-                    Id = Guid.NewGuid(),
-                    SaleItemId = saleItem.Id,
-                    ExtraId = extra.Id,
-                    ExtraNameSnapshot = extra.Name,
-                    UnitPriceSnapshot = extra.Price,
-                    Quantity = extraRow.Quantity,
-                    LineTotal = lineTotal
-                });
-            }
-
-            saleItem.LineTotal += extrasLineTotal;
-            subtotal += saleItem.LineTotal;
-        }
-
-        sale.Subtotal = subtotal;
-        sale.Total = subtotal;
-
-        if (request.Payment.Amount != sale.Total)
-        {
-            throw ValidationError("payment.amount", "Payment amount must match sale total.");
-        }
-
-        _db.Sales.Add(sale);
-        _db.Payments.Add(new Payment
-        {
-            Id = Guid.NewGuid(),
-            SaleId = sale.Id,
-            Method = request.Payment.Method,
-            Amount = request.Payment.Amount,
-            Reference = request.Payment.Method == PaymentMethod.Cash
-                ? null
-                : request.Payment.Reference?.Trim()
-        });
-
-        await using var tx = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-        try
-        {
-            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-            await tx.CommitAsync(ct).ConfigureAwait(false);
-        }
-        catch (DbUpdateException) when (request.ClientSaleId.HasValue)
-        {
-            await tx.RollbackAsync(ct).ConfigureAwait(false);
-            LogAction("CreateConflict", "Sale", sale.Id, correlationId);
-            throw new ConflictException("A sale with the same clientSaleId already exists.");
-        }
-
-        await _auditLogger.LogAsync(new AuditEntry(
-            Action: "Create",
-            UserId: userId,
-            CorrelationId: correlationId,
-            EntityType: "Sale",
-            EntityId: sale.Id.ToString("D"),
-            Before: null,
-            After: new { sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Total, sale.ShiftId, Items = request.Items.Count },
-            Source: "POS",
-            Notes: "Sale created",
-            OccurredAtUtc: DateTime.UtcNow), ct).ConfigureAwait(false);
-
-        LogAction("Create", "Sale", sale.Id, correlationId);
-        return new CreateSaleResponseDto(sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Total);
+            LogAction("Create", "Sale", sale.Id, correlationId);
+            return new CreateSaleResponseDto(sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Total);
+        }).ConfigureAwait(false);
     }
 
     public async Task<DailySummaryDto> GetDailySummaryAsync(DateOnly forDate, CancellationToken ct)
