@@ -243,13 +243,25 @@ public sealed class PosShiftService : IPosShiftService
     {
         if (_db.Database.IsSqlite())
         {
-            var cashPayments = await _db.Sales.AsNoTracking()
-                .Join(_db.Payments.AsNoTracking(), sale => sale.Id, payment => payment.SaleId, (sale, payment) => new { sale, payment })
-                .Where(x => x.sale.ShiftId == shiftId)
-                .Where(x => x.sale.Status == SaleStatus.Completed)
-                .Where(x => x.sale.OccurredAtUtc >= openedAtUtc && x.sale.OccurredAtUtc <= untilUtc)
-                .Where(x => x.payment.Method == PaymentMethod.Cash)
-                .Select(x => x.payment.Amount)
+            var saleIds = (await _db.Sales.AsNoTracking()
+                .Select(x => new { x.Id, x.ShiftId, x.Status, x.OccurredAtUtc })
+                .ToListAsync(ct)
+                .ConfigureAwait(false))
+                .Where(x => x.ShiftId == shiftId)
+                .Where(x => x.Status == SaleStatus.Completed)
+                .Where(x => x.OccurredAtUtc >= openedAtUtc && x.OccurredAtUtc <= untilUtc)
+                .Select(x => x.Id)
+                .ToList();
+
+            if (saleIds.Count == 0)
+            {
+                return 0m;
+            }
+
+            var cashPayments = await _db.Payments.AsNoTracking()
+                .Where(x => saleIds.Contains(x.SaleId))
+                .Where(x => x.Method == PaymentMethod.Cash)
+                .Select(x => x.Amount)
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
 
