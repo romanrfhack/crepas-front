@@ -13,5 +13,6 @@ public interface IPosShiftService
 {
     Task<PosShiftDto?> GetCurrentShiftAsync(CancellationToken ct);
     Task<PosShiftDto> OpenShiftAsync(OpenPosShiftRequestDto request, CancellationToken ct);
-    Task<PosShiftDto> CloseShiftAsync(ClosePosShiftRequestDto request, CancellationToken ct);
+    Task<ShiftClosePreviewDto> GetClosePreviewAsync(CancellationToken ct);
+    Task<ClosePosShiftResultDto> CloseShiftAsync(ClosePosShiftRequestDto request, CancellationToken ct);
 }

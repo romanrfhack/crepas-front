@@ -90,6 +90,78 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     }
 
     [Fact]
+    public async Task CloseShift_ComputesExpectedCountedAndDifference_FromCashDenominations()
+    {
+        await CloseAnyOpenShiftAsync();
+
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+
+        using var openReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/open", token);
+        openReq.Content = JsonContent.Create(new
+        {
+            startingCashAmount = 100m,
+            notes = "Turno para validar cierre",
+            clientOperationId = Guid.NewGuid()
+        });
+
+        using var openResp = await _client.SendAsync(openReq);
+        Assert.Equal(HttpStatusCode.OK, openResp.StatusCode);
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = "Cierre POS", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Americano", categoryId = category.Id, basePrice = 50m, isActive = true });
+
+        await CreateSaleAsync(token, product.Id, quantity: 1, total: 50m);
+
+        using var previewReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/close-preview", token);
+        using var previewResp = await _client.SendAsync(previewReq);
+        var preview = await previewResp.Content.ReadFromJsonAsync<ShiftClosePreviewResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, previewResp.StatusCode);
+        Assert.NotNull(preview);
+        Assert.Equal(100m, preview!.OpeningCashAmount);
+        Assert.Equal(50m, preview.SalesCashTotal);
+        Assert.Equal(150m, preview.ExpectedCashAmount);
+
+        using var closeReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/close", token);
+        closeReq.Content = JsonContent.Create(new
+        {
+            countedDenominations = new[]
+            {
+                new { denominationValue = 100m, count = 1 },
+                new { denominationValue = 50m, count = 2 }
+            },
+            closingNotes = "Sin diferencias",
+            clientOperationId = Guid.NewGuid()
+        });
+
+        using var closeResp = await _client.SendAsync(closeReq);
+        var close = await closeResp.Content.ReadFromJsonAsync<CloseShiftResultResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, closeResp.StatusCode);
+        Assert.NotNull(close);
+        Assert.Equal(150m, close!.ExpectedCashAmount);
+        Assert.Equal(200m, close.CountedCashAmount);
+        Assert.Equal(50m, close.Difference);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var dbShift = await db.PosShifts.AsNoTracking().FirstAsync(x => x.Id == close.ShiftId);
+
+        Assert.Equal(200m, dbShift.ClosingCashAmount);
+        Assert.Equal(150m, dbShift.ExpectedCashAmount);
+        Assert.Equal(50m, dbShift.CashDifference);
+        Assert.False(string.IsNullOrWhiteSpace(dbShift.DenominationsJson));
+
+        var audit = await db.AuditLogs.AsNoTracking()
+            .Where(x => x.Action == "Close" && x.EntityType == "PosShift" && x.EntityId == close.ShiftId.ToString())
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(audit);
+        Assert.False(string.IsNullOrWhiteSpace(audit!.AfterJson));
+    }
+
+    [Fact]
     public async Task CreateSale_PersistsSnapshot_And_Audit()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
@@ -292,6 +364,8 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive);
     private sealed record CreateSaleResponse(Guid SaleId, string Folio, DateTimeOffset OccurredAtUtc, decimal Total);
     private sealed record PosShiftResponse(Guid Id, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc, decimal OpeningCashAmount, decimal? ClosingCashAmount, string? Notes);
+    private sealed record ShiftClosePreviewResponse(Guid ShiftId, DateTimeOffset OpenedAtUtc, decimal OpeningCashAmount, decimal SalesCashTotal, decimal ExpectedCashAmount);
+    private sealed record CloseShiftResultResponse(Guid ShiftId, DateTimeOffset OpenedAtUtc, DateTimeOffset ClosedAtUtc, decimal OpeningCashAmount, decimal SalesCashTotal, decimal ExpectedCashAmount, decimal CountedCashAmount, decimal Difference, string? CloseNotes);
     private sealed record DailySummaryResponse(DateOnly Date, int TotalTickets, decimal TotalAmount, int TotalItems, decimal AvgTicket);
     private sealed record TopProductResponse(Guid ProductId, string ProductNameSnapshot, int Qty, decimal Amount);
 }

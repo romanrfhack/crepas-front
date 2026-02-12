@@ -21,10 +21,12 @@ import {
 import { ProductGridComponent } from '../components/product-grid/product-grid.component';
 import {
   CartItem,
-  CashCountLineDto,
+  CloseShiftResultDto,
+  CountedDenominationDto,
   CatalogSnapshotDto,
   CreateSaleRequestDto,
   PosShiftDto,
+  ShiftClosePreviewDto,
   ProductDto,
   SaleResponseDto,
 } from '../models/pos.models';
@@ -68,6 +70,8 @@ export class PosCajaPage {
   readonly currentShift = signal<PosShiftDto | null>(null);
   readonly showOpenShiftModal = signal(false);
   readonly showCloseShiftModal = signal(false);
+  readonly closePreview = signal<ShiftClosePreviewDto | null>(null);
+  readonly closeResult = signal<CloseShiftResultDto | null>(null);
 
   readonly correlationId = signal(crypto.randomUUID());
   readonly inProgressClientSaleId = signal<string | null>(null);
@@ -110,14 +114,7 @@ export class PosCajaPage {
     };
   });
 
-  readonly closeExpectedAmount = computed(() => {
-    const shift = this.currentShift();
-    if (!shift) {
-      return this.estimatedTotal();
-    }
-
-    return shift.expectedClosingAmount ?? this.estimatedTotal();
-  });
+  readonly closeExpectedAmount = computed(() => this.closePreview()?.expectedCashAmount ?? 0);
 
   readonly countedTotal = computed(() =>
     this.round2(
@@ -128,10 +125,9 @@ export class PosCajaPage {
     ),
   );
 
-  readonly closeDifference = computed(() =>
-    this.round2(this.countedTotal() - this.closeExpectedAmount()),
-  );
+  readonly closeDifference = computed(() => this.round2(this.countedTotal() - this.closeExpectedAmount()));
   readonly requiresDifferenceReason = computed(() => this.closeDifference() !== 0);
+  readonly largeDifferenceWarning = computed(() => Math.abs(this.closeDifference()) >= 200);
 
   readonly products = computed(() => {
     const current = this.snapshot()?.products.filter((item) => item.isActive) ?? [];
@@ -237,17 +233,29 @@ export class PosCajaPage {
     }
   }
 
-  startCloseShift() {
-    if (!this.hasOpenShift()) {
+  async startCloseShift() {
+    if (!this.hasOpenShift() || this.loading()) {
       return;
     }
 
-    this.closeShiftForm.reset({
-      reason: '',
-      evidence: '',
-      counts: this.denominations.map(() => 0),
-    });
-    this.showCloseShiftModal.set(true);
+    this.loading.set(true);
+    this.errorMessage.set(null);
+
+    try {
+      const preview = await this.shiftApi.getClosePreview();
+      this.closePreview.set(preview);
+      this.closeResult.set(null);
+      this.closeShiftForm.reset({
+        reason: '',
+        evidence: '',
+        counts: this.denominations.map(() => 0),
+      });
+      this.showCloseShiftModal.set(true);
+    } catch {
+      this.errorMessage.set('No se pudo obtener la vista previa del cierre de turno.');
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   async submitCloseShift() {
@@ -267,13 +275,15 @@ export class PosCajaPage {
     const { reason, evidence } = this.closeShiftForm.getRawValue();
 
     try {
-      const closedShift = await this.shiftApi.closeShift(
-        shift.id,
-        this.buildCashCountLines(),
-        reason,
-        evidence,
-      );
-      this.currentShift.set(closedShift);
+      const closeNotes = [reason, evidence].filter((value) => !!value?.trim()).join(' | ');
+      const result = await this.shiftApi.closeShift(this.buildCountedDenominations(), closeNotes || null);
+      this.closeResult.set(result);
+      this.currentShift.set({
+        ...shift,
+        closedAtUtc: result.closedAtUtc,
+        closingCashAmount: result.countedCashAmount,
+        closeNotes: result.closeNotes,
+      });
       this.showCloseShiftModal.set(false);
     } catch {
       this.errorMessage.set('No se pudo cerrar el turno.');
@@ -376,13 +386,13 @@ export class PosCajaPage {
     }
   }
 
-  private buildCashCountLines(): CashCountLineDto[] {
+  private buildCountedDenominations(): CountedDenominationDto[] {
     return this.denominations
-      .map((denomination, index) => ({
-        denomination,
-        quantity: this.countControls.at(index)?.value ?? 0,
+      .map((denominationValue, index) => ({
+        denominationValue,
+        count: this.countControls.at(index)?.value ?? 0,
       }))
-      .filter((line) => line.quantity > 0);
+      .filter((line) => line.count > 0);
   }
 
   private addToCart(product: ProductDto, customization: ProductCustomizationResult) {

@@ -279,6 +279,16 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.Property<decimal?>("ClosingCashAmount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal?>("CashDifference")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("DenominationsJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<decimal?>("ExpectedCashAmount")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("OpenNotes")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");

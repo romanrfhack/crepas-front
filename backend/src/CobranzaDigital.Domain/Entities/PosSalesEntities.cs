@@ -42,6 +42,9 @@ public sealed class PosShift : Entity
     public Guid? ClosedByUserId { get; set; }
     public string? ClosedByEmail { get; set; }
     public decimal? ClosingCashAmount { get; set; }
+    public decimal? ExpectedCashAmount { get; set; }
+    public decimal? CashDifference { get; set; }
+    public string? DenominationsJson { get; set; }
     public string? OpenNotes { get; set; }
     public string? CloseNotes { get; set; }
     public Guid? OpenOperationId { get; set; }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Claims;
+using System.Text.Json;
 
 using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Common.Exceptions;
@@ -31,14 +32,12 @@ public sealed class PosShiftService : IPosShiftService
     public async Task<PosShiftDto?> GetCurrentShiftAsync(CancellationToken ct)
     {
         var shift = await GetLatestOpenShiftAsync(ct).ConfigureAwait(false);
-
         return shift is null ? null : Map(shift);
     }
 
     public async Task<PosShiftDto> OpenShiftAsync(OpenPosShiftRequestDto request, CancellationToken ct)
     {
         var openingCashAmount = request.ResolveOpeningCashAmount();
-
         if (openingCashAmount < 0)
         {
             throw ValidationError("openingCashAmount", "openingCashAmount cannot be negative.");
@@ -93,25 +92,33 @@ public sealed class PosShiftService : IPosShiftService
         return Map(shift);
     }
 
-    public async Task<PosShiftDto> CloseShiftAsync(ClosePosShiftRequestDto request, CancellationToken ct)
+    public async Task<ShiftClosePreviewDto> GetClosePreviewAsync(CancellationToken ct)
     {
-        if (request.ClosingCashAmount < 0)
-        {
-            throw ValidationError("closingCashAmount", "closingCashAmount cannot be negative.");
-        }
+        var openShift = await GetOpenShiftForCloseAsync(ct).ConfigureAwait(false);
+        var now = DateTimeOffset.UtcNow;
+        var salesCashTotal = await GetCashSalesTotalAsync(openShift.Id, openShift.OpenedAtUtc, now, ct).ConfigureAwait(false);
+        var expectedCashAmount = RoundMoney(openShift.OpeningCashAmount + salesCashTotal);
 
-        var openShift = await _db.PosShifts.FirstOrDefaultAsync(x => x.ClosedAtUtc == null, ct).ConfigureAwait(false);
+        return new ShiftClosePreviewDto(openShift.Id, openShift.OpenedAtUtc, openShift.OpeningCashAmount, salesCashTotal, expectedCashAmount);
+    }
+
+    public async Task<ClosePosShiftResultDto> CloseShiftAsync(ClosePosShiftRequestDto request, CancellationToken ct)
+    {
+        ValidateCountedDenominations(request.CountedDenominations);
+
+        var openShift = await GetLatestOpenShiftForUpdateAsync(ct).ConfigureAwait(false);
         if (openShift is null)
         {
             if (request.ClientOperationId.HasValue)
             {
-                var closedByOperation = await _db.PosShifts.AsNoTracking()
+                var existingClosed = await _db.PosShifts.AsNoTracking()
                     .Where(x => x.CloseOperationId == request.ClientOperationId)
                     .FirstOrDefaultAsync(ct)
                     .ConfigureAwait(false);
-                if (closedByOperation is not null)
+
+                if (existingClosed is not null)
                 {
-                    return Map(closedByOperation);
+                    return MapClosed(existingClosed);
                 }
             }
 
@@ -120,15 +127,33 @@ public sealed class PosShiftService : IPosShiftService
 
         if (request.ClientOperationId.HasValue && openShift.CloseOperationId == request.ClientOperationId)
         {
-            return Map(openShift);
+            return MapClosed(openShift);
         }
 
+        var closedAtUtc = DateTimeOffset.UtcNow;
+        var salesCashTotal = await GetCashSalesTotalAsync(openShift.Id, openShift.OpenedAtUtc, closedAtUtc, ct).ConfigureAwait(false);
+        var expectedTotal = RoundMoney(openShift.OpeningCashAmount + salesCashTotal);
+        var countedTotal = RoundMoney(request.CountedDenominations.Sum(x => x.DenominationValue * x.Count));
+        var difference = RoundMoney(countedTotal - expectedTotal);
+
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
-        openShift.ClosedAtUtc = DateTimeOffset.UtcNow;
+        var before = new
+        {
+            openShift.ClosedAtUtc,
+            openShift.ClosingCashAmount,
+            openShift.ExpectedCashAmount,
+            openShift.CashDifference,
+            openShift.DenominationsJson
+        };
+
+        openShift.ClosedAtUtc = closedAtUtc;
         openShift.ClosedByUserId = userId;
         openShift.ClosedByEmail = GetCurrentUserEmail();
-        openShift.ClosingCashAmount = request.ClosingCashAmount;
-        openShift.CloseNotes = request.Notes;
+        openShift.ClosingCashAmount = countedTotal;
+        openShift.ExpectedCashAmount = expectedTotal;
+        openShift.CashDifference = difference;
+        openShift.DenominationsJson = JsonSerializer.Serialize(request.CountedDenominations);
+        openShift.CloseNotes = request.ClosingNotes;
         openShift.CloseOperationId = request.ClientOperationId;
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -139,13 +164,21 @@ public sealed class PosShiftService : IPosShiftService
             CorrelationId: GetCorrelationId(),
             EntityType: "PosShift",
             EntityId: openShift.Id.ToString("D"),
-            Before: null,
-            After: new { openShift.ClosedAtUtc, openShift.ClosingCashAmount },
+            Before: before,
+            After: new
+            {
+                openShift.ClosedAtUtc,
+                openShift.ClosingCashAmount,
+                openShift.ExpectedCashAmount,
+                openShift.CashDifference,
+                SalesCashTotal = salesCashTotal,
+                request.CountedDenominations
+            },
             Source: "POS",
             Notes: "Shift closed",
             OccurredAtUtc: DateTime.UtcNow), ct).ConfigureAwait(false);
 
-        return Map(openShift);
+        return new ClosePosShiftResultDto(openShift.Id, openShift.OpenedAtUtc, closedAtUtc, openShift.OpeningCashAmount, salesCashTotal, expectedTotal, countedTotal, difference, openShift.CloseNotes);
     }
 
     private static PosShiftDto Map(PosShift shift) => new(
@@ -161,29 +194,102 @@ public sealed class PosShiftService : IPosShiftService
         shift.OpenNotes,
         shift.CloseNotes);
 
+    private static ClosePosShiftResultDto MapClosed(PosShift shift)
+    {
+        var expected = shift.ExpectedCashAmount ?? shift.OpeningCashAmount;
+        var counted = shift.ClosingCashAmount ?? expected;
+        var difference = shift.CashDifference ?? RoundMoney(counted - expected);
+        var closedAt = shift.ClosedAtUtc ?? DateTimeOffset.UtcNow;
+        var salesCashTotal = RoundMoney(expected - shift.OpeningCashAmount);
+
+        return new ClosePosShiftResultDto(shift.Id, shift.OpenedAtUtc, closedAt, shift.OpeningCashAmount, salesCashTotal, expected, counted, difference, shift.CloseNotes);
+    }
+
+    private async Task<PosShift> GetOpenShiftForCloseAsync(CancellationToken ct)
+    {
+        var openShift = await GetLatestOpenShiftForUpdateAsync(ct).ConfigureAwait(false);
+        return openShift ?? throw new ConflictException("No open shift found.");
+    }
+
     private async Task<PosShift?> GetLatestOpenShiftAsync(CancellationToken ct)
     {
         var openShiftsQuery = _db.PosShifts.AsNoTracking().Where(x => x.ClosedAtUtc == null);
 
         if (_db.Database.IsSqlite())
         {
-            return (await openShiftsQuery
-                .ToListAsync(ct)
-                .ConfigureAwait(false))
+            return (await openShiftsQuery.ToListAsync(ct).ConfigureAwait(false))
                 .OrderByDescending(x => x.OpenedAtUtc)
                 .FirstOrDefault();
         }
 
-        return await openShiftsQuery
-            .OrderByDescending(x => x.OpenedAtUtc)
-            .FirstOrDefaultAsync(ct)
-            .ConfigureAwait(false);
+        return await openShiftsQuery.OrderByDescending(x => x.OpenedAtUtc).FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
-    private static ValidationException ValidationError(string key, string message)
+    private async Task<PosShift?> GetLatestOpenShiftForUpdateAsync(CancellationToken ct)
     {
-        return new ValidationException(new Dictionary<string, string[]> { [key] = [message] });
+        var openShiftsQuery = _db.PosShifts.Where(x => x.ClosedAtUtc == null);
+
+        if (_db.Database.IsSqlite())
+        {
+            return (await openShiftsQuery.ToListAsync(ct).ConfigureAwait(false))
+                .OrderByDescending(x => x.OpenedAtUtc)
+                .FirstOrDefault();
+        }
+
+        return await openShiftsQuery.OrderByDescending(x => x.OpenedAtUtc).FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
+
+    private async Task<decimal> GetCashSalesTotalAsync(Guid shiftId, DateTimeOffset openedAtUtc, DateTimeOffset untilUtc, CancellationToken ct)
+    {
+        if (_db.Database.IsSqlite())
+        {
+            var cashPayments = await _db.Sales.AsNoTracking()
+                .Join(_db.Payments.AsNoTracking(), sale => sale.Id, payment => payment.SaleId, (sale, payment) => new { sale, payment })
+                .Where(x => x.sale.ShiftId == shiftId)
+                .Where(x => x.sale.Status == SaleStatus.Completed)
+                .Where(x => x.sale.OccurredAtUtc >= openedAtUtc && x.sale.OccurredAtUtc <= untilUtc)
+                .Where(x => x.payment.Method == PaymentMethod.Cash)
+                .Select(x => x.payment.Amount)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+            return RoundMoney(cashPayments.Sum());
+        }
+
+        var total = await _db.Sales.AsNoTracking()
+            .Join(_db.Payments.AsNoTracking(), sale => sale.Id, payment => payment.SaleId, (sale, payment) => new { sale, payment })
+            .Where(x => x.sale.ShiftId == shiftId)
+            .Where(x => x.sale.Status == SaleStatus.Completed)
+            .Where(x => x.sale.OccurredAtUtc >= openedAtUtc && x.sale.OccurredAtUtc <= untilUtc)
+            .Where(x => x.payment.Method == PaymentMethod.Cash)
+            .SumAsync(x => (decimal?)x.payment.Amount, ct)
+            .ConfigureAwait(false);
+
+        return RoundMoney(total ?? 0m);
+    }
+
+    private static decimal RoundMoney(decimal amount) => decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
+
+    private static void ValidateCountedDenominations(IReadOnlyCollection<CountedDenominationDto> countedDenominations)
+    {
+        if (countedDenominations.Count == 0)
+        {
+            throw ValidationError("countedDenominations", "countedDenominations is required.");
+        }
+
+        if (countedDenominations.Any(x => x.DenominationValue <= 0))
+        {
+            throw ValidationError("countedDenominations", "denominationValue must be greater than zero.");
+        }
+
+        if (countedDenominations.Any(x => x.Count < 0))
+        {
+            throw ValidationError("countedDenominations", "count must be greater than or equal to zero.");
+        }
+    }
+
+    private static ValidationException ValidationError(string key, string message) =>
+        new(new Dictionary<string, string[]> { [key] = [message] });
 
     private string GetCorrelationId() => _httpContextAccessor.HttpContext?.Items["CorrelationId"] as string
         ?? Activity.Current?.TraceId.ToString()
