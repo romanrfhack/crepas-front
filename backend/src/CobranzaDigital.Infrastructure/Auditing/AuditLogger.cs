@@ -51,7 +51,10 @@ public sealed class AuditLogger : IAuditLogger
             };
 
             _dbContext.AuditLogs.Add(auditLog);
-            await _dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            if (_dbContext.Database.CurrentTransaction is null)
+            {
+                await _dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
