@@ -27,24 +27,7 @@ public sealed class PosShiftService : IPosShiftService
 
     public async Task<PosShiftDto?> GetCurrentShiftAsync(CancellationToken ct)
     {
-        PosShift? shift;
-        var openShiftsQuery = _db.PosShifts.AsNoTracking().Where(x => x.ClosedAtUtc == null);
-
-        if (_db.Database.IsSqlite())
-        {
-            shift = (await openShiftsQuery
-                .ToListAsync(ct)
-                .ConfigureAwait(false))
-                .OrderByDescending(x => x.OpenedAtUtc)
-                .FirstOrDefault();
-        }
-        else
-        {
-            shift = await openShiftsQuery
-                .OrderByDescending(x => x.OpenedAtUtc)
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
-        }
+        var shift = await GetLatestOpenShiftAsync(ct).ConfigureAwait(false);
 
         return shift is null ? null : Map(shift);
     }
@@ -71,11 +54,7 @@ public sealed class PosShiftService : IPosShiftService
             }
         }
 
-        var existingOpen = await _db.PosShifts.AsNoTracking()
-            .Where(x => x.ClosedAtUtc == null)
-            .OrderByDescending(x => x.OpenedAtUtc)
-            .FirstOrDefaultAsync(ct)
-            .ConfigureAwait(false);
+        var existingOpen = await GetLatestOpenShiftAsync(ct).ConfigureAwait(false);
         if (existingOpen is not null)
         {
             return Map(existingOpen);
@@ -178,6 +157,25 @@ public sealed class PosShiftService : IPosShiftService
         shift.ClosingCashAmount,
         shift.OpenNotes,
         shift.CloseNotes);
+
+    private async Task<PosShift?> GetLatestOpenShiftAsync(CancellationToken ct)
+    {
+        var openShiftsQuery = _db.PosShifts.AsNoTracking().Where(x => x.ClosedAtUtc == null);
+
+        if (_db.Database.IsSqlite())
+        {
+            return (await openShiftsQuery
+                .ToListAsync(ct)
+                .ConfigureAwait(false))
+                .OrderByDescending(x => x.OpenedAtUtc)
+                .FirstOrDefault();
+        }
+
+        return await openShiftsQuery
+            .OrderByDescending(x => x.OpenedAtUtc)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
 
     private static ValidationException ValidationError(string key, string message)
     {
