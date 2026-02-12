@@ -8,7 +8,7 @@ import {
   untracked,
 } from '@angular/core';
 import { FormField, email, form, minLength, required } from '@angular/forms/signals';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
 
@@ -269,7 +269,7 @@ interface LoginModel {
 })
 export class LoginComponent {
   private readonly authService = inject(AuthService);
-  private readonly router = inject(Router);
+  private readonly activatedRoute = inject(ActivatedRoute);
   readonly isSubmitting = signal(false);
   readonly errorMessage = signal('');
   readonly submitted = signal(false);
@@ -339,13 +339,12 @@ export class LoginComponent {
     this.errorMessage.set('');
     this.isSubmitting.set(true);
     const payload = this.model();
+    const returnUrl = this.activatedRoute.snapshot.queryParamMap.get('returnUrl');
     this.authService
-      .login(payload)
+      .loginAndRedirect(payload, returnUrl)
       .pipe(finalize(() => this.isSubmitting.set(false)))
       .subscribe({
-        next: () => {
-          void this.router.navigateByUrl('/app/dashboard');
-        },
+        next: () => undefined,
         error: () => {
           this.errorMessage.set('No pudimos iniciar sesión. Intenta nuevamente.');
         },
