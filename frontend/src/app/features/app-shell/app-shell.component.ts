@@ -1,12 +1,17 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { GlobalErrorService } from '../../core/services/global-error.service';
 import { AuthService } from '../auth/services/auth.service';
 import { AppNavComponent } from './components/app-nav/app-nav.component';
 import { APP_NAV_CONFIG } from './navigation/app-nav.config';
 
+const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
+
 @Component({
   selector: 'app-shell',
+  host: {
+    '(document:keydown.escape)': 'onEscapeClose()',
+  },
   imports: [RouterOutlet, AppNavComponent],
   template: `
     <div class="app-shell">
@@ -17,6 +22,15 @@ import { APP_NAV_CONFIG } from './navigation/app-nav.config';
         </div>
         <div class="header-actions">
           @if (isAuthenticatedSig()) {
+            <button
+              type="button"
+              class="ghost-button ghost-button--menu"
+              [attr.aria-label]="isSidenavOpen() ? 'Ocultar menú lateral' : 'Mostrar menú lateral'"
+              [attr.aria-expanded]="isSidenavOpen()"
+              (click)="onToggleSidenav()"
+            >
+              ☰
+            </button>
             <span class="session-status" aria-live="polite">Sesión iniciada</span>
             <button type="button" class="ghost-button" (click)="onLogout()">Cerrar sesión</button>
           }
@@ -35,9 +49,12 @@ import { APP_NAV_CONFIG } from './navigation/app-nav.config';
         </section>
       }
 
-      <div class="app-content-layout">
-        @if (isAuthenticatedSig()) {
-          <aside class="app-sidebar">
+      <div
+        class="app-content-layout"
+        [class.app-content-layout--sidebar-open]="isAuthenticatedSig() && isSidenavOpen()"
+      >
+        @if (isAuthenticatedSig() && isSidenavOpen()) {
+          <aside class="app-sidebar" [attr.aria-hidden]="!isSidenavOpen()">
             <app-nav [navItems]="appNavItems" [userRoles]="rolesSig()" />
           </aside>
         }
@@ -88,6 +105,13 @@ import { APP_NAV_CONFIG } from './navigation/app-nav.config';
       outline: 3px solid #94a3ff;
       outline-offset: 2px;
     }
+    .ghost-button--menu {
+      font-size: 1.2rem;
+      min-width: 2.5rem;
+      padding-inline: 0.75rem;
+      color: #0f172a;
+      border-color: #cbd5e1;
+    }
     .ghost-button {
       background: transparent;
       border: 1px solid #cbd5f5;
@@ -104,11 +128,14 @@ import { APP_NAV_CONFIG } from './navigation/app-nav.config';
     }
     .app-content-layout {
       display: grid;
-      grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       gap: 1.5rem;
       flex: 1;
       padding: 1.5rem 2rem 2rem;
       align-items: start;
+    }
+    .app-content-layout--sidebar-open {
+      grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
     }
     .app-sidebar {
       position: sticky;
@@ -152,7 +179,8 @@ import { APP_NAV_CONFIG } from './navigation/app-nav.config';
     }
 
     @media (max-width: 1024px) {
-      .app-content-layout {
+      .app-content-layout,
+      .app-content-layout--sidebar-open {
         grid-template-columns: 1fr;
       }
 
@@ -167,10 +195,49 @@ export class AppShellComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly globalErrorService = inject(GlobalErrorService);
+
   readonly appNavItems = APP_NAV_CONFIG;
   readonly isAuthenticatedSig = this.authService.isAuthenticatedSig;
   readonly rolesSig = this.authService.rolesSig;
   readonly globalErrorMessage = this.globalErrorService.message;
+  readonly isCashier = computed(() => this.authService.hasRole('Cashier'));
+  readonly isSidenavOpen = signal(true);
+
+  private readonly sidenavStorageKey = computed(
+    () => `${SIDENAV_STORAGE_KEY}:${this.authService.sessionScopeSig()}`,
+  );
+
+  private readonly syncSidenavState = effect(() => {
+    if (!this.isAuthenticatedSig()) {
+      this.isSidenavOpen.set(true);
+      return;
+    }
+
+    const storageKey = this.sidenavStorageKey();
+    const persistedValue = localStorage.getItem(storageKey);
+
+    if (persistedValue === null) {
+      this.isSidenavOpen.set(!this.isCashier());
+      this.persistSidenavState();
+      return;
+    }
+
+    this.isSidenavOpen.set(persistedValue === 'true');
+  });
+
+  onToggleSidenav() {
+    this.isSidenavOpen.update((isOpen) => !isOpen);
+    this.persistSidenavState();
+  }
+
+  onEscapeClose() {
+    if (!this.isSidenavOpen()) {
+      return;
+    }
+
+    this.isSidenavOpen.set(false);
+    this.persistSidenavState();
+  }
 
   onLogout() {
     this.authService.logout();
@@ -179,5 +246,9 @@ export class AppShellComponent {
 
   onDismissError() {
     this.globalErrorService.clear();
+  }
+
+  private persistSidenavState() {
+    localStorage.setItem(this.sidenavStorageKey(), String(this.isSidenavOpen()));
   }
 }

@@ -16,11 +16,13 @@ export interface NavSection {
 export const APP_NAV_CONFIG: NavSection[] = [
   {
     label: 'General',
+    roles: ['Admin'],
     defaultExpanded: true,
     children: [
       {
         label: 'Dashboard',
         path: '/app/dashboard',
+        roles: ['Admin'],
       },
     ],
   },

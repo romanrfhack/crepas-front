@@ -4,7 +4,7 @@ import { APP_NAV_CONFIG } from '../../navigation/app-nav.config';
 import { AppNavComponent } from './app-nav.component';
 
 describe('AppNavComponent', () => {
-  it('should render base links for authenticated users', async () => {
+  it('should hide restricted links when there are no assigned roles', async () => {
     await TestBed.configureTestingModule({
       imports: [AppNavComponent],
       providers: [provideRouter([])],
@@ -19,7 +19,7 @@ describe('AppNavComponent', () => {
       ((link as HTMLAnchorElement).textContent ?? '').trim(),
     );
 
-    expect(links).toContain('Dashboard');
+    expect(links).not.toContain('Dashboard');
     expect(links).not.toContain('Users');
     expect(fixture.nativeElement.textContent).not.toContain('Admin');
   });
