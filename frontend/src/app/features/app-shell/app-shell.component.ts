@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
-import { Router, RouterOutlet } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { filter, map, startWith } from 'rxjs';
 import { GlobalErrorService } from '../../core/services/global-error.service';
 import { AuthService } from '../auth/services/auth.service';
 import { AppNavComponent } from './components/app-nav/app-nav.component';
@@ -59,7 +61,7 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
           </aside>
         }
 
-        <main class="app-main" aria-live="polite">
+        <main class="app-main" [class.app-main--full-width]="isFullWidthRoute()" aria-live="polite">
           <router-outlet />
         </main>
       </div>
@@ -147,6 +149,9 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
       display: flex;
       justify-content: center;
     }
+    .app-main--full-width > * {
+      width: 100%;
+    }
     .global-error {
       display: flex;
       align-items: center;
@@ -194,6 +199,7 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
 export class AppShellComponent {
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly activatedRoute = inject(ActivatedRoute);
   private readonly globalErrorService = inject(GlobalErrorService);
 
   readonly appNavItems = APP_NAV_CONFIG;
@@ -202,6 +208,15 @@ export class AppShellComponent {
   readonly globalErrorMessage = this.globalErrorService.message;
   readonly isCashier = computed(() => this.authService.hasRole('Cashier'));
   readonly isSidenavOpen = signal(true);
+  private readonly activeRouteData = toSignal(
+    this.router.events.pipe(
+      filter((event) => event instanceof NavigationEnd),
+      startWith(null),
+      map(() => this.getDeepestRoute(this.activatedRoute).snapshot.data),
+    ),
+    { initialValue: this.getDeepestRoute(this.activatedRoute).snapshot.data },
+  );
+  readonly isFullWidthRoute = computed(() => this.activeRouteData()?.['fullWidth'] === true);
 
   private readonly sidenavStorageKey = computed(
     () => `${SIDENAV_STORAGE_KEY}:${this.authService.sessionScopeSig()}`,
@@ -250,5 +265,15 @@ export class AppShellComponent {
 
   private persistSidenavState() {
     localStorage.setItem(this.sidenavStorageKey(), String(this.isSidenavOpen()));
+  }
+
+  private getDeepestRoute(route: ActivatedRoute): ActivatedRoute {
+    let currentRoute = route;
+
+    while (currentRoute.firstChild) {
+      currentRoute = currentRoute.firstChild;
+    }
+
+    return currentRoute;
   }
 }

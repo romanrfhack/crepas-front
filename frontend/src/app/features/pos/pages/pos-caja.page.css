@@ -1,4 +1,6 @@
 :host {
+  display: block;
+  width: 100%;
   --brand-rose: #f3b6c2;
   --brand-rose-strong: #e89aac;
   --brand-cream: #fbf6ef;
@@ -17,9 +19,11 @@
 
 .pos-caja {
   display: flex;
+  width: 100%;
+  min-width: 0;
   flex-direction: column;
   gap: 1.5rem;
-  padding: 1rem 1.5rem;
+  padding: 1rem 2rem;
   max-width: 100%;
   margin: 0 auto;
   color: var(--brand-ink);
@@ -80,6 +84,7 @@
 
 .layout {
   display: grid;
+  min-width: 0;
   grid-template-columns: 200px minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
@@ -96,6 +101,7 @@
 }
 
 .product-grid-container {
+  min-width: 0;
   max-height: calc(100vh - 220px);
   overflow-y: auto;
   padding-right: 0.25rem;
@@ -404,6 +410,10 @@
 }
 
 @media (max-width: 700px) {
+  .pos-caja {
+    padding: 1rem;
+  }
+
   .layout {
     grid-template-columns: 1fr;
   }
