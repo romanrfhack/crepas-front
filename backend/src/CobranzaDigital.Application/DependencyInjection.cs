@@ -1,6 +1,8 @@
 using CobranzaDigital.Application.Contracts.PosCatalog;
 using CobranzaDigital.Application.Validators.PosCatalog;
+
 using FluentValidation;
+
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CobranzaDigital.Application;

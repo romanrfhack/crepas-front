@@ -1,6 +1,11 @@
-using CobranzaDigital.Api.Middleware;
+using System.Diagnostics;
+using System.Threading.RateLimiting;
+
+using CobranzaDigital.Api;
 using CobranzaDigital.Api.Extensions;
 using CobranzaDigital.Api.FeatureManagement;
+using CobranzaDigital.Api.Middleware;
+using CobranzaDigital.Api.Observability;
 using CobranzaDigital.Application;
 using CobranzaDigital.Application.Options;
 using CobranzaDigital.Infrastructure;
@@ -9,14 +14,10 @@ using CobranzaDigital.Infrastructure.Persistence;
 
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
-using System.Diagnostics;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
-using CobranzaDigital.Api;
-using CobranzaDigital.Api.Observability;
-using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+
 using CobranzaDigital.Domain.Common;
 
 namespace CobranzaDigital.Domain.Entities;

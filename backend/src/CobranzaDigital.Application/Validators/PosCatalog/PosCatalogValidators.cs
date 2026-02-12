@@ -1,5 +1,6 @@
 using CobranzaDigital.Application.Contracts.PosCatalog;
 using CobranzaDigital.Domain.Entities;
+
 using FluentValidation;
 
 namespace CobranzaDigital.Application.Validators.PosCatalog;

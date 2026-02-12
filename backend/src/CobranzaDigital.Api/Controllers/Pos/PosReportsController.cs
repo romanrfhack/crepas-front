@@ -1,6 +1,8 @@
 using Asp.Versioning;
+
 using CobranzaDigital.Application.Contracts.PosSales;
 using CobranzaDigital.Application.Interfaces.PosSales;
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

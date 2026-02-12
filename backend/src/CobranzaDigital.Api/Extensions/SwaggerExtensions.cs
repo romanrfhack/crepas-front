@@ -1,7 +1,9 @@
-using Asp.Versioning.ApiExplorer;
 using Asp.Versioning;
+using Asp.Versioning.ApiExplorer;
+
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
+
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace CobranzaDigital.Api.Extensions;
@@ -115,10 +117,10 @@ public static class SwaggerExtensions
                     // Intentar parsear el docName para obtener la versión
                     if (docName.StartsWith("v", StringComparison.OrdinalIgnoreCase))
                     {
-                        var versionString = docName[1..];                        
-                            // Verificar si este endpoint acepta esta versión
-                            // (esto es una simplificación - en producción necesitarías más lógica)
-                            return true;                        
+                        var versionString = docName[1..];
+                        // Verificar si este endpoint acepta esta versión
+                        // (esto es una simplificación - en producción necesitarías más lógica)
+                        return true;
                     }
                 }
                 else

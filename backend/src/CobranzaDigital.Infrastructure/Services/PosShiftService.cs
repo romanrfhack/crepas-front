@@ -1,13 +1,16 @@
 using System.Diagnostics;
 using System.Security.Claims;
+
 using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Common.Exceptions;
 using CobranzaDigital.Application.Contracts.PosSales;
 using CobranzaDigital.Application.Interfaces.PosSales;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
+
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+
 using ValidationException = CobranzaDigital.Application.Common.Exceptions.ValidationException;
 
 namespace CobranzaDigital.Infrastructure.Services;

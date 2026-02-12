@@ -1,5 +1,6 @@
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Identity;
+
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -43,7 +44,7 @@ public sealed class CobranzaDigitalDbContext
             entity.Property(e => e.Status)
                 .HasConversion<int>();
         });
-        
+
         builder.ApplyConfigurationsFromAssembly(typeof(CobranzaDigitalDbContext).Assembly);
     }
 }

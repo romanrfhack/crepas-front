@@ -5,9 +5,11 @@ using CobranzaDigital.Application.Validators.PosCatalog;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
 using CobranzaDigital.Infrastructure.Services;
+
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+
 using Xunit;
 
 namespace CobranzaDigital.Application.Tests;

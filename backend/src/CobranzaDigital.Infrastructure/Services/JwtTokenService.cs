@@ -2,12 +2,14 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+
 using CobranzaDigital.Application.Contracts.Auth;
 using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Options;
 using CobranzaDigital.Domain.Entities;
-using CobranzaDigital.Infrastructure.Persistence;
 using CobranzaDigital.Infrastructure.Identity;
+using CobranzaDigital.Infrastructure.Persistence;
+
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;

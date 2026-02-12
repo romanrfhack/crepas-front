@@ -6,17 +6,19 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+
 using CobranzaDigital.Application.Contracts.Auth;
 using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Options;
 using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Authorization;
+
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -227,7 +229,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
             using var scope = Services.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-            
+
             if (dbContext.Database.IsSqlite())
             {
                 await dbContext.Database.EnsureCreatedAsync();

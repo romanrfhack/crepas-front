@@ -1,8 +1,10 @@
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
+
 using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
+
+using Microsoft.Extensions.Logging;
 
 namespace CobranzaDigital.Infrastructure.Auditing;
 

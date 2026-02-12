@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Claims;
+
 using CobranzaDigital.Api.Middleware;
 
 namespace CobranzaDigital.Api.Observability;

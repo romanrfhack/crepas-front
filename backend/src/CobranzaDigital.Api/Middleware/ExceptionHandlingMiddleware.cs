@@ -1,10 +1,10 @@
+using System.Diagnostics;
+
 using CobranzaDigital.Application.Common.Exceptions;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
-
-using System.Diagnostics;
 
 namespace CobranzaDigital.Api.Middleware;
 
@@ -37,12 +37,12 @@ public sealed class ExceptionHandlingMiddleware
         {
             var correlationId = GetCorrelationId(context);
 
-                LogUnhandledException(
-                _logger,
-                context.Request.Method,
-                context.Request.Path.ToString(),
-                correlationId,
-                exception);
+            LogUnhandledException(
+            _logger,
+            context.Request.Method,
+            context.Request.Path.ToString(),
+            correlationId,
+            exception);
 
             var problemDetails = CreateProblemDetails(context, exception, correlationId);
 

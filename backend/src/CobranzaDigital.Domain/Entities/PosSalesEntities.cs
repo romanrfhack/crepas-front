@@ -1,5 +1,6 @@
-using CobranzaDigital.Domain.Common;
 using System.Text.Json.Serialization;
+
+using CobranzaDigital.Domain.Common;
 
 namespace CobranzaDigital.Domain.Entities;
 

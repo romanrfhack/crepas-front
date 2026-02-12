@@ -1,5 +1,6 @@
 using CobranzaDigital.Application.Contracts.Auth;
 using CobranzaDigital.Application.Interfaces;
+
 using Microsoft.AspNetCore.Identity;
 
 namespace CobranzaDigital.Infrastructure.Identity;
