@@ -130,7 +130,16 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         request.Content = JsonContent.Create(new { roles });
         using var response = await _client.SendAsync(request);
 
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        // Keep compatibility while the endpoint transitions between update semantics (204) and resource return (200).
+        Assert.True(response.StatusCode is HttpStatusCode.NoContent or HttpStatusCode.OK);
+
+        using var verifyRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/admin/users/{userId}", adminToken);
+        using var verifyResponse = await _client.SendAsync(verifyRequest);
+        var user = await verifyResponse.Content.ReadFromJsonAsync<AdminUserResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, verifyResponse.StatusCode);
+        Assert.NotNull(user);
+        Assert.Equal(roles.OrderBy(x => x), user!.Roles.OrderBy(x => x));
     }
 
     private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)
@@ -165,4 +174,5 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record SnapshotResponse(List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record PagedResponse(List<UserListItem> Items);
     private sealed record UserListItem([property: JsonPropertyName("id")] string Id);
+    private sealed record AdminUserResponse(string Id, string Email, string UserName, IReadOnlyCollection<string> Roles, bool IsLockedOut, DateTimeOffset? LockoutEnd);
 }
