@@ -76,9 +76,10 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     {
         var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         var cashierEmail = $"cashier.snapshot.{Guid.NewGuid():N}@test.local";
-        var cashierToken = await RegisterAndGetAccessTokenAsync(cashierEmail, "User1234!");
+        _ = await RegisterAndGetAccessTokenAsync(cashierEmail, "User1234!");
 
         await SetUserRolesAsync(adminToken, cashierEmail, ["Cashier"]);
+        var cashierToken = await LoginAndGetAccessTokenAsync(cashierEmail, "User1234!");
 
         using var snapshotReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", cashierToken);
         using var snapshotResp = await _client.SendAsync(snapshotReq);
