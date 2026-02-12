@@ -77,14 +77,16 @@
   </div>
 
   @if (activeCustomizationProduct(); as product) {
-    <app-pos-customization-modal
-      [product]="product"
-      [groups]="customizationGroups()"
-      [optionItems]="customizationOptionItems()"
-      [extras]="customizationExtras()"
-      (cancelAction)="activeCustomizationProduct.set(null)"
-      (confirm)="onConfirmCustomization($event)"
-    />
+    <div class="customization-wrapper">
+      <app-pos-customization-modal
+        [product]="product"
+        [groups]="customizationGroups()"
+        [optionItems]="customizationOptionItems()"
+        [extras]="customizationExtras()"
+        (cancelAction)="activeCustomizationProduct.set(null)"
+        (confirm)="onConfirmCustomization($event)"
+      />
+    </div>
   }
 
   @if (showPayment()) {
