@@ -17,7 +17,30 @@ public sealed record OpenPosShiftRequestDto
     public decimal ResolveOpeningCashAmount() => StartingCashAmount ?? OpeningCashAmount ?? 0m;
 }
 
-public sealed record ClosePosShiftRequestDto(decimal ClosingCashAmount, string? Notes, Guid? ClientOperationId);
+public sealed record CountedDenominationDto(decimal DenominationValue, int Count);
+
+public sealed record ClosePosShiftRequestDto(
+    IReadOnlyCollection<CountedDenominationDto> CountedDenominations,
+    string? ClosingNotes,
+    Guid? ClientOperationId);
+
+public sealed record ShiftClosePreviewDto(
+    Guid ShiftId,
+    DateTimeOffset OpenedAtUtc,
+    decimal OpeningCashAmount,
+    decimal SalesCashTotal,
+    decimal ExpectedCashAmount);
+
+public sealed record ClosePosShiftResultDto(
+    Guid ShiftId,
+    DateTimeOffset OpenedAtUtc,
+    DateTimeOffset ClosedAtUtc,
+    decimal OpeningCashAmount,
+    decimal SalesCashTotal,
+    decimal ExpectedCashAmount,
+    decimal CountedCashAmount,
+    decimal Difference,
+    string? CloseNotes);
 
 public sealed record PosShiftDto(
     Guid Id,

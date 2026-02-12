@@ -35,7 +35,11 @@ public sealed class PosShiftsController : ControllerBase
         return Ok(shift);
     }
 
+    [HttpGet("close-preview")]
+    public Task<ShiftClosePreviewDto> GetClosePreview(CancellationToken ct) =>
+        _service.GetClosePreviewAsync(ct);
+
     [HttpPost("close")]
-    public Task<PosShiftDto> Close([FromBody] ClosePosShiftRequestDto request, CancellationToken ct) =>
+    public Task<ClosePosShiftResultDto> Close([FromBody] ClosePosShiftRequestDto request, CancellationToken ct) =>
         _service.CloseShiftAsync(request, ct);
 }
