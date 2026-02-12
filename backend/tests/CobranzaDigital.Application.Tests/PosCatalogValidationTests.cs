@@ -5,8 +5,6 @@ using CobranzaDigital.Application.Validators.PosCatalog;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
 using CobranzaDigital.Infrastructure.Services;
-using FluentValidation;
-using FluentValidationException = FluentValidation.ValidationException;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -50,7 +48,7 @@ public sealed class PosCatalogValidationTests
         db.CustomizationSchemas.Add(schema);
         await db.SaveChangesAsync();
 
-        await Assert.ThrowsAsync<Common.Exceptions.ValidationException>(() => service.CreateProductAsync(new UpsertProductRequest(null, "P", category.Id, null, 10, true, schema.Id), default));
+        await Assert.ThrowsAsync<ValidationException>(() => service.CreateProductAsync(new UpsertProductRequest(null, "P", category.Id, null, 10, true, schema.Id), default));
 
     }
 
@@ -74,7 +72,7 @@ public sealed class PosCatalogValidationTests
         db.AddRange(category, schema, product, setA, setB, itemB, group);
         await db.SaveChangesAsync();
 
-        await Assert.ThrowsAsync< Common.Exceptions.ValidationException >(() => service.UpsertOverrideAsync(product.Id, "g", new OverrideUpsertRequest([itemB.Id]), default));
+        await Assert.ThrowsAsync<ValidationException>(() => service.UpsertOverrideAsync(product.Id, "g", new OverrideUpsertRequest([itemB.Id]), default));
     }
 
     private static PosCatalogService BuildService(CobranzaDigitalDbContext db)

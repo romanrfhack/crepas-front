@@ -1,4 +1,3 @@
-using CobranzaDigital.Application.Common.Exceptions;
 using CobranzaDigital.Application.Contracts.PosCatalog;
 using CobranzaDigital.Domain.Entities;
 using FluentValidation;
@@ -71,7 +70,7 @@ public static class ValidationExtensions
 {
     public static async Task EnsureValidAsync<T>(this IValidator<T> validator, T instance, CancellationToken ct)
     {
-        var result = await validator.ValidateAsync(instance, ct);
+        var result = await validator.ValidateAsync(instance, ct).ConfigureAwait(false);
         if (result.IsValid)
         {
             return;

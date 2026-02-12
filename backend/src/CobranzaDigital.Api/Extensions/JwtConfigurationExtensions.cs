@@ -1,5 +1,4 @@
 using CobranzaDigital.Application.Options;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -92,7 +91,7 @@ public static class JwtConfigurationExtensions
                 };
             });
 
-        services.PostConfigure<AuthenticationOptions>(options =>
+        services.PostConfigure<Microsoft.AspNetCore.Authentication.AuthenticationOptions>(options =>
         {
             options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
             options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
