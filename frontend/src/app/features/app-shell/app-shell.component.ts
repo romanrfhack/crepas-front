@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { ActivatedRoute, Data, NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { GlobalErrorService } from '../../core/services/global-error.service';
 import { AuthService } from '../auth/services/auth.service';
@@ -212,9 +212,9 @@ export class AppShellComponent {
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
       startWith(null),
-      map(() => this.getDeepestRoute(this.activatedRoute).snapshot.data),
+      map(() => this.getActiveRouteData()),
     ),
-    { initialValue: this.getDeepestRoute(this.activatedRoute).snapshot.data },
+    { initialValue: this.getActiveRouteData() },
   );
   readonly isFullWidthRoute = computed(() => this.activeRouteData()?.['fullWidth'] === true);
 
@@ -275,5 +275,9 @@ export class AppShellComponent {
     }
 
     return currentRoute;
+  }
+
+  private getActiveRouteData(): Data {
+    return this.getDeepestRoute(this.activatedRoute).snapshot?.data ?? {};
   }
 }
