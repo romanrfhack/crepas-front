@@ -9,7 +9,7 @@ namespace CobranzaDigital.Api.Controllers.Pos;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/pos/catalog")]
-[Authorize(Policy = AuthorizationPolicies.PosAdmin)]
+[Authorize(Policy = AuthorizationPolicies.PosOperator)]
 public sealed class PosCatalogController : ControllerBase
 {
     private readonly IPosCatalogService _service;
