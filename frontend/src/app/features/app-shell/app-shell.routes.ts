@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { roleGuard } from '../../core/guards/role.guard';
 import { AppShellComponent } from './app-shell.component';
 
 export const appShellRoutes: Routes = [
@@ -16,6 +17,13 @@ export const appShellRoutes: Routes = [
       {
         path: 'admin',
         loadChildren: () => import('../admin/admin.routes').then((m) => m.adminRoutes),
+      },
+      {
+        path: 'pos',
+        canMatch: [roleGuard(['Admin', 'Cashier'])],
+        canActivate: [roleGuard(['Admin', 'Cashier'])],
+        data: { roles: ['Admin', 'Cashier'] },
+        loadChildren: () => import('../pos/pos.routes').then((m) => m.posRoutes),
       },
       {
         path: '',

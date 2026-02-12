@@ -1,0 +1,11 @@
+<section aria-label="Productos disponibles">
+  <h2>Productos</h2>
+  <div class="grid">
+    @for (product of products(); track product.id) {
+      <button type="button" class="card" (click)="addProduct.emit(product)">
+        <span class="title">{{ product.name }}</span>
+        <span>${{ product.basePrice.toFixed(2) }}</span>
+      </button>
+    }
+  </div>
+</section>

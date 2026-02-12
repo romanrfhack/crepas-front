@@ -1,0 +1,39 @@
+<section class="modal" aria-label="Personalizar producto">
+  <h3>Personalizar: {{ product().name }}</h3>
+  @for (group of sortedGroups(); track group.id) {
+    <fieldset>
+      <legend>{{ group.label }}</legend>
+      <small>Selecciona entre {{ group.minSelections }} y {{ group.maxSelections }}</small>
+      @for (item of optionsForGroup(group); track item.id) {
+        <label>
+          <input
+            [type]="group.selectionMode === 0 ? 'radio' : 'checkbox'"
+            [name]="group.key"
+            [checked]="isSelected(group.key, item.id)"
+            (change)="toggleSelection(group, item)"
+          />
+          {{ item.name }}
+        </label>
+      }
+    </fieldset>
+  }
+
+  @if (extras().length > 0) {
+    <fieldset>
+      <legend>Extras</legend>
+      @for (extra of extras(); track extra.id) {
+        <div>
+          <span>{{ extra.name }} (${{ extra.price.toFixed(2) }})</span>
+          <button type="button" (click)="changeExtraQuantity(extra.id, -1)">-</button>
+          <span>{{ readExtraQuantity(extra.id) }}</span>
+          <button type="button" (click)="changeExtraQuantity(extra.id, 1)">+</button>
+        </div>
+      }
+    </fieldset>
+  }
+
+  <div class="actions">
+    <button type="button" (click)="cancelAction.emit()">Cancelar</button>
+    <button type="button" [disabled]="!canConfirm()" (click)="submit()">Agregar al carrito</button>
+  </div>
+</section>

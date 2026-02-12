@@ -1,0 +1,37 @@
+<section class="modal" aria-label="Cobro de venta">
+  <h3>Cobrar</h3>
+  <p>Total: ${{ total().toFixed(2) }}</p>
+
+  <label>
+    Método de pago
+    <select [value]="method()" (change)="method.set($any($event.target).value)">
+      <option value="Cash">Efectivo</option>
+      <option value="Card">Tarjeta</option>
+      <option value="Transfer">Transferencia</option>
+    </select>
+  </label>
+
+  @if (method() === 'Cash') {
+    <label>
+      Recibí
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        [value]="receivedAmount()"
+        (input)="receivedAmount.set(+$any($event.target).value || 0)"
+      />
+    </label>
+    <p>Cambio: ${{ changeAmount().toFixed(2) }}</p>
+  }
+
+  <label>
+    Referencia
+    <input type="text" [value]="reference()" (input)="reference.set($any($event.target).value)" />
+  </label>
+
+  <div class="actions">
+    <button type="button" (click)="cancelAction.emit()">Cancelar</button>
+    <button type="button" [disabled]="loading()" (click)="confirmPayment()">Confirmar cobro</button>
+  </div>
+</section>

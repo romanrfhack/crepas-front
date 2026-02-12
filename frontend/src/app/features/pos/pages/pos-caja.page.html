@@ -1,0 +1,62 @@
+<section class="pos-caja">
+  <header>
+    <h1>Caja POS</h1>
+    <p>CorrelationId: <code>{{ correlationId() }}</code></p>
+    <div class="toolbar">
+      <input
+        type="search"
+        placeholder="Buscar producto"
+        [value]="searchTerm()"
+        (input)="searchTerm.set($any($event.target).value)"
+      />
+      <button type="button" (click)="loadSnapshot(true)">Refrescar catálogo</button>
+    </div>
+  </header>
+
+  @if (errorMessage()) {
+    <p class="error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  @if (saleSuccess(); as sale) {
+    <p class="success" role="status">Venta registrada: {{ sale.folio }} · Total final: ${{ sale.total.toFixed(2) }}</p>
+  }
+
+  <div class="layout">
+    <app-pos-category-list
+      [categories]="categories()"
+      [selectedCategoryId]="selectedCategoryId()"
+      (selectCategory)="selectedCategoryId.set($event)"
+    />
+
+    <app-pos-product-grid [products]="products()" (addProduct)="onProductSelected($event)" />
+
+    <app-pos-cart
+      [items]="cartItems()"
+      [estimatedTotal]="estimatedTotal()"
+      (increase)="increaseQty($event)"
+      (decrease)="decreaseQty($event)"
+      (remove)="removeFromCart($event)"
+      (checkout)="showPayment.set(true)"
+    />
+  </div>
+
+  @if (activeCustomizationProduct(); as product) {
+    <app-pos-customization-modal
+      [product]="product"
+      [groups]="customizationGroups()"
+      [optionItems]="customizationOptionItems()"
+      [extras]="customizationExtras()"
+      (cancelAction)="activeCustomizationProduct.set(null)"
+      (confirm)="onConfirmCustomization($event)"
+    />
+  }
+
+  @if (showPayment()) {
+    <app-pos-payment-modal
+      [total]="estimatedTotal()"
+      [loading]="loading()"
+      (cancelAction)="showPayment.set(false)"
+      (submitPayment)="confirmPayment($event)"
+    />
+  }
+</section>
