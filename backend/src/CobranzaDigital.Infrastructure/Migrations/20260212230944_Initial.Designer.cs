@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CobranzaDigital.Infrastructure.Migrations
 {
     [DbContext(typeof(CobranzaDigitalDbContext))]
-    [Migration("20260212165223_AddPosShifts")]
-    partial class AddPosShifts
+    [Migration("20260212230944_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -262,6 +262,9 @@ namespace CobranzaDigital.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<decimal?>("CashDifference")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("CloseNotes")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -280,6 +283,13 @@ namespace CobranzaDigital.Infrastructure.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<decimal?>("ClosingCashAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("DenominationsJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<decimal?>("ExpectedCashAmount")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("OpenNotes")
