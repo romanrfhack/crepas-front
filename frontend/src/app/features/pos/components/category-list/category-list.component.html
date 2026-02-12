@@ -1,0 +1,15 @@
+<section aria-label="Categorías de productos">
+  <h2>Categorías</h2>
+  <button type="button" [class.active]="selectedCategoryId() === null" (click)="selectCategory.emit(null)">
+    Todas
+  </button>
+  @for (category of categories(); track category.id) {
+    <button
+      type="button"
+      [class.active]="selectedCategoryId() === category.id"
+      (click)="selectCategory.emit(category.id)"
+    >
+      {{ category.name }}
+    </button>
+  }
+</section>

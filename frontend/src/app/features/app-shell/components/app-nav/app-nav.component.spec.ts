@@ -41,5 +41,22 @@ describe('AppNavComponent', () => {
     expect(content).toContain('POS Catálogo');
     expect(content).toContain('Categories');
     expect(content).toContain('Overrides');
+    expect(content).toContain('Caja POS');
+  });
+
+  it('should render Caja POS for cashier users', async () => {
+    await TestBed.configureTestingModule({
+      imports: [AppNavComponent],
+      providers: [provideRouter([])],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(AppNavComponent);
+    fixture.componentRef.setInput('navItems', APP_NAV_CONFIG);
+    fixture.componentRef.setInput('userRoles', ['Cashier']);
+    fixture.detectChanges();
+
+    const content = fixture.nativeElement.textContent as string;
+    expect(content).toContain('Caja POS');
+    expect(content).not.toContain('Users');
   });
 });

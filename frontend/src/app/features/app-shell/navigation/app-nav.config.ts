@@ -24,6 +24,19 @@ export const APP_NAV_CONFIG: NavSection[] = [
       },
     ],
   },
+
+  {
+    label: 'POS',
+    roles: ['Admin', 'Cashier'],
+    defaultExpanded: true,
+    children: [
+      {
+        label: 'Caja POS',
+        path: '/app/pos/caja',
+        roles: ['Admin', 'Cashier'],
+      },
+    ],
+  },
   {
     label: 'Admin',
     roles: ['Admin'],

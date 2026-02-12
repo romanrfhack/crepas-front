@@ -1,0 +1,16 @@
+.modal {
+  border: 1px solid #9ca3af;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background: #fff;
+}
+
+fieldset {
+  margin: 0 0 1rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}

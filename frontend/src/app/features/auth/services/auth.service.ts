@@ -105,15 +105,15 @@ export class AuthService {
     }
   }
 
-  private extractRoles(payload: any): string[] {
+  private extractRoles(payload: Record<string, unknown> | null): string[] {
   const roleClaimUris = [
     'http://schemas.microsoft.com/ws/2008/06/identity/claims/role',
     'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role',
   ];
 
   const candidates = [
-    payload?.roles,
-    payload?.role,
+    payload?.['roles'],
+    payload?.['role'],
     ...roleClaimUris.map((k) => payload?.[k]),
   ];
 

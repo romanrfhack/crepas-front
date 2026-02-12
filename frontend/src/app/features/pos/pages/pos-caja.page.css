@@ -1,0 +1,26 @@
+.pos-caja {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 320px;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.error {
+  color: #b91c1c;
+}
+
+.success {
+  color: #166534;
+  font-weight: 700;
+}
