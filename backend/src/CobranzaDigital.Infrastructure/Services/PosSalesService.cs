@@ -201,7 +201,7 @@ public sealed class PosSalesService : IPosSalesService
         {
             await tx.RollbackAsync(ct).ConfigureAwait(false);
             LogAction("CreateConflict", "Sale", sale.Id, correlationId);
-            throw new ConflictException("A sale with the same clientSaleId already exists.", ex);
+            throw new ConflictException("A sale with the same clientSaleId already exists.");
         }
 
         await _auditLogger.LogAsync(new AuditEntry(
@@ -222,12 +222,13 @@ public sealed class PosSalesService : IPosSalesService
 
     public async Task<DailySummaryDto> GetDailySummaryAsync(DateOnly date, CancellationToken ct)
     {
-        var from = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var to = from.AddDays(1);
+        var fromDate = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var to = fromDate.AddDays(1);
+        var completedStatus = (int)SaleStatus.Completed; // 👈 variable local
 
         var sales = await _db.Sales.AsNoTracking()
-            .Where(x => x.Status == SaleStatus.Completed
-                && x.OccurredAtUtc >= from
+            .Where(x => (int)x.Status == completedStatus
+                && x.OccurredAtUtc >= fromDate
                 && x.OccurredAtUtc < to)
             .Select(x => new { x.Id, x.Total })
             .ToListAsync(ct)
@@ -263,13 +264,14 @@ public sealed class PosSalesService : IPosSalesService
             throw ValidationError("dateTo", "dateTo must be greater than or equal to dateFrom.");
         }
 
-        var from = dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var fromDate = dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var toExclusive = dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var completedStatus = (int)SaleStatus.Completed; // 👈 variable local
 
         var rows = await (from sale in _db.Sales.AsNoTracking()
                           join item in _db.SaleItems.AsNoTracking() on sale.Id equals item.SaleId
-                          where sale.Status == SaleStatus.Completed
-                                && sale.OccurredAtUtc >= from
+                          where (int)sale.Status == completedStatus
+                                && sale.OccurredAtUtc >= fromDate
                                 && sale.OccurredAtUtc < toExclusive
                           group item by new { item.ProductId, item.ProductNameSnapshot }
             into grouped
