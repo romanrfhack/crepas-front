@@ -191,7 +191,7 @@ public sealed class PosSalesService : IPosSalesService
             Reference = request.Payment.Reference
         });
 
-        await using var tx = (await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false)).ConfigureAwait(false);
+        await using var tx = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         try
         {
             await _db.SaveChangesAsync(ct).ConfigureAwait(false);
