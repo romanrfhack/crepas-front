@@ -53,7 +53,9 @@
       (selectCategory)="selectedCategoryId.set($event)"
     />
 
-    <app-pos-product-grid [products]="products()" (addProduct)="onProductSelected($event)" />
+    <div class="product-grid-container">
+      <app-pos-product-grid [products]="products()" (addProduct)="onProductSelected($event)" />
+    </div>
 
     <app-pos-cart
       [items]="cartItems()"

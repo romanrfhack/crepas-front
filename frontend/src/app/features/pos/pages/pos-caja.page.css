@@ -77,9 +77,20 @@
 
 .layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 320px;
-  gap: 1rem;
-  align-items: flex-start;
+  grid-template-columns: 200px minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.layout > app-pos-category-list {
+  max-height: calc(100vh - 250px);
+  overflow-y: auto;
+}
+
+.product-grid-container {
+  max-height: calc(100vh - 250px);
+  overflow-y: auto;
+  padding-right: 0.25rem;
 }
 
 .shift-banner {
