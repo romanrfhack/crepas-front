@@ -188,7 +188,9 @@ public sealed class PosSalesService : IPosSalesService
             SaleId = sale.Id,
             Method = request.Payment.Method,
             Amount = request.Payment.Amount,
-            Reference = request.Payment.Reference
+            Reference = request.Payment.Method == PaymentMethod.Cash
+                ? null
+                : request.Payment.Reference?.Trim()
         });
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
@@ -378,6 +380,12 @@ public sealed class PosSalesService : IPosSalesService
         if (request.Payment.Amount <= 0)
         {
             throw ValidationError("payment.amount", "Payment amount must be greater than zero.");
+        }
+
+        if (request.Payment.Method is PaymentMethod.Card or PaymentMethod.Transfer
+            && string.IsNullOrWhiteSpace(request.Payment.Reference))
+        {
+            throw ValidationError("payment.reference", "Payment reference is required for Card and Transfer methods.");
         }
 
         if (request.Items.Any(x => x.Quantity <= 0))

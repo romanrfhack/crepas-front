@@ -1,4 +1,5 @@
 using CobranzaDigital.Domain.Common;
+using System.Text.Json.Serialization;
 
 namespace CobranzaDigital.Domain.Entities;
 
@@ -8,6 +9,7 @@ public enum SaleStatus
     Void = 1
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum PaymentMethod
 {
     Cash = 0,
