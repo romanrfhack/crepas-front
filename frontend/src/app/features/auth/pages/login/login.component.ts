@@ -81,89 +81,188 @@ interface LoginModel {
       </section>
     </main>
   `,
-  styles: `
+    styles: `
+    :host {
+      /* Paleta alineada a tu menú + fondo */
+      --brand-rose: #f3b6c2;
+      --brand-rose-strong: #e89aac;
+      --brand-cream: #fbf6ef;
+      --brand-cocoa: #6b3f2a;
+      --brand-ink: #0f172a;
+      --brand-muted: #475569;
+
+      --ring: rgba(232, 154, 172, 0.55);
+      --border: rgba(243, 182, 194, 0.35);
+      --shadow: 0 20px 60px rgba(15, 23, 42, 0.14);
+    }
+
     .auth-container {
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2rem 1rem;
-      background: #f5f7fb;
+
+      /* padding responsivo */
+      padding: clamp(1.25rem, 3vw, 3rem);
+
+      /* Fondo: imagen + overlays para asegurar legibilidad del card */
+      background-color: var(--brand-cream);
+      background-image:
+        radial-gradient(1100px 700px at 70% 35%,
+          rgba(255, 255, 255, 0.78),
+          rgba(255, 255, 255, 0.38) 35%,
+          rgba(255, 255, 255, 0) 72%),
+        linear-gradient(90deg,
+          rgba(243, 182, 194, 0.28) 0%,
+          rgba(251, 246, 239, 0.88) 55%,
+          rgba(251, 246, 239, 1) 100%),
+        url('/assets/fondoLogin.webp');
+
+      background-repeat: no-repeat;
+      background-size: cover;
+
+      /* Mantiene el “lado con espacio” para el formulario */
+      background-position: left center;
     }
+
+    /* En desktop, empuja el card hacia la derecha para respetar el “safe area” */
+    @media (min-width: 900px) {
+      .auth-container {
+        justify-content: flex-end;
+      }
+      .auth-card {
+        margin-right: clamp(0rem, 6vw, 6rem);
+      }
+    }
+
     .auth-card {
       width: min(420px, 100%);
-      background: #ffffff;
-      border-radius: 16px;
       padding: 2rem;
-      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
       display: grid;
       gap: 1.5rem;
+
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+
+      /* glass */
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
+
     .auth-header h1 {
       margin: 0;
-      font-size: 1.5rem;
-      color: #0f172a;
+      font-size: 1.55rem;
+      letter-spacing: 0.2px;
+      color: var(--brand-ink);
     }
+
     .auth-header p {
       margin: 0.5rem 0 0;
-      color: #475569;
+      color: var(--brand-muted);
     }
+
     .auth-form {
       display: grid;
       gap: 1rem;
     }
+
     .field {
       display: grid;
       gap: 0.5rem;
     }
+
     label {
-      font-weight: 600;
-      color: #0f172a;
+      font-weight: 650;
+      color: var(--brand-ink);
     }
+
     input {
-      padding: 0.65rem 0.75rem;
-      border-radius: 8px;
-      border: 1px solid #cbd5f5;
+      padding: 0.7rem 0.8rem;
+      border-radius: 12px;
+      border: 1px solid rgba(107, 63, 42, 0.16);
+      background: rgba(255, 255, 255, 0.9);
       font-size: 1rem;
+      transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
     }
+
+    input:hover {
+      border-color: rgba(232, 154, 172, 0.45);
+    }
+
     input:focus-visible {
-      outline: 3px solid #94a3ff;
+      outline: 3px solid var(--ring);
       outline-offset: 1px;
+      border-color: rgba(232, 154, 172, 0.55);
+      box-shadow: 0 0 0 4px rgba(232, 154, 172, 0.16);
     }
+
     .field-error {
       margin: 0;
       color: #b42318;
       font-size: 0.85rem;
     }
+
     .form-error {
       margin: 0;
-      color: #b42318;
-      background: #fff1f0;
+      color: #7a1a12;
+      background: rgba(243, 182, 194, 0.22);
+      border: 1px solid rgba(243, 182, 194, 0.35);
       padding: 0.75rem;
-      border-radius: 8px;
+      border-radius: 12px;
     }
+
     .primary-button {
       border: none;
       border-radius: 999px;
-      padding: 0.75rem 1.5rem;
-      background: #1d4ed8;
+      padding: 0.85rem 1.5rem;
       color: #ffffff;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
+      transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+
+      /* rosa → caramelo (combina con waffle/chocolate) */
+      background: linear-gradient(135deg, var(--brand-rose-strong), #c98d6a);
+      box-shadow: 0 12px 26px rgba(201, 141, 106, 0.28);
     }
+
+    .primary-button:hover:not([disabled]) {
+      transform: translateY(-1px);
+      filter: saturate(1.05) brightness(0.98);
+    }
+
+    .primary-button:focus-visible {
+      outline: 3px solid var(--ring);
+      outline-offset: 2px;
+    }
+
     .primary-button[disabled] {
-      opacity: 0.6;
+      opacity: 0.65;
       cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+      filter: none;
     }
+
     .auth-footer {
       display: flex;
       gap: 0.5rem;
       justify-content: center;
-      color: #475569;
+      color: var(--brand-muted);
     }
+
     .auth-footer a {
-      color: #1d4ed8;
-      font-weight: 600;
+      color: var(--brand-cocoa);
+      font-weight: 700;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(107, 63, 42, 0.25);
+      transition: border-color 140ms ease, color 140ms ease;
+    }
+
+    .auth-footer a:hover {
+      color: #4f2d1f;
+      border-bottom-color: rgba(232, 154, 172, 0.65);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
