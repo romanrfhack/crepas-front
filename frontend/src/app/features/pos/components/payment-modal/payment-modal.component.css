@@ -13,3 +13,8 @@
   justify-content: flex-end;
   gap: 0.5rem;
 }
+
+.error {
+  color: #b91c1c;
+  margin: 0;
+}

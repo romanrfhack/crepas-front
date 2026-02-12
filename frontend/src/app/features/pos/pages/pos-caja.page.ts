@@ -173,7 +173,7 @@ export class PosCajaPage {
       })),
       payment: {
         method: event.method,
-        amount: event.amount,
+        amount: this.estimatedTotal(),
         reference: event.reference,
       },
     };

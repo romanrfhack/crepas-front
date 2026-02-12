@@ -108,7 +108,14 @@ export interface CreateSaleItemRequestDto {
 export interface CreatePaymentRequestDto {
   method: PaymentMethod;
   amount: number;
-  reference: string | null;
+  reference?: string | null;
+}
+
+export interface PaymentUiState {
+  method: PaymentMethod;
+  receivedAmount?: number;
+  change?: number;
+  reference: string;
 }
 
 export interface CreateSaleRequestDto {
