@@ -46,6 +46,12 @@
     </p>
   }
 
+  @if (closeResult(); as closeResult) {
+    <p class="success" role="status">
+      Cierre registrado · Esperado: ${{ closeResult.expectedCashAmount.toFixed(2) }} · Contado: ${{ closeResult.countedCashAmount.toFixed(2) }} · Diferencia: ${{ closeResult.difference.toFixed(2) }}
+    </p>
+  }
+
   <div class="layout">
     <app-pos-category-list
       [categories]="categories()"
@@ -140,6 +146,13 @@
         <h2>Cierre de turno</h2>
         <p>Captura conteo por denominación para realizar el cierre de caja.</p>
 
+        @if (closePreview(); as preview) {
+          <div class="close-summary">
+            <p>Apertura: <strong>${{ preview.openingCashAmount.toFixed(2) }}</strong></p>
+            <p>Ventas efectivo turno: <strong>${{ preview.salesCashTotal.toFixed(2) }}</strong></p>
+          </div>
+        }
+
         <div class="denomination-grid" [formGroup]="closeShiftForm">
           @for (denomination of denominations; track denomination; let index = $index) {
             <label>
@@ -159,6 +172,11 @@
           <p>
             Diferencia: <strong>${{ closeDifference().toFixed(2) }}</strong>
           </p>
+          @if (largeDifferenceWarning()) {
+            <p class="shift-banner shift-banner--warning" role="alert">
+              La diferencia es mayor o igual a $200.00, verifica antes de confirmar.
+            </p>
+          }
         </div>
 
         <div [formGroup]="closeShiftForm">

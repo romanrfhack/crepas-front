@@ -36,6 +36,9 @@ public sealed class PosShiftConfiguration : IEntityTypeConfiguration<PosShift>
         builder.Property(x => x.CloseNotes).HasMaxLength(500);
         builder.Property(x => x.OpeningCashAmount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.ClosingCashAmount).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.ExpectedCashAmount).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.CashDifference).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.DenominationsJson).HasMaxLength(4000);
         builder.HasIndex(x => x.OpenOperationId).IsUnique();
         builder.HasIndex(x => x.CloseOperationId).IsUnique();
         builder.HasIndex(x => x.ClosedAtUtc);

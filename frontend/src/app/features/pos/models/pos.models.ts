@@ -152,16 +152,35 @@ export interface OpenShiftRequestDto {
   notes: string | null;
 }
 
-export interface CashCountLineDto {
-  denomination: number;
-  quantity: number;
+export interface CountedDenominationDto {
+  denominationValue: number;
+  count: number;
 }
 
 export interface CloseShiftRequestDto {
+  countedDenominations: CountedDenominationDto[];
+  closingNotes: string | null;
+  clientOperationId: string;
+}
+
+export interface ShiftClosePreviewDto {
   shiftId: string;
-  cashCountLines: CashCountLineDto[];
-  reason: string | null;
-  evidence: string | null;
+  openedAtUtc: string;
+  openingCashAmount: number;
+  salesCashTotal: number;
+  expectedCashAmount: number;
+}
+
+export interface CloseShiftResultDto {
+  shiftId: string;
+  openedAtUtc: string;
+  closedAtUtc: string;
+  openingCashAmount: number;
+  salesCashTotal: number;
+  expectedCashAmount: number;
+  countedCashAmount: number;
+  difference: number;
+  closeNotes: string | null;
 }
 
 export interface PosShiftDto {
