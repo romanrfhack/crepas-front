@@ -158,63 +158,72 @@
   @if (showCloseShiftModal()) {
     <section class="modal" aria-label="Cerrar turno">
       <div class="modal-card modal-card--wide">
-        <h2>Cierre de turno</h2>
-        <p>Captura conteo por denominación para realizar el cierre de caja.</p>
+        <div class="modal-body">
+          <h2>Cierre de turno</h2>
+          <p>Captura conteo por denominación para realizar el cierre de caja.</p>
 
-        @if (closePreview(); as preview) {
+          @if (closePreview(); as preview) {
+            <div class="close-summary">
+              <p>
+                Apertura: <strong>${{ preview.openingCashAmount.toFixed(2) }}</strong>
+              </p>
+              <p>
+                Ventas efectivo turno: <strong>${{ preview.salesCashTotal.toFixed(2) }}</strong>
+              </p>
+            </div>
+          }
+
+          <div class="denomination-grid" [formGroup]="closeShiftForm">
+            @for (denomination of denominations; track denomination; let index = $index) {
+              <div class="denomination-item">
+                <label [for]="'denomination-count-' + index">${{ denomination.toFixed(2) }}</label>
+                <input
+                  [id]="'denomination-count-' + index"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputmode="numeric"
+                  [formControl]="getCountControl(index)"
+                />
+              </div>
+            }
+          </div>
+
           <div class="close-summary">
             <p>
-              Apertura: <strong>${{ preview.openingCashAmount.toFixed(2) }}</strong>
+              Esperado: <strong>${{ closeExpectedAmount().toFixed(2) }}</strong>
             </p>
             <p>
-              Ventas efectivo turno: <strong>${{ preview.salesCashTotal.toFixed(2) }}</strong>
+              Contado: <strong>${{ countedTotal().toFixed(2) }}</strong>
             </p>
+            <p>
+              Diferencia: <strong>${{ closeDifference().toFixed(2) }}</strong>
+            </p>
+            @if (largeDifferenceWarning()) {
+              <p class="shift-banner shift-banner--warning" role="alert">
+                La diferencia es mayor o igual a $200.00, verifica antes de confirmar.
+              </p>
+            }
           </div>
-        }
 
-        <div class="denomination-grid" [formGroup]="closeShiftForm">
-          @for (denomination of denominations; track denomination; let index = $index) {
-            <label>
-              <span>${{ denomination.toFixed(2) }}</span>
-              <input type="number" min="0" [formControl]="getCountControl(index)" />
-            </label>
-          }
+          <div [formGroup]="closeShiftForm">
+            <label for="differenceReason">Motivo de diferencia</label>
+            <textarea
+              id="differenceReason"
+              rows="3"
+              formControlName="reason"
+              [attr.aria-required]="requiresDifferenceReason()"
+              [placeholder]="
+                requiresDifferenceReason() ? 'Motivo obligatorio cuando hay diferencia' : 'Opcional'
+              "
+            ></textarea>
+
+            <label for="closeEvidence">Evidencia (opcional)</label>
+            <textarea id="closeEvidence" rows="2" formControlName="evidence"></textarea>
+          </div>
         </div>
 
-        <div class="close-summary">
-          <p>
-            Esperado: <strong>${{ closeExpectedAmount().toFixed(2) }}</strong>
-          </p>
-          <p>
-            Contado: <strong>${{ countedTotal().toFixed(2) }}</strong>
-          </p>
-          <p>
-            Diferencia: <strong>${{ closeDifference().toFixed(2) }}</strong>
-          </p>
-          @if (largeDifferenceWarning()) {
-            <p class="shift-banner shift-banner--warning" role="alert">
-              La diferencia es mayor o igual a $200.00, verifica antes de confirmar.
-            </p>
-          }
-        </div>
-
-        <div [formGroup]="closeShiftForm">
-          <label for="differenceReason">Motivo de diferencia</label>
-          <textarea
-            id="differenceReason"
-            rows="3"
-            formControlName="reason"
-            [attr.aria-required]="requiresDifferenceReason()"
-            [placeholder]="
-              requiresDifferenceReason() ? 'Motivo obligatorio cuando hay diferencia' : 'Opcional'
-            "
-          ></textarea>
-
-          <label for="closeEvidence">Evidencia (opcional)</label>
-          <textarea id="closeEvidence" rows="2" formControlName="evidence"></textarea>
-        </div>
-
-        <div class="modal-actions">
+        <div class="modal-actions modal-actions--sticky">
           <button type="button" (click)="showCloseShiftModal.set(false)">Cancelar</button>
           <button type="button" (click)="submitCloseShift()" [disabled]="loading()">
             Confirmar cierre

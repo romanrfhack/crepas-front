@@ -62,6 +62,13 @@ describe('PosCajaPage', () => {
               openNotes: null,
               closeNotes: null,
             }),
+            getClosePreview: async () => ({
+              shiftId: 'shift-1',
+              openedAtUtc: '2026-02-12T10:00:00Z',
+              openingCashAmount: 100,
+              salesCashTotal: 250,
+              expectedCashAmount: 350,
+            }),
             closeShift: async () => ({
               id: 'shift-2',
               openedAtUtc: '2026-02-12T11:00:00Z',
@@ -130,6 +137,22 @@ describe('PosCajaPage', () => {
     expect(salesCalls[0]?.payload.clientSaleId).toBeTruthy();
     expect(salesCalls[0]?.payload.clientSaleId).toBe(salesCalls[1]?.payload.clientSaleId);
     expect(fixture.componentInstance.cartItems().length).toBe(0);
+  });
+
+  it('should update counted total and difference in real time from denomination counts', async () => {
+    await fixture.componentInstance.startCloseShift();
+
+    const hundredControl = fixture.componentInstance.getCountControl(3);
+    hundredControl.setValue(2);
+
+    expect(fixture.componentInstance.countedTotal()).toBe(200);
+    expect(fixture.componentInstance.closeDifference()).toBe(150);
+
+    const fiftyCentControl = fixture.componentInstance.getCountControl(10);
+    fiftyCentControl.setValue(3);
+
+    expect(fixture.componentInstance.countedTotal()).toBe(201.5);
+    expect(fixture.componentInstance.closeDifference()).toBe(148.5);
   });
 
   it('should always send payment amount as sale total and omit cash ui-only fields', async () => {

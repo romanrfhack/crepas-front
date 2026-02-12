@@ -14,6 +14,8 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map, startWith } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import { CategoryListComponent } from '../components/category-list/category-list.component';
 import {
@@ -99,10 +101,22 @@ export class PosCajaPage implements OnDestroy {
     evidence: [''],
     counts: this.formBuilder.array(
       this.denominations.map(() =>
-        this.formBuilder.nonNullable.control(0, [Validators.required, Validators.min(0)]),
+        this.formBuilder.nonNullable.control(0, [
+          Validators.required,
+          Validators.min(0),
+          Validators.pattern(/^\d+$/),
+        ]),
       ),
     ),
   });
+
+  private readonly countsValues = toSignal(
+    this.countControls.valueChanges.pipe(
+      startWith(this.countControls.getRawValue()),
+      map((counts) => this.normalizeCounts(counts)),
+    ),
+    { initialValue: this.denominations.map(() => 0) },
+  );
 
   readonly categories = computed(
     () => this.snapshot()?.categories.filter((item) => item.isActive) ?? [],
@@ -126,17 +140,10 @@ export class PosCajaPage implements OnDestroy {
 
   readonly closeExpectedAmount = computed(() => this.closePreview()?.expectedCashAmount ?? 0);
 
-  readonly countedTotal = computed(() =>
-    this.round2(
-      this.denominations.reduce((total, denomination, index) => {
-        const quantity = this.countControls.at(index)?.value ?? 0;
-        return total + denomination * quantity;
-      }, 0),
-    ),
-  );
+  readonly countedTotal = computed(() => this.centsToMoney(this.countedTotalCents()));
 
   readonly closeDifference = computed(() =>
-    this.round2(this.countedTotal() - this.closeExpectedAmount()),
+    this.centsToMoney(this.closeExpectedCents() - this.countedTotalCents()),
   );
   readonly requiresDifferenceReason = computed(() => this.closeDifference() !== 0);
   readonly largeDifferenceWarning = computed(() => Math.abs(this.closeDifference()) >= 200);
@@ -410,12 +417,58 @@ export class PosCajaPage implements OnDestroy {
   }
 
   private buildCountedDenominations(): CountedDenominationDto[] {
+    const normalizedCounts = this.normalizeCounts(this.countControls.getRawValue());
+
     return this.denominations
       .map((denominationValue, index) => ({
         denominationValue,
-        count: this.countControls.at(index)?.value ?? 0,
+        count: normalizedCounts[index] ?? 0,
       }))
       .filter((line) => line.count > 0);
+  }
+
+  private countedTotalCents() {
+    const counts = this.countsValues();
+    return this.denominations.reduce((total, denomination, index) => {
+      const denominationCents = this.moneyToCents(denomination);
+      const count = counts[index] ?? 0;
+      return total + denominationCents * count;
+    }, 0);
+  }
+
+  private closeExpectedCents() {
+    return this.moneyToCents(this.closeExpectedAmount());
+  }
+
+  private normalizeCounts(counts: readonly number[]) {
+    const normalized = this.denominations.map((_, index) => {
+      const raw = counts[index];
+      if (typeof raw !== 'number' || Number.isNaN(raw)) {
+        return 0;
+      }
+
+      if (raw < 0) {
+        return 0;
+      }
+
+      return Math.floor(raw);
+    });
+
+    const current = this.countControls.getRawValue();
+    const requiresPatch = normalized.some((value, index) => value !== current[index]);
+    if (requiresPatch) {
+      this.countControls.patchValue(normalized, { emitEvent: false });
+    }
+
+    return normalized;
+  }
+
+  private moneyToCents(value: number) {
+    return Math.round(value * 100);
+  }
+
+  private centsToMoney(cents: number) {
+    return cents / 100;
   }
 
   private addToCart(product: ProductDto, customization: ProductCustomizationResult) {

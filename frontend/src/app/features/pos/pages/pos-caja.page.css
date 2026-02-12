@@ -142,11 +142,14 @@
   background: rgb(15 23 42 / 0.45);
   display: grid;
   place-items: center;
+  padding: 1rem;
   z-index: 20;
 }
 
 .modal-card {
   width: min(520px, 90vw);
+  max-height: min(70vh, 680px);
+  overflow: hidden;
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -161,6 +164,15 @@
 
 .modal-card--wide {
   width: min(820px, 94vw);
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 0.25rem;
 }
 
 .modal-card input,
@@ -198,15 +210,42 @@
   gap: 0.5rem;
 }
 
-.denomination-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.6rem;
+.modal-actions--sticky {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(107, 63, 42, 0.14);
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.97), rgba(255, 255, 255, 0.85));
 }
 
-.denomination-grid label {
+.denomination-grid {
   display: grid;
-  gap: 0.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.denomination-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgba(107, 63, 42, 0.12);
+  border-radius: 10px;
+  min-height: 2.4rem;
+}
+
+.denomination-item label {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.denomination-item input[type='number'] {
+  width: 4.2rem;
+  min-width: 4.2rem;
+  padding: 0.28rem 0.35rem;
+  font-size: 0.9rem;
+  text-align: right;
 }
 
 .close-summary {
@@ -403,5 +442,15 @@
     left: 1rem;
     width: auto;
     bottom: 80px;
+  }
+}
+
+@media (max-width: 720px) {
+  .modal-card {
+    max-height: 82vh;
+  }
+
+  .denomination-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
