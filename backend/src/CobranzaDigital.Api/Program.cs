@@ -137,6 +137,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Admin"));
     options.AddPolicy(AuthorizationPolicies.PosAdmin, policy =>
         policy.RequireRole("Admin"));
+    options.AddPolicy(AuthorizationPolicies.PosOperator, policy =>
+        policy.RequireRole("Admin", "Cashier"));
     options.AddPolicy(AuthorizationPolicies.RequireScope, policy =>
         policy.RequireClaim("scope", AuthorizationPolicies.RequiredScopeValue));
 });

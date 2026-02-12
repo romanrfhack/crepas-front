@@ -27,6 +27,11 @@ public sealed class CobranzaDigitalDbContext
     public DbSet<IncludedItem> IncludedItems => Set<IncludedItem>();
     public DbSet<ProductGroupOverride> ProductGroupOverrides => Set<ProductGroupOverride>();
     public DbSet<ProductGroupOverrideAllowedItem> ProductGroupOverrideAllowedItems => Set<ProductGroupOverrideAllowedItem>();
+    public DbSet<Sale> Sales => Set<Sale>();
+    public DbSet<SaleItem> SaleItems => Set<SaleItem>();
+    public DbSet<SaleItemSelection> SaleItemSelections => Set<SaleItemSelection>();
+    public DbSet<SaleItemExtra> SaleItemExtras => Set<SaleItemExtra>();
+    public DbSet<Payment> Payments => Set<Payment>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
