@@ -4,6 +4,7 @@ import { PosCajaPage } from './pos-caja.page';
 import { PosCatalogSnapshotService } from '../services/pos-catalog-snapshot.service';
 import { PosSalesApiService } from '../services/pos-sales-api.service';
 import { CreateSaleRequestDto } from '../models/pos.models';
+import { PosShiftApiService } from '../services/pos-shift-api.service';
 
 describe('PosCajaPage', () => {
   let fixture: ComponentFixture<PosCajaPage>;
@@ -33,21 +34,8 @@ describe('PosCajaPage', () => {
           },
         },
         {
-          provide: PosSalesApiService,
+          provide: PosShiftApiService,
           useValue: {
-            createSale: async (payload: CreateSaleRequestDto, correlationId: string) => {
-              salesCalls.push({ payload, correlationId });
-              if (salesCalls.length === 1) {
-                throw new HttpErrorResponse({ status: 0 });
-              }
-
-              return {
-                saleId: 'sale-1',
-                folio: 'POS-001',
-                occurredAtUtc: '2026-02-12T16:04:00Z',
-                total: 10,
-              };
-            },
             getCurrentShift: async () => ({
               id: 'shift-1',
               openedAtUtc: '2026-02-12T10:00:00Z',
@@ -66,7 +54,7 @@ describe('PosCajaPage', () => {
               openedAtUtc: '2026-02-12T11:00:00Z',
               openedByUserId: 'u1',
               openedByEmail: 'cashier@local',
-              openingCashAmount: 0,
+              openingCashAmount: 100,
               closedAtUtc: null,
               closedByUserId: null,
               closedByEmail: null,
@@ -79,7 +67,7 @@ describe('PosCajaPage', () => {
               openedAtUtc: '2026-02-12T11:00:00Z',
               openedByUserId: 'u1',
               openedByEmail: 'cashier@local',
-              openingCashAmount: 0,
+              openingCashAmount: 100,
               closedAtUtc: '2026-02-12T20:00:00Z',
               closedByUserId: 'u1',
               closedByEmail: 'cashier@local',
@@ -87,6 +75,24 @@ describe('PosCajaPage', () => {
               openNotes: null,
               closeNotes: null,
             }),
+          },
+        },
+        {
+          provide: PosSalesApiService,
+          useValue: {
+            createSale: async (payload: CreateSaleRequestDto, correlationId: string) => {
+              salesCalls.push({ payload, correlationId });
+              if (salesCalls.length === 1) {
+                throw new HttpErrorResponse({ status: 0 });
+              }
+
+              return {
+                saleId: 'sale-1',
+                folio: 'POS-001',
+                occurredAtUtc: '2026-02-12T16:04:00Z',
+                total: 10,
+              };
+            },
           },
         },
       ],

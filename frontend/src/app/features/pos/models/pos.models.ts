@@ -148,15 +148,20 @@ export interface TopProductDto {
 }
 
 export interface OpenShiftRequestDto {
-  openingCashAmount: number;
+  startingCashAmount: number;
   notes: string | null;
-  clientOperationId: string | null;
+}
+
+export interface CashCountLineDto {
+  denomination: number;
+  quantity: number;
 }
 
 export interface CloseShiftRequestDto {
-  closingCashAmount: number;
-  notes: string | null;
-  clientOperationId: string | null;
+  shiftId: string;
+  cashCountLines: CashCountLineDto[];
+  reason: string | null;
+  evidence: string | null;
 }
 
 export interface PosShiftDto {
@@ -169,6 +174,7 @@ export interface PosShiftDto {
   closedByUserId: string | null;
   closedByEmail: string | null;
   closingCashAmount: number | null;
+  expectedClosingAmount?: number | null;
   openNotes: string | null;
   closeNotes: string | null;
 }

@@ -9,9 +9,13 @@
           <strong>{{ item.productName }}</strong>
           <span>${{ (item.basePrice * item.quantity).toFixed(2) }}</span>
           <div class="actions">
-            <button type="button" (click)="decrease.emit(item.id)" aria-label="Disminuir cantidad">-</button>
+            <button type="button" (click)="decrease.emit(item.id)" aria-label="Disminuir cantidad">
+              -
+            </button>
             <span>{{ item.quantity }}</span>
-            <button type="button" (click)="increase.emit(item.id)" aria-label="Aumentar cantidad">+</button>
+            <button type="button" (click)="increase.emit(item.id)" aria-label="Aumentar cantidad">
+              +
+            </button>
             <button type="button" (click)="remove.emit(item.id)">Eliminar</button>
           </div>
         </li>
@@ -19,5 +23,11 @@
     </ul>
   }
   <p class="total">Total estimado: ${{ estimatedTotal().toFixed(2) }}</p>
-  <button type="button" [disabled]="items().length === 0" (click)="checkout.emit()">Cobrar</button>
+  <button
+    type="button"
+    [disabled]="items().length === 0 || checkoutDisabled()"
+    (click)="checkout.emit()"
+  >
+    Confirmar cobro
+  </button>
 </section>

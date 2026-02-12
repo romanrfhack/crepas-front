@@ -4,10 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import {
   CreateSaleRequestDto,
-  CloseShiftRequestDto,
   DailySummaryDto,
-  OpenShiftRequestDto,
-  PosShiftDto,
   SaleResponseDto,
   TopProductDto,
 } from '../models/pos.models';
@@ -39,17 +36,5 @@ export class PosSalesApiService {
         `${this.baseUrl}/v1/pos/reports/top-products?dateFrom=${dateFrom}&dateTo=${dateTo}&top=${top}`,
       ),
     );
-  }
-
-  getCurrentShift() {
-    return firstValueFrom(this.http.get<PosShiftDto | null>(`${this.baseUrl}/v1/pos/shifts/current`));
-  }
-
-  openShift(payload: OpenShiftRequestDto) {
-    return firstValueFrom(this.http.post<PosShiftDto>(`${this.baseUrl}/v1/pos/shifts/open`, payload));
-  }
-
-  closeShift(payload: CloseShiftRequestDto) {
-    return firstValueFrom(this.http.post<PosShiftDto>(`${this.baseUrl}/v1/pos/shifts/close`, payload));
   }
 }

@@ -1,5 +1,12 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  FormArray,
+  FormBuilder,
+  FormControl,
+  ReactiveFormsModule,
+  Validators,
+} from '@angular/forms';
 import { environment } from '../../../../environments/environment';
 import { CategoryListComponent } from '../components/category-list/category-list.component';
 import {
@@ -14,6 +21,7 @@ import {
 import { ProductGridComponent } from '../components/product-grid/product-grid.component';
 import {
   CartItem,
+  CashCountLineDto,
   CatalogSnapshotDto,
   CreateSaleRequestDto,
   PosShiftDto,
@@ -22,10 +30,12 @@ import {
 } from '../models/pos.models';
 import { PosCatalogSnapshotService } from '../services/pos-catalog-snapshot.service';
 import { PosSalesApiService } from '../services/pos-sales-api.service';
+import { PosShiftApiService } from '../services/pos-shift-api.service';
 
 @Component({
   selector: 'app-pos-caja-page',
   imports: [
+    ReactiveFormsModule,
     CategoryListComponent,
     ProductGridComponent,
     CartComponent,
@@ -39,6 +49,12 @@ import { PosSalesApiService } from '../services/pos-sales-api.service';
 export class PosCajaPage {
   private readonly snapshotService = inject(PosCatalogSnapshotService);
   private readonly salesApi = inject(PosSalesApiService);
+  private readonly shiftApi = inject(PosShiftApiService);
+  private readonly formBuilder = inject(FormBuilder);
+  private readonly shortDateTimeFormatter = new Intl.DateTimeFormat('es-MX', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
 
   readonly snapshot = signal<CatalogSnapshotDto | null>(null);
   readonly selectedCategoryId = signal<string | null>(null);
@@ -50,13 +66,72 @@ export class PosCajaPage {
   readonly errorMessage = signal<string | null>(null);
   readonly saleSuccess = signal<SaleResponseDto | null>(null);
   readonly currentShift = signal<PosShiftDto | null>(null);
+  readonly showOpenShiftModal = signal(false);
+  readonly showCloseShiftModal = signal(false);
 
   readonly correlationId = signal(crypto.randomUUID());
   readonly inProgressClientSaleId = signal<string | null>(null);
   readonly requireOpenShift = environment.posRequireOpenShift;
 
-  readonly categories = computed(() => this.snapshot()?.categories.filter((item) => item.isActive) ?? []);
-  readonly hasOpenShift = computed(() => this.currentShift()?.closedAtUtc == null && this.currentShift() !== null);
+  readonly denominations = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5];
+
+  readonly openShiftForm = this.formBuilder.nonNullable.group({
+    startingCashAmount: [0, [Validators.required, Validators.min(0)]],
+    notes: [''],
+  });
+
+  readonly closeShiftForm = this.formBuilder.nonNullable.group({
+    reason: [''],
+    evidence: [''],
+    counts: this.formBuilder.array(
+      this.denominations.map(() =>
+        this.formBuilder.nonNullable.control(0, [Validators.required, Validators.min(0)]),
+      ),
+    ),
+  });
+
+  readonly categories = computed(
+    () => this.snapshot()?.categories.filter((item) => item.isActive) ?? [],
+  );
+  readonly hasOpenShift = computed(
+    () => this.currentShift()?.closedAtUtc == null && this.currentShift() !== null,
+  );
+  readonly canCheckout = computed(() => !this.requireOpenShift || this.hasOpenShift());
+
+  readonly openedShiftSummary = computed(() => {
+    const shift = this.currentShift();
+    if (!shift || shift.closedAtUtc) {
+      return null;
+    }
+
+    return {
+      openedAt: this.formatDateTime(shift.openedAtUtc),
+      openingCashAmount: shift.openingCashAmount,
+    };
+  });
+
+  readonly closeExpectedAmount = computed(() => {
+    const shift = this.currentShift();
+    if (!shift) {
+      return this.estimatedTotal();
+    }
+
+    return shift.expectedClosingAmount ?? this.estimatedTotal();
+  });
+
+  readonly countedTotal = computed(() =>
+    this.round2(
+      this.denominations.reduce((total, denomination, index) => {
+        const quantity = this.countControls.at(index)?.value ?? 0;
+        return total + denomination * quantity;
+      }, 0),
+    ),
+  );
+
+  readonly closeDifference = computed(() =>
+    this.round2(this.countedTotal() - this.closeExpectedAmount()),
+  );
+  readonly requiresDifferenceReason = computed(() => this.closeDifference() !== 0);
 
   readonly products = computed(() => {
     const current = this.snapshot()?.products.filter((item) => item.isActive) ?? [];
@@ -71,7 +146,10 @@ export class PosCajaPage {
   readonly estimatedTotal = computed(() =>
     this.round2(
       this.cartItems().reduce((acc, item) => {
-        const extrasTotal = item.extras.reduce((sum, extra) => sum + extra.unitPrice * extra.quantity, 0);
+        const extrasTotal = item.extras.reduce(
+          (sum, extra) => sum + extra.unitPrice * extra.quantity,
+          0,
+        );
         const unit = item.basePrice + extrasTotal;
         return acc + unit * item.quantity;
       }, 0),
@@ -91,7 +169,17 @@ export class PosCajaPage {
   });
 
   readonly customizationOptionItems = computed(() => this.snapshot()?.optionItems ?? []);
-  readonly customizationExtras = computed(() => this.snapshot()?.extras.filter((extra) => extra.isActive) ?? []);
+  readonly customizationExtras = computed(
+    () => this.snapshot()?.extras.filter((extra) => extra.isActive) ?? [],
+  );
+
+  get countControls() {
+    return this.closeShiftForm.controls.counts as FormArray<FormControl<number>>;
+  }
+
+  getCountControl(index: number) {
+    return this.countControls.at(index);
+  }
 
   constructor() {
     void this.loadSnapshot();
@@ -111,36 +199,86 @@ export class PosCajaPage {
 
   async loadCurrentShift() {
     try {
-      const shift = await this.salesApi.getCurrentShift();
-      this.currentShift.set(shift);
+      const shift = await this.shiftApi.getCurrentShift();
+      this.currentShift.set(shift ?? null);
+      this.showOpenShiftModal.set(this.requireOpenShift && !shift);
     } catch {
       this.errorMessage.set('No se pudo consultar el estado del turno.');
     }
   }
 
-  async openShift() {
+  openPaymentModal() {
+    if (!this.canCheckout()) {
+      this.showOpenShiftModal.set(true);
+      this.errorMessage.set('Debes abrir turno para confirmar cobros.');
+      return;
+    }
+
+    this.showPayment.set(true);
+  }
+
+  async submitOpenShift() {
+    if (this.openShiftForm.invalid || this.loading()) {
+      return;
+    }
+
+    this.loading.set(true);
+    this.errorMessage.set(null);
     try {
-      const shift = await this.salesApi.openShift({
-        openingCashAmount: 0,
-        notes: 'Apertura rápida desde Caja POS',
-        clientOperationId: crypto.randomUUID(),
-      });
+      const { startingCashAmount, notes } = this.openShiftForm.getRawValue();
+      const shift = await this.shiftApi.openShift(startingCashAmount, notes);
       this.currentShift.set(shift);
+      this.showOpenShiftModal.set(false);
+      this.openShiftForm.patchValue({ notes: '' });
     } catch {
       this.errorMessage.set('No se pudo abrir el turno.');
+    } finally {
+      this.loading.set(false);
     }
   }
 
-  async closeShift() {
+  startCloseShift() {
+    if (!this.hasOpenShift()) {
+      return;
+    }
+
+    this.closeShiftForm.reset({
+      reason: '',
+      evidence: '',
+      counts: this.denominations.map(() => 0),
+    });
+    this.showCloseShiftModal.set(true);
+  }
+
+  async submitCloseShift() {
+    const shift = this.currentShift();
+    if (!shift || this.loading()) {
+      return;
+    }
+
+    if (this.requiresDifferenceReason() && !this.closeShiftForm.controls.reason.value.trim()) {
+      this.errorMessage.set('Debes capturar un motivo cuando exista diferencia en cierre de caja.');
+      return;
+    }
+
+    this.loading.set(true);
+    this.errorMessage.set(null);
+
+    const { reason, evidence } = this.closeShiftForm.getRawValue();
+
     try {
-      const shift = await this.salesApi.closeShift({
-        closingCashAmount: this.estimatedTotal(),
-        notes: 'Cierre rápido desde Caja POS',
-        clientOperationId: crypto.randomUUID(),
-      });
-      this.currentShift.set(shift);
+      const closedShift = await this.shiftApi.closeShift(
+        shift.id,
+        this.buildCashCountLines(),
+        reason,
+        evidence,
+      );
+      this.currentShift.set(closedShift);
+      this.showCloseShiftModal.set(false);
     } catch {
       this.errorMessage.set('No se pudo cerrar el turno.');
+    } finally {
+      this.loading.set(false);
     }
   }
 
@@ -186,7 +324,8 @@ export class PosCajaPage {
       return;
     }
 
-    if (this.requireOpenShift && !this.hasOpenShift()) {
+    if (!this.canCheckout()) {
+      this.showOpenShiftModal.set(true);
       this.errorMessage.set('Debes tener un turno abierto para registrar ventas.');
       return;
     }
@@ -231,10 +370,19 @@ export class PosCajaPage {
       this.showPayment.set(false);
       this.inProgressClientSaleId.set(null);
     } catch (error) {
-      this.handleSaleError(error);
+      await this.handleSaleError(error);
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private buildCashCountLines(): CashCountLineDto[] {
+    return this.denominations
+      .map((denomination, index) => ({
+        denomination,
+        quantity: this.countControls.at(index)?.value ?? 0,
+      }))
+      .filter((line) => line.quantity > 0);
   }
 
   private addToCart(product: ProductDto, customization: ProductCustomizationResult) {
@@ -252,8 +400,16 @@ export class PosCajaPage {
     ]);
   }
 
-  private handleSaleError(error: unknown) {
+  private async handleSaleError(error: unknown) {
     const httpError = error as HttpErrorResponse;
+    if (httpError.status === 409 && this.isNoOpenShiftError(httpError.error)) {
+      this.errorMessage.set('No hay turno abierto. Debes abrir turno para continuar.');
+      this.inProgressClientSaleId.set(null);
+      await this.loadCurrentShift();
+      this.showOpenShiftModal.set(true);
+      return;
+    }
+
     if (httpError.status === 409) {
       this.errorMessage.set('Esta venta ya fue registrada.');
       this.inProgressClientSaleId.set(null);
@@ -273,6 +429,23 @@ export class PosCajaPage {
     }
 
     this.errorMessage.set('No fue posible registrar la venta.');
+  }
+
+  private isNoOpenShiftError(payload: unknown) {
+    if (!payload || typeof payload !== 'object') {
+      return false;
+    }
+
+    const data = payload as Record<string, unknown>;
+    const code = String(data['code'] ?? '').toLowerCase();
+    const title = String(data['title'] ?? '').toLowerCase();
+    const detail = String(data['detail'] ?? '').toLowerCase();
+
+    return code.includes('open_shift') || title.includes('turno') || detail.includes('open shift');
+  }
+
+  private formatDateTime(value: string) {
+    return this.shortDateTimeFormatter.format(new Date(value));
   }
 
   private round2(value: number) {
