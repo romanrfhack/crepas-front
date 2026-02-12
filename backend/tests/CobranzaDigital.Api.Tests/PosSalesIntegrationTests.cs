@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using CobranzaDigital.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,47 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     {
         _factory = factory;
         _client = factory.CreateClient();
+    }
+
+
+    [Fact]
+    public async Task OpenShift_WithStartingCashAmount_PersistsResponseDbAndAudit()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+
+        using var openReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/open", token);
+        openReq.Headers.Add("X-Correlation-Id", "corr-shift-open-starting-cash");
+        openReq.Content = JsonContent.Create(new
+        {
+            startingCashAmount = 200m,
+            notes = "Cambio para iniciar",
+            clientOperationId = Guid.NewGuid()
+        });
+
+        using var openResp = await _client.SendAsync(openReq);
+        var openedShift = await openResp.Content.ReadFromJsonAsync<PosShiftResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, openResp.StatusCode);
+        Assert.NotNull(openedShift);
+        Assert.Equal(200m, openedShift!.OpeningCashAmount);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+
+        var dbShift = await db.PosShifts.AsNoTracking().FirstAsync(x => x.Id == openedShift.Id);
+        Assert.Equal(200m, dbShift.OpeningCashAmount);
+
+        var audit = await db.AuditLogs.AsNoTracking()
+            .Where(x => x.Action == "Open" && x.EntityType == "PosShift" && x.EntityId == openedShift.Id.ToString())
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .FirstOrDefaultAsync();
+
+        Assert.NotNull(audit);
+        Assert.False(string.IsNullOrWhiteSpace(audit!.AfterJson));
+
+        using var afterJson = JsonDocument.Parse(audit.AfterJson!);
+        var openingCashFromAudit = afterJson.RootElement.GetProperty("openingCashAmount").GetDecimal();
+        Assert.Equal(200m, openingCashFromAudit);
     }
 
     [Fact]
@@ -180,7 +222,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         using var openReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/open", token);
         openReq.Content = JsonContent.Create(new
         {
-            openingCashAmount = initialCash,
+            startingCashAmount = initialCash,
             notes = $"Opened by {cashierEmail} for integration test",
             clientOperationId = Guid.NewGuid()
         });
@@ -190,12 +232,14 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
 
         var openedShift = await openResp.Content.ReadFromJsonAsync<PosShiftResponse>();
         Assert.NotNull(openedShift);
+        Assert.Equal(initialCash, openedShift!.OpeningCashAmount);
 
         using var verifyReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/current", token);
         using var verifyResp = await _client.SendAsync(verifyReq);
         Assert.Equal(HttpStatusCode.OK, verifyResp.StatusCode);
         var verifiedShift = await verifyResp.Content.ReadFromJsonAsync<PosShiftResponse>();
         Assert.NotNull(verifiedShift);
+        Assert.Equal(initialCash, verifiedShift!.OpeningCashAmount);
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
