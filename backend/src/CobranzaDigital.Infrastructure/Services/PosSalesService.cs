@@ -224,10 +224,10 @@ public sealed class PosSalesService : IPosSalesService
     {
         var fromDate = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var to = fromDate.AddDays(1);
-        var completedStatus = (int)SaleStatus.Completed; // 👈 variable local
+        var completedStatus = SaleStatus.Completed;
 
         var sales = await _db.Sales.AsNoTracking()
-            .Where(x => (int)x.Status == completedStatus
+            .Where(x => x.Status == completedStatus
                 && x.OccurredAtUtc >= fromDate
                 && x.OccurredAtUtc < to)
             .Select(x => new { x.Id, x.Total })
@@ -266,11 +266,11 @@ public sealed class PosSalesService : IPosSalesService
 
         var fromDate = dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var toExclusive = dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var completedStatus = (int)SaleStatus.Completed; // 👈 variable local
+        var completedStatus = SaleStatus.Completed;
 
         var rows = await (from sale in _db.Sales.AsNoTracking()
                           join item in _db.SaleItems.AsNoTracking() on sale.Id equals item.SaleId
-                          where (int)sale.Status == completedStatus
+                          where sale.Status == completedStatus
                                 && sale.OccurredAtUtc >= fromDate
                                 && sale.OccurredAtUtc < toExclusive
                           group item by new { item.ProductId, item.ProductNameSnapshot }
