@@ -6,4 +6,10 @@ describe('posRoutes', () => {
     expect(route).toBeDefined();
     expect(route?.loadComponent).toBeDefined();
   });
+
+  it('should expose lazy reportes route', () => {
+    const route = posRoutes.find((item) => item.path === 'reportes');
+    expect(route).toBeDefined();
+    expect(route?.loadComponent).toBeDefined();
+  });
 });

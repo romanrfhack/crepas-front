@@ -32,6 +32,7 @@ public sealed class CobranzaDigitalDbContext
     public DbSet<SaleItemSelection> SaleItemSelections => Set<SaleItemSelection>();
     public DbSet<SaleItemExtra> SaleItemExtras => Set<SaleItemExtra>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PosShift> PosShifts => Set<PosShift>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

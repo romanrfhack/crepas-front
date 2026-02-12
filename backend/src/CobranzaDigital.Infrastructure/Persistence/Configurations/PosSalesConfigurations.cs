@@ -18,6 +18,26 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.Property(x => x.Status).HasConversion<int>();
         builder.HasIndex(x => x.OccurredAtUtc);
         builder.HasIndex(x => x.ClientSaleId).IsUnique();
+        builder.HasIndex(x => x.ShiftId);
+        builder.HasOne<PosShift>().WithMany().HasForeignKey(x => x.ShiftId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class PosShiftConfiguration : IEntityTypeConfiguration<PosShift>
+{
+    public void Configure(EntityTypeBuilder<PosShift> builder)
+    {
+        builder.ToTable("PosShifts");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.OpenedByEmail).HasMaxLength(320);
+        builder.Property(x => x.ClosedByEmail).HasMaxLength(320);
+        builder.Property(x => x.OpenNotes).HasMaxLength(500);
+        builder.Property(x => x.CloseNotes).HasMaxLength(500);
+        builder.Property(x => x.OpeningCashAmount).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.ClosingCashAmount).HasColumnType("decimal(18,2)");
+        builder.HasIndex(x => x.OpenOperationId).IsUnique();
+        builder.HasIndex(x => x.CloseOperationId).IsUnique();
+        builder.HasIndex(x => x.ClosedAtUtc);
     }
 }
 
