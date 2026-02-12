@@ -23,6 +23,8 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     [Fact]
     public async Task OpenShift_WithStartingCashAmount_PersistsResponseDbAndAudit()
     {
+        await CloseAnyOpenShiftAsync();
+
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
 
         using var openReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/open", token);
@@ -58,6 +60,31 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         using var afterJson = JsonDocument.Parse(audit.AfterJson!);
         var openingCashFromAudit = afterJson.RootElement.GetProperty("openingCashAmount").GetDecimal();
         Assert.Equal(200m, openingCashFromAudit);
+    }
+
+    private async Task CloseAnyOpenShiftAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+
+        var openShifts = await db.PosShifts
+            .Where(x => x.ClosedAtUtc == null)
+            .ToListAsync();
+
+        if (openShifts.Count == 0)
+        {
+            return;
+        }
+
+        var closedAt = DateTimeOffset.UtcNow;
+        foreach (var shift in openShifts)
+        {
+            shift.ClosedAtUtc = closedAt;
+            shift.ClosingCashAmount ??= shift.OpeningCashAmount;
+            shift.CloseNotes ??= "Closed by integration test setup to guarantee isolation.";
+        }
+
+        await db.SaveChangesAsync();
     }
 
     [Fact]
