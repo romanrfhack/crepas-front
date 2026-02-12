@@ -122,7 +122,7 @@ interface LoginModel {
       background-size: cover;
 
       /* Mantiene el “lado con espacio” para el formulario */
-      background-position: left center;
+      background-position: center;
     }
 
     /* En desktop, empuja el card hacia la derecha para respetar el “safe area” */
