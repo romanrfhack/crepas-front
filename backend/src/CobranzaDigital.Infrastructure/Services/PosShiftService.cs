@@ -27,11 +27,24 @@ public sealed class PosShiftService : IPosShiftService
 
     public async Task<PosShiftDto?> GetCurrentShiftAsync(CancellationToken ct)
     {
-        var shift = await _db.PosShifts.AsNoTracking()
-            .Where(x => x.ClosedAtUtc == null)
-            .OrderByDescending(x => x.OpenedAtUtc)
-            .FirstOrDefaultAsync(ct)
-            .ConfigureAwait(false);
+        PosShift? shift;
+        var openShiftsQuery = _db.PosShifts.AsNoTracking().Where(x => x.ClosedAtUtc == null);
+
+        if (_db.Database.IsSqlite())
+        {
+            shift = (await openShiftsQuery
+                .ToListAsync(ct)
+                .ConfigureAwait(false))
+                .OrderByDescending(x => x.OpenedAtUtc)
+                .FirstOrDefault();
+        }
+        else
+        {
+            shift = await openShiftsQuery
+                .OrderByDescending(x => x.OpenedAtUtc)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+        }
 
         return shift is null ? null : Map(shift);
     }
