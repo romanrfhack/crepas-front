@@ -51,7 +51,9 @@ public sealed class PosShiftService : IPosShiftService
 
     public async Task<PosShiftDto> OpenShiftAsync(OpenPosShiftRequestDto request, CancellationToken ct)
     {
-        if (request.OpeningCashAmount < 0)
+        var openingCashAmount = request.ResolveOpeningCashAmount();
+
+        if (openingCashAmount < 0)
         {
             throw ValidationError("openingCashAmount", "openingCashAmount cannot be negative.");
         }
@@ -86,7 +88,7 @@ public sealed class PosShiftService : IPosShiftService
             OpenedAtUtc = DateTimeOffset.UtcNow,
             OpenedByUserId = userId,
             OpenedByEmail = GetCurrentUserEmail(),
-            OpeningCashAmount = request.OpeningCashAmount,
+            OpeningCashAmount = openingCashAmount,
             OpenNotes = request.Notes,
             OpenOperationId = request.ClientOperationId
         };
