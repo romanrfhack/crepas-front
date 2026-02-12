@@ -28,7 +28,7 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace CobranzaDigital.Api.Tests;
 
-public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
+public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, IAsyncLifetime, IDisposable
 {
     private const string TestJwtIssuer = "CobranzaDigital.Tests";
     private const string TestJwtAudience = "CobranzaDigital.Tests.Api";
@@ -122,7 +122,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
                         if (previousOnAuthenticationFailed is not null)
                         {
-                            await previousOnAuthenticationFailed(context).ConfigureAwait(false);
+                            await previousOnAuthenticationFailed(context);
                         }
                     },
                     OnChallenge = async context =>
@@ -140,7 +140,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
                         if (previousOnChallenge is not null)
                         {
-                            await previousOnChallenge(context).ConfigureAwait(false);
+                            await previousOnChallenge(context);
                         }
                     },
                     OnForbidden = previousEvents.OnForbidden,
@@ -215,7 +215,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
     public async Task InitializeAsync()
     {
-        await _initializationLock.WaitAsync().ConfigureAwait(false);
+        await _initializationLock.WaitAsync();
         try
         {
             if (_isInitialized)
@@ -230,21 +230,21 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             
             if (dbContext.Database.IsSqlite())
             {
-                await dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
+                await dbContext.Database.EnsureCreatedAsync();
             }
             else
             {
-                await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+                await dbContext.Database.MigrateAsync();
             }
 
 
             var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-            await IdentitySeeder.SeedAsync(scope.ServiceProvider, config).ConfigureAwait(false);
+            await IdentitySeeder.SeedAsync(scope.ServiceProvider, config);
 
             var jwtOptions = scope.ServiceProvider.GetRequiredService<IOptions<JwtOptions>>().Value;
             var schemeProvider = scope.ServiceProvider.GetRequiredService<IAuthenticationSchemeProvider>();
-            var defaultAuthenticate = await schemeProvider.GetDefaultAuthenticateSchemeAsync().ConfigureAwait(false);
-            var defaultChallenge = await schemeProvider.GetDefaultChallengeSchemeAsync().ConfigureAwait(false);
+            var defaultAuthenticate = await schemeProvider.GetDefaultAuthenticateSchemeAsync();
+            var defaultChallenge = await schemeProvider.GetDefaultChallengeSchemeAsync();
 
             Console.WriteLine(
                 $"[test-host] Jwt effective config: Issuer='{jwtOptions.Issuer}', Audience='{jwtOptions.Audience}', SigningKeyLength={jwtOptions.SigningKey.Length}, AccessTokenMinutes={jwtOptions.AccessTokenMinutes}, RefreshTokenDays={jwtOptions.RefreshTokenDays}");
@@ -294,13 +294,20 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
     public override async ValueTask DisposeAsync()
     {
         _sqliteConnection?.Dispose();
+        _initializationLock.Dispose();
 
-        await base.DisposeAsync().ConfigureAwait(false);
+        await base.DisposeAsync();
+    }
+
+    public new void Dispose()
+    {
+        _initializationLock.Dispose();
+        base.Dispose();
     }
 
     async Task IAsyncLifetime.DisposeAsync()
     {
-        await DisposeAsync().ConfigureAwait(false);
+        await DisposeAsync();
     }
 }
 
@@ -342,13 +349,13 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
         var adminUser = await dbContext.Users
             .AsNoTracking()
             .SingleAsync(user => user.Email == "admin@test.local")
-            .ConfigureAwait(false);
+            ;
 
         var authResponse = await tokenService.CreateTokensAsync(
             new IdentityUserInfo(adminUser.Id.ToString(), adminUser.Email!, Array.Empty<string>()))
-            .ConfigureAwait(false);
+            ;
 
-        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", authResponse.AccessToken).ConfigureAwait(false);
+        var response = await GetWithBearerTokenAsync("/api/v1/admin/users", authResponse.AccessToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -465,9 +472,9 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password }).ConfigureAwait(false);
-        await LogUnauthorizedResponseAsync(response, "/api/v1/auth/register", authorizationHeader: null).ConfigureAwait(false);
-        var rawBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
+        await LogUnauthorizedResponseAsync(response, "/api/v1/auth/register", authorizationHeader: null);
+        var rawBody = await response.Content.ReadAsStringAsync();
 
         Assert.True(
             response.IsSuccessStatusCode,
@@ -484,9 +491,9 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password }).ConfigureAwait(false);
-        await LogUnauthorizedResponseAsync(response, "/api/v1/auth/login", authorizationHeader: null).ConfigureAwait(false);
-        var rawBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
+        await LogUnauthorizedResponseAsync(response, "/api/v1/auth/login", authorizationHeader: null);
+        var rawBody = await response.Content.ReadAsStringAsync();
 
         Assert.True(
             response.IsSuccessStatusCode,
@@ -503,8 +510,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 
     private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)
     {
-        var response = await GetWithBearerTokenAsync($"/api/v1/admin/users?search={Uri.EscapeDataString(email)}", adminToken).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>().ConfigureAwait(false);
+        var response = await GetWithBearerTokenAsync($"/api/v1/admin/users?search={Uri.EscapeDataString(email)}", adminToken);
+        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
@@ -521,8 +528,8 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 
         SetBearerAuthorization(accessToken);
         var authorizationHeader = _client.DefaultRequestHeaders.Authorization?.ToString();
-        var response = await _client.GetAsync(uri).ConfigureAwait(false);
-        await LogUnauthorizedResponseAsync(response, uri, authorizationHeader).ConfigureAwait(false);
+        var response = await _client.GetAsync(uri);
+        await LogUnauthorizedResponseAsync(response, uri, authorizationHeader);
         _client.DefaultRequestHeaders.Authorization = null;
 
         return response;
@@ -558,7 +565,7 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
             return;
         }
 
-        var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        var body = await response.Content.ReadAsStringAsync();
         var wwwAuthenticate = string.Join(" | ", response.Headers.WwwAuthenticate.Select(value => value.ToString()));
 
         var authSummary = authorizationHeader is null

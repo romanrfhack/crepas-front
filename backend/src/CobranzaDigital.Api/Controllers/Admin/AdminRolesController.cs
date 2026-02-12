@@ -23,7 +23,7 @@ public sealed class AdminRolesController : ControllerBase
     private readonly IAuditRequestContextAccessor _auditRequestContextAccessor;
     private readonly ILogger<AdminRolesController> _logger;
     private static readonly Action<ILogger, string, string, string, string?, Guid?, Exception?> _logAuditWritten =
-        LoggerMessage.Define<string, string, string, string, Guid?>(
+        LoggerMessage.Define<string, string, string, string?, Guid?>(
             LogLevel.Information,
             new EventId(1, nameof(LogAuditWritten)),
             "audit_log_written action={Action} entity={EntityType} entityId={EntityId} correlationId={CorrelationId} userId={UserId}");
@@ -126,7 +126,7 @@ public sealed class AdminRolesController : ControllerBase
         string action,
         string entityType,
         string entityId,
-        string correlationId,
+        string? correlationId,
         Guid? userId)
     {
         _logAuditWritten(logger, action, entityType, entityId, correlationId, userId, null);

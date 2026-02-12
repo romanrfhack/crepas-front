@@ -197,7 +197,7 @@ public sealed class PosSalesService : IPosSalesService
             await _db.SaveChangesAsync(ct).ConfigureAwait(false);
             await tx.CommitAsync(ct).ConfigureAwait(false);
         }
-        catch (DbUpdateException ex) when (request.ClientSaleId.HasValue)
+        catch (DbUpdateException) when (request.ClientSaleId.HasValue)
         {
             await tx.RollbackAsync(ct).ConfigureAwait(false);
             LogAction("CreateConflict", "Sale", sale.Id, correlationId);
@@ -220,9 +220,9 @@ public sealed class PosSalesService : IPosSalesService
         return new CreateSaleResponseDto(sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Total);
     }
 
-    public async Task<DailySummaryDto> GetDailySummaryAsync(DateOnly date, CancellationToken ct)
+    public async Task<DailySummaryDto> GetDailySummaryAsync(DateOnly forDate, CancellationToken ct)
     {
-        var fromDate = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var fromDate = forDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var to = fromDate.AddDays(1);
         var completedStatus = (int)SaleStatus.Completed; // 👈 variable local
 
@@ -249,7 +249,7 @@ public sealed class PosSalesService : IPosSalesService
         var correlationId = GetCorrelationId();
         LogAction("DailySummary", "SaleReport", null, correlationId);
 
-        return new DailySummaryDto(date, totalTickets, totalAmount, totalItems, avgTicket);
+        return new DailySummaryDto(forDate, totalTickets, totalAmount, totalItems, avgTicket);
     }
 
     public async Task<IReadOnlyList<TopProductDto>> GetTopProductsAsync(DateOnly dateFrom, DateOnly dateTo, int top, CancellationToken ct)
@@ -356,11 +356,26 @@ public sealed class PosSalesService : IPosSalesService
 
     private void LogAction(string action, string entity, Guid? entityId, string? correlationId)
     {
-        _logger.LogInformation(
-            "pos_action={Action} entity={Entity} entityId={EntityId} correlationId={CorrelationId}",
+        PosSalesLog.Action(
+            _logger,
             action,
             entity,
             entityId?.ToString("D") ?? "-",
             correlationId ?? Activity.Current?.TraceId.ToString() ?? "-");
+    }
+
+}
+
+internal static class PosSalesLog
+{
+    private static readonly Action<ILogger, string, string, string, string, Exception?> LogActionMessage =
+        LoggerMessage.Define<string, string, string, string>(
+            LogLevel.Information,
+            new EventId(1, nameof(Action)),
+            "pos_action={Action} entity={Entity} entityId={EntityId} correlationId={CorrelationId}");
+
+    public static void Action(ILogger logger, string action, string entity, string entityId, string correlationId)
+    {
+        LogActionMessage(logger, action, entity, entityId, correlationId, null);
     }
 }

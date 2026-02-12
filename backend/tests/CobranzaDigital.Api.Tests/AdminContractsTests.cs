@@ -18,10 +18,10 @@ public sealed class AdminContractsTests : IClassFixture<CobranzaDigitalApiFactor
     [InlineData("/api/v1/admin/users?pageNumber=1")]
     public async Task GetUsers_PagingContractSupportsPageAndPageNumber(string uri)
     {
-        var accessToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var accessToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
 
         using var request = CreateAuthorizedRequest(HttpMethod.Get, uri, accessToken);
-        using var response = await _client.SendAsync(request).ConfigureAwait(false);
+        using var response = await _client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -30,15 +30,15 @@ public sealed class AdminContractsTests : IClassFixture<CobranzaDigitalApiFactor
     public async Task PutLockUser_CompatibilityRouteReturnsSuccess()
     {
         var userEmail = "contract.lock.user@test.local";
-        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
-        await RegisterAsync(userEmail, "User1234!").ConfigureAwait(false);
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await RegisterAsync(userEmail, "User1234!");
 
-        var userId = await GetUserIdByEmailAsync(adminToken, userEmail).ConfigureAwait(false);
+        var userId = await GetUserIdByEmailAsync(adminToken, userEmail);
 
         using var request = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/admin/users/{userId}/lock", adminToken);
         request.Content = JsonContent.Create(new { @lock = true });
 
-        using var response = await _client.SendAsync(request).ConfigureAwait(false);
+        using var response = await _client.SendAsync(request);
 
         Assert.True(
             response.StatusCode is HttpStatusCode.OK or HttpStatusCode.NoContent,
@@ -48,11 +48,11 @@ public sealed class AdminContractsTests : IClassFixture<CobranzaDigitalApiFactor
     [Fact]
     public async Task GetRoles_ReturnsRoleObjectsWithName()
     {
-        var accessToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var accessToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
 
         using var request = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/admin/roles", accessToken);
-        using var response = await _client.SendAsync(request).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<List<RoleContractDto>>().ConfigureAwait(false);
+        using var response = await _client.SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<List<RoleContractDto>>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
@@ -62,8 +62,8 @@ public sealed class AdminContractsTests : IClassFixture<CobranzaDigitalApiFactor
 
     private async Task RegisterAsync(string email, string password)
     {
-        using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password }).ConfigureAwait(false);
-        var rawBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
+        var rawBody = await response.Content.ReadAsStringAsync();
 
         Assert.True(
             response.IsSuccessStatusCode,
@@ -72,8 +72,8 @@ public sealed class AdminContractsTests : IClassFixture<CobranzaDigitalApiFactor
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
     {
-        using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password }).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>().ConfigureAwait(false);
+        using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
+        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
@@ -87,8 +87,8 @@ public sealed class AdminContractsTests : IClassFixture<CobranzaDigitalApiFactor
             HttpMethod.Get,
             $"/api/v1/admin/users?search={Uri.EscapeDataString(email)}",
             adminToken);
-        using var response = await _client.SendAsync(request).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<PagedUsersResponse>().ConfigureAwait(false);
+        using var response = await _client.SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<PagedUsersResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);

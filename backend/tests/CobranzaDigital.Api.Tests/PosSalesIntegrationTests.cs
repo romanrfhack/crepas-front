@@ -21,7 +21,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     [Fact]
     public async Task CreateSale_PersistsSnapshot_And_Audit()
     {
-        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = "Bebidas POS", sortOrder = 1, isActive = true });
         var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Latte", categoryId = category.Id, basePrice = 75m, isActive = true });
@@ -46,8 +46,8 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
             payment = new { method = 0, amount = 170m, reference = "CASH-001" }
         });
 
-        using var response = await _client.SendAsync(request).ConfigureAwait(false);
-        var sale = await response.Content.ReadFromJsonAsync<CreateSaleResponse>().ConfigureAwait(false);
+        using var response = await _client.SendAsync(request);
+        var sale = await response.Content.ReadFromJsonAsync<CreateSaleResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(sale);
@@ -56,13 +56,13 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
 
-        var saleItem = await db.SaleItems.AsNoTracking().FirstAsync(x => x.SaleId == sale.SaleId).ConfigureAwait(false);
+        var saleItem = await db.SaleItems.AsNoTracking().FirstAsync(x => x.SaleId == sale.SaleId);
         Assert.Equal("Latte", saleItem.ProductNameSnapshot);
         Assert.Equal(75m, saleItem.UnitPriceSnapshot);
 
         var audits = await db.AuditLogs.AsNoTracking()
             .Where(x => x.EntityType == "Sale" && x.EntityId == sale.SaleId.ToString())
-            .ToListAsync().ConfigureAwait(false);
+            .ToListAsync();
         var audit = audits.OrderByDescending(x => x.OccurredAtUtc).FirstOrDefault();
 
         Assert.NotNull(audit);
@@ -73,20 +73,20 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     [Fact]
     public async Task Reports_DailySummary_And_TopProducts_Work()
     {
-        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"Comidas-{Guid.NewGuid():N}", sortOrder = 2, isActive = true });
         var productA = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Taco Pastor", categoryId = category.Id, basePrice = 30m, isActive = true });
         var productB = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Taco Bistec", categoryId = category.Id, basePrice = 35m, isActive = true });
 
-        await CreateSaleAsync(token, productA.Id, quantity: 2, total: 60m).ConfigureAwait(false);
-        await CreateSaleAsync(token, productB.Id, quantity: 1, total: 35m).ConfigureAwait(false);
+        await CreateSaleAsync(token, productA.Id, quantity: 2, total: 60m);
+        await CreateSaleAsync(token, productB.Id, quantity: 1, total: 35m);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         using var dailyReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/daily-summary?date={today:yyyy-MM-dd}", token);
-        using var dailyResp = await _client.SendAsync(dailyReq).ConfigureAwait(false);
-        var daily = await dailyResp.Content.ReadFromJsonAsync<DailySummaryResponse>().ConfigureAwait(false);
+        using var dailyResp = await _client.SendAsync(dailyReq);
+        var daily = await dailyResp.Content.ReadFromJsonAsync<DailySummaryResponse>();
 
         Assert.Equal(HttpStatusCode.OK, dailyResp.StatusCode);
         Assert.NotNull(daily);
@@ -94,8 +94,8 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Assert.True(daily.TotalAmount >= 95m);
 
         using var topReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/top-products?dateFrom={today:yyyy-MM-dd}&dateTo={today:yyyy-MM-dd}&top=5", token);
-        using var topResp = await _client.SendAsync(topReq).ConfigureAwait(false);
-        var top = await topResp.Content.ReadFromJsonAsync<List<TopProductResponse>>().ConfigureAwait(false);
+        using var topResp = await _client.SendAsync(topReq);
+        var top = await topResp.Content.ReadFromJsonAsync<List<TopProductResponse>>();
 
         Assert.Equal(HttpStatusCode.OK, topResp.StatusCode);
         Assert.NotNull(top);
@@ -113,7 +113,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
             payment = new { method = 0, amount = total }
         });
 
-        using var resp = await _client.SendAsync(req).ConfigureAwait(false);
+        using var resp = await _client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
 
@@ -121,15 +121,15 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     {
         using var req = CreateAuthorizedRequest(HttpMethod.Post, url, token);
         req.Content = JsonContent.Create(body);
-        using var resp = await _client.SendAsync(req).ConfigureAwait(false);
+        using var resp = await _client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        return (await resp.Content.ReadFromJsonAsync<T>().ConfigureAwait(false))!;
+        return (await resp.Content.ReadFromJsonAsync<T>())!;
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
     {
-        using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password }).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>().ConfigureAwait(false);
+        using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
+        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return payload!.AccessToken;
     }

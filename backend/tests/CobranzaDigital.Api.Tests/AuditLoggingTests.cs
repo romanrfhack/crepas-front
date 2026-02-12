@@ -32,9 +32,9 @@ public sealed class AuditLoggerTests
             Before: new { IsLocked = false },
             After: new { IsLocked = true },
             Source: "Api",
-            Notes: "test")).ConfigureAwait(false);
+            Notes: "test"));
 
-        var saved = await dbContext.AuditLogs.SingleAsync().ConfigureAwait(false);
+        var saved = await dbContext.AuditLogs.SingleAsync();
 
         Assert.Equal("{\"isLocked\":false}", saved.BeforeJson);
         Assert.Equal("{\"isLocked\":true}", saved.AfterJson);
@@ -48,7 +48,7 @@ public sealed class AuditLoggerTests
             .Options;
 
         var dbContext = new CobranzaDigitalDbContext(options);
-        await dbContext.DisposeAsync().ConfigureAwait(false);
+        await dbContext.DisposeAsync();
 
         var sut = new AuditLogger(dbContext, NullLogger<AuditLogger>.Instance);
 
@@ -61,7 +61,7 @@ public sealed class AuditLoggerTests
             Before: null,
             After: new { name = "Backoffice" },
             Source: "Api",
-            Notes: null)).ConfigureAwait(false);
+            Notes: null));
     }
 }
 
@@ -80,7 +80,7 @@ public sealed class AdminAuditIntegrationTests : IClassFixture<CobranzaDigitalAp
     [Fact]
     public async Task CreateRole_PersistsAuditLog_WithCorrelationIdAndUserId()
     {
-        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         const string correlationId = "test-correlation-role";
         var roleName = $"RoleAudit{Guid.NewGuid():N}";
 
@@ -88,12 +88,12 @@ public sealed class AdminAuditIntegrationTests : IClassFixture<CobranzaDigitalAp
         request.Headers.Add("X-Correlation-Id", correlationId);
         request.Content = JsonContent.Create(new { name = roleName });
 
-        using var response = await _client.SendAsync(request).ConfigureAwait(false);
+        using var response = await _client.SendAsync(request);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         using var scope = _factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-        var audit = await GetLatestAuditEventAsync(dbContext, "CreateRole", roleName).ConfigureAwait(false);
+        var audit = await GetLatestAuditEventAsync(dbContext, "CreateRole", roleName);
         Assert.NotNull(audit);
 
         Assert.Equal("Role", audit.EntityType);
@@ -104,22 +104,22 @@ public sealed class AdminAuditIntegrationTests : IClassFixture<CobranzaDigitalAp
     [Fact]
     public async Task LockUser_PersistsAuditLog_WithCorrelationIdAndUserId()
     {
-        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         var targetEmail = $"lock.audit.{Guid.NewGuid():N}@test.local";
-        await RegisterAsync(targetEmail, "User1234!").ConfigureAwait(false);
-        var userId = await GetUserIdByEmailAsync(adminToken, targetEmail).ConfigureAwait(false);
+        await RegisterAsync(targetEmail, "User1234!");
+        var userId = await GetUserIdByEmailAsync(adminToken, targetEmail);
 
         const string correlationId = "test-correlation-lock";
         using var request = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/admin/users/{userId}/lock", adminToken);
         request.Headers.Add("X-Correlation-Id", correlationId);
         request.Content = JsonContent.Create(new { @lock = true });
 
-        using var response = await _client.SendAsync(request).ConfigureAwait(false);
+        using var response = await _client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         using var scope = _factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-        var audit = await GetLatestAuditEventAsync(dbContext, "LockUser", userId).ConfigureAwait(false);
+        var audit = await GetLatestAuditEventAsync(dbContext, "LockUser", userId);
         Assert.NotNull(audit);
 
         Assert.Equal("User", audit.EntityType);
@@ -131,26 +131,26 @@ public sealed class AdminAuditIntegrationTests : IClassFixture<CobranzaDigitalAp
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password }).ConfigureAwait(false);
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
         response.EnsureSuccessStatusCode();
-        var authResponse = await response.Content.ReadFromJsonAsync<AuthTokensResponse>(JsonOptions).ConfigureAwait(false);
+        var authResponse = await response.Content.ReadFromJsonAsync<AuthTokensResponse>(JsonOptions);
         Assert.NotNull(authResponse);
         return authResponse!.AccessToken;
     }
 
     private async Task RegisterAsync(string email, string password)
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password }).ConfigureAwait(false);
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
         response.EnsureSuccessStatusCode();
     }
 
     private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)
     {
         using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/admin/users?search={Uri.EscapeDataString(email)}", adminToken);
-        using var response = await _client.SendAsync(request).ConfigureAwait(false);
+        using var response = await _client.SendAsync(request);
         response.EnsureSuccessStatusCode();
 
-        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>(JsonOptions).ConfigureAwait(false);
+        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>(JsonOptions);
         Assert.NotNull(payload);
 
         return payload!.Items.Single().Id;
@@ -171,7 +171,7 @@ public sealed class AdminAuditIntegrationTests : IClassFixture<CobranzaDigitalAp
         var matchingEvents = await dbContext.AuditLogs
             .Where(x => x.Action == action && x.EntityId == entityId)
             .ToListAsync()
-            .ConfigureAwait(false);
+            ;
 
         return matchingEvents
             .OrderByDescending(x => x.OccurredAt)

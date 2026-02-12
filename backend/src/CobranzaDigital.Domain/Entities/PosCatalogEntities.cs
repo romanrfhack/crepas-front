@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using CobranzaDigital.Domain.Common;
 
 namespace CobranzaDigital.Domain.Entities;
 
+[SuppressMessage("Naming", "CA1720:Identifier contains type name", Justification = "Domain term uses Single vs Multi selection semantics.")]
 public enum SelectionMode
 {
     Single = 0,

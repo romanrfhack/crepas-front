@@ -16,33 +16,33 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     [Fact]
     public async Task Category_And_Product_Crud_SoftDelete_Works()
     {
-        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         using var createCategory = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/categories", token);
         createCategory.Content = JsonContent.Create(new { name = "Bebidas", sortOrder = 1, isActive = true });
-        using var createdCategoryResp = await _client.SendAsync(createCategory).ConfigureAwait(false);
-        var category = await createdCategoryResp.Content.ReadFromJsonAsync<CategoryResponse>().ConfigureAwait(false);
+        using var createdCategoryResp = await _client.SendAsync(createCategory);
+        var category = await createdCategoryResp.Content.ReadFromJsonAsync<CategoryResponse>();
         Assert.Equal(HttpStatusCode.OK, createdCategoryResp.StatusCode);
 
         using var createProduct = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/products", token);
         createProduct.Content = JsonContent.Create(new { name = "Cafe", categoryId = category!.Id, basePrice = 10.5m, isActive = true });
-        using var createdProductResp = await _client.SendAsync(createProduct).ConfigureAwait(false);
-        var product = await createdProductResp.Content.ReadFromJsonAsync<ProductResponse>().ConfigureAwait(false);
+        using var createdProductResp = await _client.SendAsync(createProduct);
+        var product = await createdProductResp.Content.ReadFromJsonAsync<ProductResponse>();
         Assert.Equal(HttpStatusCode.OK, createdProductResp.StatusCode);
 
         using var deleteProduct = CreateAuthorizedRequest(HttpMethod.Delete, $"/api/v1/pos/admin/products/{product!.Id}", token);
-        using var deleteResp = await _client.SendAsync(deleteProduct).ConfigureAwait(false);
+        using var deleteResp = await _client.SendAsync(deleteProduct);
         Assert.Equal(HttpStatusCode.NoContent, deleteResp.StatusCode);
 
         using var getProducts = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/admin/products", token);
-        using var getProductsResp = await _client.SendAsync(getProducts).ConfigureAwait(false);
-        var products = await getProductsResp.Content.ReadFromJsonAsync<List<ProductResponse>>().ConfigureAwait(false);
+        using var getProductsResp = await _client.SendAsync(getProducts);
+        var products = await getProductsResp.Content.ReadFromJsonAsync<List<ProductResponse>>();
         Assert.DoesNotContain(products!, x => x.Id == product.Id);
     }
 
     [Fact]
     public async Task Snapshot_Returns_Only_Active_And_Overrides()
     {
-        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!").ConfigureAwait(false);
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = "Comida", sortOrder = 1, isActive = true });
         var optionSet = await PostAsync<OptionSetResponse>("/api/v1/pos/admin/option-sets", token, new { name = "Salsas", isActive = true });
@@ -54,15 +54,15 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         using var putIncluded = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/pos/admin/products/{product.Id}/included-items", token);
         putIncluded.Content = JsonContent.Create(new { items = new[] { new { extraId = extra.Id, quantity = 1 } } });
-        using var _incResp = await _client.SendAsync(putIncluded).ConfigureAwait(false);
+        using var _incResp = await _client.SendAsync(putIncluded);
 
         using var putOverride = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/pos/admin/products/{product.Id}/overrides/sauce", token);
         putOverride.Content = JsonContent.Create(new { allowedOptionItemIds = new[] { itemA.Id } });
-        using var _ovResp = await _client.SendAsync(putOverride).ConfigureAwait(false);
+        using var _ovResp = await _client.SendAsync(putOverride);
 
         using var snapshotReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
-        using var snapshotResp = await _client.SendAsync(snapshotReq).ConfigureAwait(false);
-        var snapshot = await snapshotResp.Content.ReadFromJsonAsync<SnapshotResponse>().ConfigureAwait(false);
+        using var snapshotResp = await _client.SendAsync(snapshotReq);
+        var snapshot = await snapshotResp.Content.ReadFromJsonAsync<SnapshotResponse>();
 
         Assert.Equal(HttpStatusCode.OK, snapshotResp.StatusCode);
         Assert.NotNull(snapshot);
@@ -74,15 +74,15 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     {
         using var req = CreateAuthorizedRequest(HttpMethod.Post, url, token);
         req.Content = JsonContent.Create(body);
-        using var resp = await _client.SendAsync(req).ConfigureAwait(false);
+        using var resp = await _client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
-        return (await resp.Content.ReadFromJsonAsync<T>().ConfigureAwait(false))!;
+        return (await resp.Content.ReadFromJsonAsync<T>())!;
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
     {
-        using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password }).ConfigureAwait(false);
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>().ConfigureAwait(false);
+        using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
+        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return payload!.AccessToken;
     }
