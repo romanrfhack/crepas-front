@@ -7,6 +7,7 @@
 .toolbar {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .layout {
@@ -16,6 +17,18 @@
   align-items: flex-start;
 }
 
+.shift-banner {
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.shift-banner--warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .error {
   color: #b91c1c;
 }
@@ -23,4 +36,55 @@
 .success {
   color: #166534;
   font-weight: 700;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgb(15 23 42 / 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.modal-card {
+  width: min(520px, 90vw);
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.modal-card--wide {
+  width: min(820px, 94vw);
+}
+
+.modal-card input,
+.modal-card textarea {
+  width: 100%;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.denomination-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.denomination-grid label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.close-summary {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
