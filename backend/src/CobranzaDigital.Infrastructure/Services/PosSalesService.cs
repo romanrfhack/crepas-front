@@ -222,27 +222,37 @@ public sealed class PosSalesService : IPosSalesService
 
     public async Task<DailySummaryDto> GetDailySummaryAsync(DateOnly forDate, CancellationToken ct)
     {
-        var fromUtc = forDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var toUtc = fromUtc.AddDays(1);
-        var completedStatus = SaleStatus.Completed;
+        var fromDate = forDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var toExclusive = fromDate.AddDays(1);
         var isSqlite = _db.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
 
         var baseQuery = _db.Sales.AsNoTracking()
-            .Where(x => x.OccurredAtUtc >= fromUtc && x.OccurredAtUtc < toUtc);
+            .Where(x => x.OccurredAtUtc >= fromDate && x.OccurredAtUtc < toExclusive);
 
-        var sales = isSqlite
-            ? (await baseQuery
+        List<(Guid Id, decimal Total)> sales;
+        if (isSqlite)
+        {
+            // SQLite workaround: client-side evaluation (tests).
+            var tmp = await baseQuery
                 .Select(x => new { x.Id, x.Status, x.Total })
                 .ToListAsync(ct)
-                .ConfigureAwait(false))
-                .Where(x => x.Status == completedStatus)
-                .Select(x => new { x.Id, x.Total })
-                .ToList()
-            : await baseQuery
-                .Where(x => x.Status == completedStatus)
+                .ConfigureAwait(false);
+
+            sales = tmp
+                .Where(x => x.Status == SaleStatus.Completed)
+                .Select(x => (x.Id, x.Total))
+                .ToList();
+        }
+        else
+        {
+            sales = (await baseQuery
+                .Where(x => x.Status == SaleStatus.Completed)
                 .Select(x => new { x.Id, x.Total })
                 .ToListAsync(ct)
-                .ConfigureAwait(false);
+                .ConfigureAwait(false))
+                .Select(x => (x.Id, x.Total))
+                .ToList();
+        }
 
         var saleIds = sales.Select(x => x.Id).ToArray();
         var totalItems = saleIds.Length == 0
@@ -274,47 +284,60 @@ public sealed class PosSalesService : IPosSalesService
             throw ValidationError("dateTo", "dateTo must be greater than or equal to dateFrom.");
         }
 
-        var fromUtc = dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var fromDate = dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var toExclusive = dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var completedStatus = SaleStatus.Completed;
         var isSqlite = _db.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
 
-        var rows = isSqlite
-            ? (await (from sale in _db.Sales.AsNoTracking()
-                      join item in _db.SaleItems.AsNoTracking() on sale.Id equals item.SaleId
-                      where sale.OccurredAtUtc >= fromUtc && sale.OccurredAtUtc < toExclusive
-                      select new { sale.Status, item.ProductId, item.ProductNameSnapshot, item.Quantity, item.LineTotal })
+        var baseQuery =
+            from sale in _db.Sales.AsNoTracking()
+            join item in _db.SaleItems.AsNoTracking() on sale.Id equals item.SaleId
+            where sale.OccurredAtUtc >= fromDate && sale.OccurredAtUtc < toExclusive
+            select new
+            {
+                sale.Status,
+                item.ProductId,
+                item.ProductNameSnapshot,
+                item.Quantity,
+                item.LineTotal
+            };
+
+        List<TopProductDto> rows;
+        if (isSqlite)
+        {
+            // SQLite workaround: client-side evaluation (tests).
+            var tmp = await baseQuery
                 .ToListAsync(ct)
-                .ConfigureAwait(false))
-                .Where(x => x.Status == completedStatus)
+                .ConfigureAwait(false);
+
+            rows = tmp
+                .Where(x => x.Status == SaleStatus.Completed)
                 .GroupBy(x => new { x.ProductId, x.ProductNameSnapshot })
                 .Select(grouped => new TopProductDto(
                     grouped.Key.ProductId,
                     grouped.Key.ProductNameSnapshot,
                     grouped.Sum(x => x.Quantity),
                     grouped.Sum(x => x.LineTotal)))
-                .OrderByDescending(x => x.Qty)
-                .ThenByDescending(x => x.Amount)
-                .Take(top)
-                .ToList()
-            : (await (from sale in _db.Sales.AsNoTracking()
-                      join item in _db.SaleItems.AsNoTracking() on sale.Id equals item.SaleId
-                      where sale.Status == completedStatus
-                            && sale.OccurredAtUtc >= fromUtc
-                            && sale.OccurredAtUtc < toExclusive
-                      group item by new { item.ProductId, item.ProductNameSnapshot }
-                into grouped
-                      select new TopProductDto(
-                          grouped.Key.ProductId,
-                          grouped.Key.ProductNameSnapshot,
-                          grouped.Sum(x => x.Quantity),
-                          grouped.Sum(x => x.LineTotal)))
-                .ToListAsync(ct)
-                .ConfigureAwait(false))
-                .OrderByDescending(x => x.Qty)
-                .ThenByDescending(x => x.Amount)
-                .Take(top)
                 .ToList();
+        }
+        else
+        {
+            rows = await baseQuery
+                .Where(x => x.Status == SaleStatus.Completed)
+                .GroupBy(x => new { x.ProductId, x.ProductNameSnapshot })
+                .Select(grouped => new TopProductDto(
+                    grouped.Key.ProductId,
+                    grouped.Key.ProductNameSnapshot,
+                    grouped.Sum(x => x.Quantity),
+                    grouped.Sum(x => x.LineTotal)))
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+        }
+
+        rows = rows
+            .OrderByDescending(x => x.Qty)
+            .ThenByDescending(x => x.Amount)
+            .Take(top)
+            .ToList();
 
         var correlationId = GetCorrelationId();
         LogAction("TopProducts", "SaleReport", null, correlationId);
