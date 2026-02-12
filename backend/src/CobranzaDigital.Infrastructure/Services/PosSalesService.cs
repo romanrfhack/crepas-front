@@ -222,37 +222,21 @@ public sealed class PosSalesService : IPosSalesService
 
     public async Task<DailySummaryDto> GetDailySummaryAsync(DateOnly forDate, CancellationToken ct)
     {
-        var fromDate = forDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        // Keep report boundaries as DateTimeOffset because Sale.OccurredAtUtc is DateTimeOffset.
+        // Mixing DateTime and DateTimeOffset can break SQL translation on SQLite.
+        var fromDate = new DateTimeOffset(forDate.Year, forDate.Month, forDate.Day, 0, 0, 0, TimeSpan.Zero);
         var toExclusive = fromDate.AddDays(1);
-        var isSqlite = _db.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
 
         var baseQuery = _db.Sales.AsNoTracking()
             .Where(x => x.OccurredAtUtc >= fromDate && x.OccurredAtUtc < toExclusive);
 
-        List<(Guid Id, decimal Total)> sales;
-        if (isSqlite)
-        {
-            // SQLite workaround: client-side evaluation (tests).
-            var tmp = await baseQuery
-                .Select(x => new { x.Id, x.Status, x.Total })
-                .ToListAsync(ct)
-                .ConfigureAwait(false);
-
-            sales = tmp
-                .Where(x => x.Status == SaleStatus.Completed)
-                .Select(x => (x.Id, x.Total))
-                .ToList();
-        }
-        else
-        {
-            sales = (await baseQuery
-                .Where(x => x.Status == SaleStatus.Completed)
-                .Select(x => new { x.Id, x.Total })
-                .ToListAsync(ct)
-                .ConfigureAwait(false))
-                .Select(x => (x.Id, x.Total))
-                .ToList();
-        }
+        var sales = (await baseQuery
+            .Where(x => x.Status == SaleStatus.Completed)
+            .Select(x => new { x.Id, x.Total })
+            .ToListAsync(ct)
+            .ConfigureAwait(false))
+            .Select(x => (x.Id, x.Total))
+            .ToList();
 
         var saleIds = sales.Select(x => x.Id).ToArray();
         var totalItems = saleIds.Length == 0
@@ -284,9 +268,9 @@ public sealed class PosSalesService : IPosSalesService
             throw ValidationError("dateTo", "dateTo must be greater than or equal to dateFrom.");
         }
 
-        var fromDate = dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var toExclusive = dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var isSqlite = _db.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+        var fromDate = new DateTimeOffset(dateFrom.Year, dateFrom.Month, dateFrom.Day, 0, 0, 0, TimeSpan.Zero);
+        var toExclusiveDate = dateTo.AddDays(1);
+        var toExclusive = new DateTimeOffset(toExclusiveDate.Year, toExclusiveDate.Month, toExclusiveDate.Day, 0, 0, 0, TimeSpan.Zero);
 
         var baseQuery =
             from sale in _db.Sales.AsNoTracking()
@@ -301,37 +285,16 @@ public sealed class PosSalesService : IPosSalesService
                 item.LineTotal
             };
 
-        List<TopProductDto> rows;
-        if (isSqlite)
-        {
-            // SQLite workaround: client-side evaluation (tests).
-            var tmp = await baseQuery
-                .ToListAsync(ct)
-                .ConfigureAwait(false);
-
-            rows = tmp
-                .Where(x => x.Status == SaleStatus.Completed)
-                .GroupBy(x => new { x.ProductId, x.ProductNameSnapshot })
-                .Select(grouped => new TopProductDto(
-                    grouped.Key.ProductId,
-                    grouped.Key.ProductNameSnapshot,
-                    grouped.Sum(x => x.Quantity),
-                    grouped.Sum(x => x.LineTotal)))
-                .ToList();
-        }
-        else
-        {
-            rows = await baseQuery
-                .Where(x => x.Status == SaleStatus.Completed)
-                .GroupBy(x => new { x.ProductId, x.ProductNameSnapshot })
-                .Select(grouped => new TopProductDto(
-                    grouped.Key.ProductId,
-                    grouped.Key.ProductNameSnapshot,
-                    grouped.Sum(x => x.Quantity),
-                    grouped.Sum(x => x.LineTotal)))
-                .ToListAsync(ct)
-                .ConfigureAwait(false);
-        }
+        var rows = await baseQuery
+            .Where(x => x.Status == SaleStatus.Completed)
+            .GroupBy(x => new { x.ProductId, x.ProductNameSnapshot })
+            .Select(grouped => new TopProductDto(
+                grouped.Key.ProductId,
+                grouped.Key.ProductNameSnapshot,
+                grouped.Sum(x => x.Quantity),
+                grouped.Sum(x => x.LineTotal)))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         rows = rows
             .OrderByDescending(x => x.Qty)
