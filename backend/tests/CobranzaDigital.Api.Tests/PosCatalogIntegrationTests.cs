@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 
 namespace CobranzaDigital.Api.Tests;
 
@@ -70,6 +71,32 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Contains(snapshot.Overrides, x => x.ProductId == product.Id && x.AllowedOptionItemIds.Contains(itemA.Id));
     }
 
+    [Fact]
+    public async Task Snapshot_Allows_Cashier()
+    {
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var cashierEmail = $"cashier.snapshot.{Guid.NewGuid():N}@test.local";
+        var cashierToken = await RegisterAndGetAccessTokenAsync(cashierEmail, "User1234!");
+
+        await SetUserRolesAsync(adminToken, cashierEmail, ["Cashier"]);
+
+        using var snapshotReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", cashierToken);
+        using var snapshotResp = await _client.SendAsync(snapshotReq);
+
+        Assert.Equal(HttpStatusCode.OK, snapshotResp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Snapshot_Denies_User_Without_Allowed_Role()
+    {
+        var userToken = await RegisterAndGetAccessTokenAsync($"user.snapshot.{Guid.NewGuid():N}@test.local", "User1234!");
+
+        using var snapshotReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", userToken);
+        using var snapshotResp = await _client.SendAsync(snapshotReq);
+
+        Assert.Equal(HttpStatusCode.Forbidden, snapshotResp.StatusCode);
+    }
+
     private async Task<T> PostAsync<T>(string url, string token, object body)
     {
         using var req = CreateAuthorizedRequest(HttpMethod.Post, url, token);
@@ -85,6 +112,39 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return payload!.AccessToken;
+    }
+
+    private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
+    {
+        using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
+        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return payload!.AccessToken;
+    }
+
+    private async Task SetUserRolesAsync(string adminToken, string email, string[] roles)
+    {
+        var userId = await GetUserIdByEmailAsync(adminToken, email);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/admin/users/{userId}/roles", adminToken);
+        request.Content = JsonContent.Create(new { roles });
+        using var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)
+    {
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/admin/users?search={Uri.EscapeDataString(email)}", adminToken);
+        using var response = await _client.SendAsync(request);
+
+        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Single(payload!.Items);
+
+        return payload.Items[0].Id;
     }
 
     private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token)
@@ -103,4 +163,6 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
     private sealed record SnapshotResponse(List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
+    private sealed record PagedResponse(List<UserListItem> Items);
+    private sealed record UserListItem([property: JsonPropertyName("id")] string Id);
 }
