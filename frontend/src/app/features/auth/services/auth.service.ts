@@ -105,28 +105,32 @@ export class AuthService {
     }
   }
 
-  private extractRoles(payload: Record<string, unknown> | null): string[] {
-    if (!payload) {
-      return [];
-    }
+  private extractRoles(payload: any): string[] {
+  const roleClaimUris = [
+    'http://schemas.microsoft.com/ws/2008/06/identity/claims/role',
+    'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role',
+  ];
 
-    const directRoles = this.normalizeRolesClaim(payload['roles']);
-    if (directRoles.length > 0) {
-      return directRoles;
-    }
+  const candidates = [
+    payload?.roles,
+    payload?.role,
+    ...roleClaimUris.map((k) => payload?.[k]),
+  ];
 
-    return this.normalizeRolesClaim(payload['role']);
-  }
-
-  private normalizeRolesClaim(claim: unknown): string[] {
-    if (typeof claim === 'string') {
-      return [claim];
-    }
-
-    if (Array.isArray(claim)) {
-      return claim.filter((value): value is string => typeof value === 'string');
-    }
-
+  const roles = candidates.flatMap((v) => {
+    if (!v) return [];
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') return [v];
     return [];
-  }
+  });
+
+  return Array.from(
+    new Set(
+      roles
+        .map((r) => String(r).trim())
+        .filter((r) => r.length > 0)
+    )
+  );
+}
+
 }
