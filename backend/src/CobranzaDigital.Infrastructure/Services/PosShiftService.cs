@@ -69,10 +69,14 @@ public sealed class PosShiftService : IPosShiftService
             }
         }
 
-        var existingOpen = await _db.PosShifts.AsNoTracking().AnyAsync(x => x.ClosedAtUtc == null, ct).ConfigureAwait(false);
-        if (existingOpen)
+        var existingOpen = await _db.PosShifts.AsNoTracking()
+            .Where(x => x.ClosedAtUtc == null)
+            .OrderByDescending(x => x.OpenedAtUtc)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        if (existingOpen is not null)
         {
-            throw new ConflictException("An open shift already exists.");
+            return Map(existingOpen);
         }
 
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
