@@ -97,6 +97,9 @@ dotnet_naming_rule.private_fields_camel_case_underscore.severity = suggestion
 dotnet_diagnostic.CA1861.severity = none
 dotnet_diagnostic.IDE0005.severity = none
 
+[src/CobranzaDigital.Api/**/*.cs]
+dotnet_diagnostic.CA2007.severity = none
+
 [tests/**/*.cs]
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA2007.severity = none
