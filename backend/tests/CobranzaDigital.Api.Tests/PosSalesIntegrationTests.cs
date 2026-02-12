@@ -22,6 +22,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     public async Task CreateSale_PersistsSnapshot_And_Audit()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = "Bebidas POS", sortOrder = 1, isActive = true });
         var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Latte", categoryId = category.Id, basePrice = 75m, isActive = true });
@@ -77,6 +78,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     public async Task CreateSale_WithCardPaymentAndReference_ReturnsOk()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"Bebidas-{Guid.NewGuid():N}", sortOrder = 3, isActive = true });
         var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Cappuccino", categoryId = category.Id, basePrice = 80m, isActive = true });
@@ -109,6 +111,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     public async Task Reports_DailySummary_And_TopProducts_Work()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"Comidas-{Guid.NewGuid():N}", sortOrder = 2, isActive = true });
         var productA = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Taco Pastor", categoryId = category.Id, basePrice = 30m, isActive = true });
@@ -161,6 +164,33 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         return (await resp.Content.ReadFromJsonAsync<T>())!;
     }
 
+    private async Task EnsureOpenShiftAsync(string token, string cashierEmail, decimal initialCash = 500m)
+    {
+        using var currentReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/current", token);
+        using var currentResp = await _client.SendAsync(currentReq);
+        Assert.Equal(HttpStatusCode.OK, currentResp.StatusCode);
+
+        var current = await currentResp.Content.ReadFromJsonAsync<PosShiftResponse>();
+        if (current is not null)
+        {
+            return;
+        }
+
+        using var openReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/open", token);
+        openReq.Content = JsonContent.Create(new
+        {
+            openingCashAmount = initialCash,
+            notes = $"Opened by {cashierEmail} for integration test",
+            clientOperationId = Guid.NewGuid()
+        });
+
+        using var openResp = await _client.SendAsync(openReq);
+        Assert.Equal(HttpStatusCode.OK, openResp.StatusCode);
+
+        var openedShift = await openResp.Content.ReadFromJsonAsync<PosShiftResponse>();
+        Assert.NotNull(openedShift);
+    }
+
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
     {
         using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
@@ -181,6 +211,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     private sealed record ProductResponse(Guid Id, string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive, Guid? CustomizationSchemaId);
     private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive);
     private sealed record CreateSaleResponse(Guid SaleId, string Folio, DateTimeOffset OccurredAtUtc, decimal Total);
+    private sealed record PosShiftResponse(Guid Id, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc, decimal OpeningCashAmount, decimal? ClosingCashAmount, string? Notes);
     private sealed record DailySummaryResponse(DateOnly Date, int TotalTickets, decimal TotalAmount, int TotalItems, decimal AvgTicket);
     private sealed record TopProductResponse(Guid ProductId, string ProductNameSnapshot, int Qty, decimal Amount);
 }
