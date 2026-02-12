@@ -168,13 +168,14 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     {
         using var currentReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/current", token);
         using var currentResp = await _client.SendAsync(currentReq);
-        Assert.Equal(HttpStatusCode.OK, currentResp.StatusCode);
-
-        var current = await currentResp.Content.ReadFromJsonAsync<PosShiftResponse>();
-        if (current is not null)
+        if (currentResp.StatusCode == HttpStatusCode.OK)
         {
+            var current = await currentResp.Content.ReadFromJsonAsync<PosShiftResponse>();
+            Assert.NotNull(current);
             return;
         }
+
+        Assert.Equal(HttpStatusCode.NoContent, currentResp.StatusCode);
 
         using var openReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/open", token);
         openReq.Content = JsonContent.Create(new
@@ -185,10 +186,16 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         });
 
         using var openResp = await _client.SendAsync(openReq);
-        Assert.Equal(HttpStatusCode.OK, openResp.StatusCode);
+        Assert.Contains(openResp.StatusCode, new[] { HttpStatusCode.OK, HttpStatusCode.Created });
 
         var openedShift = await openResp.Content.ReadFromJsonAsync<PosShiftResponse>();
         Assert.NotNull(openedShift);
+
+        using var verifyReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/current", token);
+        using var verifyResp = await _client.SendAsync(verifyReq);
+        Assert.Equal(HttpStatusCode.OK, verifyResp.StatusCode);
+        var verifiedShift = await verifyResp.Content.ReadFromJsonAsync<PosShiftResponse>();
+        Assert.NotNull(verifiedShift);
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)

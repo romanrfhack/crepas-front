@@ -20,11 +20,18 @@ public sealed class PosShiftsController : ControllerBase
     }
 
     [HttpGet("current")]
-    public Task<PosShiftDto?> GetCurrent(CancellationToken ct) => _service.GetCurrentShiftAsync(ct);
+    public async Task<ActionResult<PosShiftDto>> GetCurrent(CancellationToken ct)
+    {
+        var shift = await _service.GetCurrentShiftAsync(ct);
+        return shift is null ? NoContent() : Ok(shift);
+    }
 
     [HttpPost("open")]
-    public Task<PosShiftDto> Open([FromBody] OpenPosShiftRequestDto request, CancellationToken ct) =>
-        _service.OpenShiftAsync(request, ct);
+    public async Task<ActionResult<PosShiftDto>> Open([FromBody] OpenPosShiftRequestDto request, CancellationToken ct)
+    {
+        var shift = await _service.OpenShiftAsync(request, ct);
+        return Ok(shift);
+    }
 
     [HttpPost("close")]
     public Task<PosShiftDto> Close([FromBody] ClosePosShiftRequestDto request, CancellationToken ct) =>
