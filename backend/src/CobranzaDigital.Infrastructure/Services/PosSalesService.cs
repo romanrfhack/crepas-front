@@ -222,17 +222,27 @@ public sealed class PosSalesService : IPosSalesService
 
     public async Task<DailySummaryDto> GetDailySummaryAsync(DateOnly forDate, CancellationToken ct)
     {
-        var fromDate = forDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var to = fromDate.AddDays(1);
+        var fromUtc = forDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var toUtc = fromUtc.AddDays(1);
         var completedStatus = SaleStatus.Completed;
+        var isSqlite = _db.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
 
-        var sales = await _db.Sales.AsNoTracking()
-            .Where(x => x.Status == completedStatus
-                && x.OccurredAtUtc >= fromDate
-                && x.OccurredAtUtc < to)
-            .Select(x => new { x.Id, x.Total })
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var baseQuery = _db.Sales.AsNoTracking()
+            .Where(x => x.OccurredAtUtc >= fromUtc && x.OccurredAtUtc < toUtc);
+
+        var sales = isSqlite
+            ? (await baseQuery
+                .Select(x => new { x.Id, x.Status, x.Total })
+                .ToListAsync(ct)
+                .ConfigureAwait(false))
+                .Where(x => x.Status == completedStatus)
+                .Select(x => new { x.Id, x.Total })
+                .ToList()
+            : await baseQuery
+                .Where(x => x.Status == completedStatus)
+                .Select(x => new { x.Id, x.Total })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
 
         var saleIds = sales.Select(x => x.Id).ToArray();
         var totalItems = saleIds.Length == 0
@@ -264,33 +274,52 @@ public sealed class PosSalesService : IPosSalesService
             throw ValidationError("dateTo", "dateTo must be greater than or equal to dateFrom.");
         }
 
-        var fromDate = dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var fromUtc = dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var toExclusive = dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var completedStatus = SaleStatus.Completed;
+        var isSqlite = _db.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
 
-        var rows = await (from sale in _db.Sales.AsNoTracking()
-                          join item in _db.SaleItems.AsNoTracking() on sale.Id equals item.SaleId
-                          where sale.Status == completedStatus
-                                && sale.OccurredAtUtc >= fromDate
-                                && sale.OccurredAtUtc < toExclusive
-                          group item by new { item.ProductId, item.ProductNameSnapshot }
-            into grouped
-                          select new TopProductDto(
-                              grouped.Key.ProductId,
-                              grouped.Key.ProductNameSnapshot,
-                              grouped.Sum(x => x.Quantity),
-                              grouped.Sum(x => x.LineTotal)))
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var rows = isSqlite
+            ? (await (from sale in _db.Sales.AsNoTracking()
+                      join item in _db.SaleItems.AsNoTracking() on sale.Id equals item.SaleId
+                      where sale.OccurredAtUtc >= fromUtc && sale.OccurredAtUtc < toExclusive
+                      select new { sale.Status, item.ProductId, item.ProductNameSnapshot, item.Quantity, item.LineTotal })
+                .ToListAsync(ct)
+                .ConfigureAwait(false))
+                .Where(x => x.Status == completedStatus)
+                .GroupBy(x => new { x.ProductId, x.ProductNameSnapshot })
+                .Select(grouped => new TopProductDto(
+                    grouped.Key.ProductId,
+                    grouped.Key.ProductNameSnapshot,
+                    grouped.Sum(x => x.Quantity),
+                    grouped.Sum(x => x.LineTotal)))
+                .OrderByDescending(x => x.Qty)
+                .ThenByDescending(x => x.Amount)
+                .Take(top)
+                .ToList()
+            : (await (from sale in _db.Sales.AsNoTracking()
+                      join item in _db.SaleItems.AsNoTracking() on sale.Id equals item.SaleId
+                      where sale.Status == completedStatus
+                            && sale.OccurredAtUtc >= fromUtc
+                            && sale.OccurredAtUtc < toExclusive
+                      group item by new { item.ProductId, item.ProductNameSnapshot }
+                into grouped
+                      select new TopProductDto(
+                          grouped.Key.ProductId,
+                          grouped.Key.ProductNameSnapshot,
+                          grouped.Sum(x => x.Quantity),
+                          grouped.Sum(x => x.LineTotal)))
+                .ToListAsync(ct)
+                .ConfigureAwait(false))
+                .OrderByDescending(x => x.Qty)
+                .ThenByDescending(x => x.Amount)
+                .Take(top)
+                .ToList();
 
         var correlationId = GetCorrelationId();
         LogAction("TopProducts", "SaleReport", null, correlationId);
 
-        return rows
-            .OrderByDescending(x => x.Qty)
-            .ThenByDescending(x => x.Amount)
-            .Take(top)
-            .ToList();
+        return rows;
     }
 
     private static string GenerateFolio(DateTimeOffset timestamp)
