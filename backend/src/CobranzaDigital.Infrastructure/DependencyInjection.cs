@@ -29,6 +29,9 @@ public static class DependencyInjection
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        services.AddOptions<PosOptions>()
+            .BindConfiguration(PosOptions.SectionName);
+
         services.AddDbContext<CobranzaDigitalDbContext>((serviceProvider, options) =>
         {
             var databaseOptions = serviceProvider.GetRequiredService<IOptions<DatabaseOptions>>().Value;
@@ -88,6 +91,7 @@ public static class DependencyInjection
         services.AddTransient<IDateTime, SystemDateTime>();
         services.AddScoped<IPosCatalogService, PosCatalogService>();
         services.AddScoped<IPosSalesService, PosSalesService>();
+        services.AddScoped<IPosShiftService, PosShiftService>();
 
         return services;
     }

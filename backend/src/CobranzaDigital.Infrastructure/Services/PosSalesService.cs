@@ -6,9 +6,11 @@ using CobranzaDigital.Application.Contracts.PosSales;
 using CobranzaDigital.Application.Interfaces.PosSales;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
+using CobranzaDigital.Infrastructure.Options;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ValidationException = CobranzaDigital.Application.Common.Exceptions.ValidationException;
 
 namespace CobranzaDigital.Infrastructure.Services;
@@ -19,17 +21,20 @@ public sealed class PosSalesService : IPosSalesService
     private readonly IAuditLogger _auditLogger;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<PosSalesService> _logger;
+    private readonly PosOptions _posOptions;
 
     public PosSalesService(
         CobranzaDigitalDbContext db,
         IAuditLogger auditLogger,
         IHttpContextAccessor httpContextAccessor,
-        ILogger<PosSalesService> logger)
+        ILogger<PosSalesService> logger,
+        IOptions<PosOptions> posOptions)
     {
         _db = db;
         _auditLogger = auditLogger;
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
+        _posOptions = posOptions.Value;
     }
 
     public async Task<CreateSaleResponseDto> CreateSaleAsync(CreateSaleRequestDto request, CancellationToken ct)
@@ -38,6 +43,21 @@ public sealed class PosSalesService : IPosSalesService
 
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
         var correlationId = GetCorrelationId();
+
+        Guid? openShiftId = null;
+        if (_posOptions.RequireOpenShiftForSales)
+        {
+            openShiftId = await _db.PosShifts.AsNoTracking()
+                .Where(x => x.ClosedAtUtc == null)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+
+            if (!openShiftId.HasValue)
+            {
+                throw new ConflictException("Cannot register sale because there is no open shift.");
+            }
+        }
 
         if (request.ClientSaleId.HasValue)
         {
@@ -110,6 +130,7 @@ public sealed class PosSalesService : IPosSalesService
             CreatedByUserId = userId,
             CorrelationId = correlationId,
             ClientSaleId = request.ClientSaleId,
+            ShiftId = openShiftId,
             Status = SaleStatus.Completed
         };
 
@@ -213,7 +234,7 @@ public sealed class PosSalesService : IPosSalesService
             EntityType: "Sale",
             EntityId: sale.Id.ToString("D"),
             Before: null,
-            After: new { sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Total, Items = request.Items.Count },
+            After: new { sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Total, sale.ShiftId, Items = request.Items.Count },
             Source: "POS",
             Notes: "Sale created",
             OccurredAtUtc: DateTime.UtcNow), ct).ConfigureAwait(false);

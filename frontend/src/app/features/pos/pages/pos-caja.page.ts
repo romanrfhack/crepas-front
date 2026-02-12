@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { environment } from '../../../../environments/environment';
 import { CategoryListComponent } from '../components/category-list/category-list.component';
 import {
   CustomizationModalComponent,
@@ -15,6 +16,7 @@ import {
   CartItem,
   CatalogSnapshotDto,
   CreateSaleRequestDto,
+  PosShiftDto,
   ProductDto,
   SaleResponseDto,
 } from '../models/pos.models';
@@ -47,11 +49,14 @@ export class PosCajaPage {
   readonly loading = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly saleSuccess = signal<SaleResponseDto | null>(null);
+  readonly currentShift = signal<PosShiftDto | null>(null);
 
   readonly correlationId = signal(crypto.randomUUID());
   readonly inProgressClientSaleId = signal<string | null>(null);
+  readonly requireOpenShift = environment.posRequireOpenShift;
 
   readonly categories = computed(() => this.snapshot()?.categories.filter((item) => item.isActive) ?? []);
+  readonly hasOpenShift = computed(() => this.currentShift()?.closedAtUtc == null && this.currentShift() !== null);
 
   readonly products = computed(() => {
     const current = this.snapshot()?.products.filter((item) => item.isActive) ?? [];
@@ -90,6 +95,7 @@ export class PosCajaPage {
 
   constructor() {
     void this.loadSnapshot();
+    void this.loadCurrentShift();
     console.debug('[POS Caja] correlationId', this.correlationId());
   }
 
@@ -100,6 +106,41 @@ export class PosCajaPage {
       this.snapshot.set(data);
     } catch {
       this.errorMessage.set('No se pudo cargar el catálogo. Intenta nuevamente.');
+    }
+  }
+
+  async loadCurrentShift() {
+    try {
+      const shift = await this.salesApi.getCurrentShift();
+      this.currentShift.set(shift);
+    } catch {
+      this.errorMessage.set('No se pudo consultar el estado del turno.');
+    }
+  }
+
+  async openShift() {
+    try {
+      const shift = await this.salesApi.openShift({
+        openingCashAmount: 0,
+        notes: 'Apertura rápida desde Caja POS',
+        clientOperationId: crypto.randomUUID(),
+      });
+      this.currentShift.set(shift);
+    } catch {
+      this.errorMessage.set('No se pudo abrir el turno.');
+    }
+  }
+
+  async closeShift() {
+    try {
+      const shift = await this.salesApi.closeShift({
+        closingCashAmount: this.estimatedTotal(),
+        notes: 'Cierre rápido desde Caja POS',
+        clientOperationId: crypto.randomUUID(),
+      });
+      this.currentShift.set(shift);
+    } catch {
+      this.errorMessage.set('No se pudo cerrar el turno.');
     }
   }
 
@@ -142,6 +183,11 @@ export class PosCajaPage {
 
   async confirmPayment(event: PaymentSubmitEvent) {
     if (this.cartItems().length === 0 || this.loading()) {
+      return;
+    }
+
+    if (this.requireOpenShift && !this.hasOpenShift()) {
+      this.errorMessage.set('Debes tener un turno abierto para registrar ventas.');
       return;
     }
 

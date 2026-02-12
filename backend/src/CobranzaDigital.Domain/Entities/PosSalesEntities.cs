@@ -27,7 +27,24 @@ public sealed class Sale : Entity
     public Guid CreatedByUserId { get; set; }
     public string? CorrelationId { get; set; }
     public Guid? ClientSaleId { get; set; }
+    public Guid? ShiftId { get; set; }
     public SaleStatus Status { get; set; } = SaleStatus.Completed;
+}
+
+public sealed class PosShift : Entity
+{
+    public DateTimeOffset OpenedAtUtc { get; set; }
+    public Guid OpenedByUserId { get; set; }
+    public string? OpenedByEmail { get; set; }
+    public decimal OpeningCashAmount { get; set; }
+    public DateTimeOffset? ClosedAtUtc { get; set; }
+    public Guid? ClosedByUserId { get; set; }
+    public string? ClosedByEmail { get; set; }
+    public decimal? ClosingCashAmount { get; set; }
+    public string? OpenNotes { get; set; }
+    public string? CloseNotes { get; set; }
+    public Guid? OpenOperationId { get; set; }
+    public Guid? CloseOperationId { get; set; }
 }
 
 public sealed class SaleItem : Entity

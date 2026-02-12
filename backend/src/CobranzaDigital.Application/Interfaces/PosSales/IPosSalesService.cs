@@ -8,3 +8,10 @@ public interface IPosSalesService
     Task<DailySummaryDto> GetDailySummaryAsync(DateOnly forDate, CancellationToken ct);
     Task<IReadOnlyList<TopProductDto>> GetTopProductsAsync(DateOnly dateFrom, DateOnly dateTo, int top, CancellationToken ct);
 }
+
+public interface IPosShiftService
+{
+    Task<PosShiftDto?> GetCurrentShiftAsync(CancellationToken ct);
+    Task<PosShiftDto> OpenShiftAsync(OpenPosShiftRequestDto request, CancellationToken ct);
+    Task<PosShiftDto> CloseShiftAsync(ClosePosShiftRequestDto request, CancellationToken ct);
+}

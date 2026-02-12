@@ -2,6 +2,14 @@
   <header>
     <h1>Caja POS</h1>
     <p>CorrelationId: <code>{{ correlationId() }}</code></p>
+    <p>
+      Turno:
+      @if (hasOpenShift()) {
+        <strong>Abierto</strong>
+      } @else {
+        <strong>Cerrado</strong>
+      }
+    </p>
     <div class="toolbar">
       <input
         type="search"
@@ -10,6 +18,10 @@
         (input)="searchTerm.set($any($event.target).value)"
       />
       <button type="button" (click)="loadSnapshot(true)">Refrescar catálogo</button>
+      <button type="button" (click)="loadCurrentShift()">Actualizar turno</button>
+      <button type="button" (click)="openShift()" [disabled]="hasOpenShift()">Abrir turno</button>
+      <button type="button" (click)="closeShift()" [disabled]="!hasOpenShift()">Cerrar turno</button>
+      <a href="/app/pos/reportes">Ir a reportes</a>
     </div>
   </header>
 

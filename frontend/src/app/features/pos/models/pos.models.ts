@@ -147,6 +147,32 @@ export interface TopProductDto {
   amount: number;
 }
 
+export interface OpenShiftRequestDto {
+  openingCashAmount: number;
+  notes: string | null;
+  clientOperationId: string | null;
+}
+
+export interface CloseShiftRequestDto {
+  closingCashAmount: number;
+  notes: string | null;
+  clientOperationId: string | null;
+}
+
+export interface PosShiftDto {
+  id: string;
+  openedAtUtc: string;
+  openedByUserId: string;
+  openedByEmail: string | null;
+  openingCashAmount: number;
+  closedAtUtc: string | null;
+  closedByUserId: string | null;
+  closedByEmail: string | null;
+  closingCashAmount: number | null;
+  openNotes: string | null;
+  closeNotes: string | null;
+}
+
 export interface CartSelection {
   groupKey: string;
   optionItemId: string;
