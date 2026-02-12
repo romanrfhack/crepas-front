@@ -25,7 +25,7 @@ Request ejemplo:
   "payment": {
     "method": "Cash",
     "amount": 170,
-    "reference": "CASH-001"
+    "reference": null
   }
 }
 ```
@@ -68,6 +68,14 @@ Response:
   }
 ]
 ```
+
+
+## Reglas de pago y fecha
+
+- `payment.method` se recibe como string del enum: `Cash`, `Card`, `Transfer`.
+- `payment.reference` es **requerido** para `Card` y `Transfer`; para `Cash` es opcional y se ignora en persistencia.
+- `occurredAtUtc` es opcional. Si no se envía, el backend asigna `DateTimeOffset.UtcNow` como fuente de verdad.
+- `clientSaleId` mantiene idempotencia: si se repite uno existente, se devuelve la venta previamente creada.
 
 ## Reglas de snapshot
 

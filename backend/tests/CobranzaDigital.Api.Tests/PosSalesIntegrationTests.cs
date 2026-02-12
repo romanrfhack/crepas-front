@@ -43,7 +43,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
                     extras = new[] { new { extraId = extra.Id, quantity = 2 } }
                 }
             },
-            payment = new { method = 0, amount = 170m, reference = "CASH-001" }
+            payment = new { method = "Cash", amount = 170m, reference = "CASH-001" }
         });
 
         using var response = await _client.SendAsync(request);
@@ -60,6 +60,9 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Assert.Equal("Latte", saleItem.ProductNameSnapshot);
         Assert.Equal(75m, saleItem.UnitPriceSnapshot);
 
+        var payment = await db.Payments.AsNoTracking().FirstAsync(x => x.SaleId == sale.SaleId);
+        Assert.Null(payment.Reference);
+
         var audits = await db.AuditLogs.AsNoTracking()
             .Where(x => x.EntityType == "Sale" && x.EntityId == sale.SaleId.ToString())
             .ToListAsync();
@@ -68,6 +71,38 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Assert.NotNull(audit);
         Assert.Equal("Create", audit!.Action);
         Assert.Equal("corr-pos-sale", audit.CorrelationId);
+    }
+
+    [Fact]
+    public async Task CreateSale_WithCardPaymentAndReference_ReturnsOk()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"Bebidas-{Guid.NewGuid():N}", sortOrder = 3, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Cappuccino", categoryId = category.Id, basePrice = 80m, isActive = true });
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        request.Content = JsonContent.Create(new
+        {
+            clientSaleId = Guid.NewGuid(),
+            items = new[]
+            {
+                new
+                {
+                    productId = product.Id,
+                    quantity = 1,
+                    selections = Array.Empty<object>(),
+                    extras = Array.Empty<object>()
+                }
+            },
+            payment = new { method = "Card", amount = 80m, reference = "AUTH-123" }
+        });
+
+        using var response = await _client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain("request field is required", body, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -110,7 +145,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         {
             clientSaleId = Guid.NewGuid(),
             items = new[] { new { productId, quantity, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
-            payment = new { method = 0, amount = total }
+            payment = new { method = "Cash", amount = total }
         });
 
         using var resp = await _client.SendAsync(req);
