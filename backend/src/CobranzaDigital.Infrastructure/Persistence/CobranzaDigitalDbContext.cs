@@ -1,5 +1,8 @@
+using System.Reflection.Emit;
+
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Identity;
+
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,6 +39,13 @@ public sealed class CobranzaDigitalDbContext
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.Entity<Sale>(entity =>
+        {
+            entity.Property(e => e.Status)
+                .HasConversion<int>();
+        });
+        
         builder.ApplyConfigurationsFromAssembly(typeof(CobranzaDigitalDbContext).Assembly);
     }
 }
