@@ -11,6 +11,7 @@ using CobranzaDigital.Infrastructure.Persistence;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -221,7 +222,7 @@ public sealed class PosSalesService : IPosSalesService
                     : request.Payment.Reference?.Trim()
             });
 
-            await using var tx = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            IDbContextTransaction tx = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             try
             {
                 await _auditLogger.LogAsync(new AuditEntry(
@@ -244,6 +245,10 @@ public sealed class PosSalesService : IPosSalesService
                 await tx.RollbackAsync(ct).ConfigureAwait(false);
                 LogAction("CreateConflict", "Sale", sale.Id, correlationId);
                 throw new ConflictException("A sale with the same clientSaleId already exists.");
+            }
+            finally
+            {
+                await tx.DisposeAsync().ConfigureAwait(false);
             }
 
             LogAction("Create", "Sale", sale.Id, correlationId);
