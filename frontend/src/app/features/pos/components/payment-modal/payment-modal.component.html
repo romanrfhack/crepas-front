@@ -1,47 +1,73 @@
 <section class="modal" aria-label="Cobro de venta">
   <div class="modal-card">
-    <h3>Cobrar</h3>
-    <p>Total: ${{ total().toFixed(2) }}</p>
+    <h3>💰 Cobrar</h3>
 
-    <label>
-      Método de pago
-      <select [value]="method()" (change)="selectMethod($any($event.target).value)">
+    <div class="total-row">
+      <span class="total-label">Total a pagar</span>
+      <span class="total-amount">${{ total().toFixed(2) }}</span>
+    </div>
+
+    <div class="form-group">
+      <label for="payment-method">Método de pago</label>
+      <select
+        id="payment-method"
+        [value]="method()"
+        (change)="selectMethod($any($event.target).value)"
+      >
         <option value="Cash">Efectivo</option>
         <option value="Card">Tarjeta</option>
         <option value="Transfer">Transferencia</option>
       </select>
-    </label>
+    </div>
 
     @if (method() === 'Cash') {
-      <label>
-        Recibí
+      <div class="form-group">
+        <label for="received-amount">Recibí</label>
         <input
+          id="received-amount"
           type="number"
           min="0"
           step="0.01"
+          placeholder="0.00"
           [value]="receivedAmount()"
           (input)="updateReceivedAmount(+$any($event.target).value || 0)"
         />
-      </label>
-      @if (insufficientCash()) {
-        <p class="error" role="alert">El monto recibido debe ser mayor o igual al total.</p>
-      }
-      <p>Cambio: ${{ changeAmount().toFixed(2) }}</p>
+      </div>
+
+      <div class="cash-feedback">
+        <div class="change-row">
+          <span>Cambio</span>
+          <strong>${{ changeAmount().toFixed(2) }}</strong>
+        </div>
+        @if (insufficientCash()) {
+          <p class="error" role="alert">
+            El monto recibido debe ser mayor o igual al total
+          </p>
+        }
+      </div>
     }
 
-    <label>
-      Referencia
-      <input
-        type="text"
-        [value]="reference()"
-        (input)="updateReference($any($event.target).value)"
-      />
-    </label>
+    @if (method() === 'Transfer' || method() === 'Card') {
+      <div class="form-group">
+        <label for="payment-reference">Referencia (opcional)</label>
+        <input
+          id="payment-reference"
+          type="text"
+          [value]="reference()"
+          (input)="updateReference($any($event.target).value)"
+          placeholder="Número de voucher, folio, etc."
+        />
+      </div>
+    }
 
     <div class="modal-actions">
       <button type="button" (click)="cancelAction.emit()">Cancelar</button>
-      <button type="button" [disabled]="loading() || insufficientCash()" (click)="confirmPayment()">
-        Confirmar cobro
+      <button
+        type="button"
+        [disabled]="loading() || insufficientCash()"
+        (click)="confirmPayment()"
+      >
+        <span>✅</span> Confirmar cobro
       </button>
     </div>
   </div>
