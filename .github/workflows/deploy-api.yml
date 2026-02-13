@@ -1,72 +1,43 @@
 name: Deploy API (CobranzaDigital)
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: [ "main" ]   # cambia si usas master u otra
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET 10
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
 
-      - name: Publish (find csproj)
-        shell: bash
+      - name: Publish API
         run: |
-          set -e
-          CSPROJ="$(find . -name '*.csproj' | grep -E 'CobranzaDigital\.Api|WebApi' | head -n 1)"
-          if [ -z "$CSPROJ" ]; then
-            echo "No encontré csproj. Ajusta el grep o pon la ruta fija al .csproj."
-            exit 1
-          fi
-          echo "Using csproj: $CSPROJ"
-          dotnet restore "$CSPROJ"
-          dotnet publish "$CSPROJ" -c Release -o out
-          tar -czf api_publish.tgz -C out .
+          dotnet restore backend          
+          dotnet publish backend/src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release -o out/api
 
-      - name: Copy artifact to server (scp)
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.CD_HOST }}
-          username: ${{ secrets.CD_SSH_USER }}
-          key: ${{ secrets.CD_SSH_KEY }}
-          port: 22
-          source: "api_publish.tgz"
-          target: "/home/deploy"
 
-      - name: Deploy on server (extract + restart)
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.CD_HOST }}
-          username: ${{ secrets.CD_SSH_USER }}
-          key: ${{ secrets.CD_SSH_KEY }}
-          port: 22
-          script: |
-            set -e
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.CD_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p ${{ secrets.CD_SSH_PORT || '22' }} -H ${{ secrets.CD_HOST }} >> ~/.ssh/known_hosts
 
-            # asegurar dirs
-            sudo mkdir -p /var/www/cobranzadigital/api/publish
-            sudo chown -R www-data:www-data /var/www/cobranzadigital
-            sudo chmod -R 775 /var/www/cobranzadigital
+      - name: Upload API to server
+        run: |
+          ssh -p ${{ secrets.CD_SSH_PORT || '22' }} deploy@${{ secrets.CD_HOST }} "mkdir -p /var/www/cobranzadigital/api/publish && rm -rf /var/www/cobranzadigital/api/publish/*"
+          scp -P ${{ secrets.CD_SSH_PORT || '22' }} -r out/api/* deploy@${{ secrets.CD_HOST }}:/var/www/cobranzadigital/api/publish/
 
-            # parar servicio si existe
-            sudo systemctl stop cobranzadigital-api || true
-
-            # limpiar y desplegar
-            sudo rm -rf /var/www/cobranzadigital/api/publish/*
-            sudo tar -xzf /home/deploy/api_publish.tgz -C /var/www/cobranzadigital/api/publish
-            sudo chown -R www-data:www-data /var/www/cobranzadigital/api/publish
-
-            # habilitar e iniciar
-            sudo systemctl daemon-reload
-            sudo systemctl enable cobranzadigital-api
-            sudo systemctl restart cobranzadigital-api
-            sudo systemctl status cobranzadigital-api --no-pager | head -n 50
+      - name: Restart service
+        run: |
+          ssh -p ${{ secrets.CD_SSH_PORT || '22' }} deploy@${{ secrets.CD_HOST }} "sudo systemctl daemon-reload && sudo systemctl enable cobranzadigital-api && sudo systemctl restart cobranzadigital-api && sudo systemctl status cobranzadigital-api --no-pager -l"

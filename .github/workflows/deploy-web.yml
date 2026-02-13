@@ -1,0 +1,42 @@
+name: Deploy Web (CobranzaDigital)
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Install & Build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build -- --configuration production
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.CD_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p ${{ secrets.CD_SSH_PORT || '22' }} -H ${{ secrets.CD_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload Web to server
+        run: |
+          ssh -p ${{ secrets.CD_SSH_PORT || '22' }} deploy@${{ secrets.CD_HOST }} "mkdir -p /var/www/cobranzadigital/web && rm -rf /var/www/cobranzadigital/web/*"
+          # OJO: el dist real puede ser frontend/dist/<nombre-app>/
+          scp -P ${{ secrets.CD_SSH_PORT || '22' }} -r frontend/dist/* deploy@${{ secrets.CD_HOST }}:/var/www/cobranzadigital/web/
