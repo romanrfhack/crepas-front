@@ -4,9 +4,6 @@ export const posRoutes: Routes = [
   {
     path: 'caja',
     loadComponent: () => import('./pages/pos-caja.page').then((m) => m.PosCajaPage),
-    data: {
-      fullWidth: true,
-    },
   },
   {
     path: 'reportes',
