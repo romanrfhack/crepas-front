@@ -1,0 +1,72 @@
+name: Deploy API (CobranzaDigital)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish (find csproj)
+        shell: bash
+        run: |
+          set -e
+          CSPROJ="$(find . -name '*.csproj' | grep -E 'CobranzaDigital\.Api|WebApi' | head -n 1)"
+          if [ -z "$CSPROJ" ]; then
+            echo "No encontré csproj. Ajusta el grep o pon la ruta fija al .csproj."
+            exit 1
+          fi
+          echo "Using csproj: $CSPROJ"
+          dotnet restore "$CSPROJ"
+          dotnet publish "$CSPROJ" -c Release -o out
+          tar -czf api_publish.tgz -C out .
+
+      - name: Copy artifact to server (scp)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.CD_HOST }}
+          username: ${{ secrets.CD_SSH_USER }}
+          key: ${{ secrets.CD_SSH_KEY }}
+          port: 22
+          source: "api_publish.tgz"
+          target: "/home/deploy"
+
+      - name: Deploy on server (extract + restart)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.CD_HOST }}
+          username: ${{ secrets.CD_SSH_USER }}
+          key: ${{ secrets.CD_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+
+            # asegurar dirs
+            sudo mkdir -p /var/www/cobranzadigital/api/publish
+            sudo chown -R www-data:www-data /var/www/cobranzadigital
+            sudo chmod -R 775 /var/www/cobranzadigital
+
+            # parar servicio si existe
+            sudo systemctl stop cobranzadigital-api || true
+
+            # limpiar y desplegar
+            sudo rm -rf /var/www/cobranzadigital/api/publish/*
+            sudo tar -xzf /home/deploy/api_publish.tgz -C /var/www/cobranzadigital/api/publish
+            sudo chown -R www-data:www-data /var/www/cobranzadigital/api/publish
+
+            # habilitar e iniciar
+            sudo systemctl daemon-reload
+            sudo systemctl enable cobranzadigital-api
+            sudo systemctl restart cobranzadigital-api
+            sudo systemctl status cobranzadigital-api --no-pager | head -n 50
