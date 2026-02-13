@@ -24,34 +24,63 @@ export class CustomizationModalComponent {
   readonly selectedByGroup = signal<Record<string, string[]>>({});
   readonly extraQty = signal<Record<string, number>>({});
 
-  readonly sortedGroups = computed(() => [...this.groups()].sort((a, b) => a.sortOrder - b.sortOrder));
+  readonly sortedGroups = computed(() =>
+    [...this.groups()].sort((a, b) => a.sortOrder - b.sortOrder),
+  );
 
+  /** Retorna la cantidad de selecciones actuales para un grupo */
+  selectedCountForGroup(groupKey: string): number {
+    return (this.selectedByGroup()[groupKey] ?? []).length;
+  }
 
-  isSelected(groupKey: string, optionItemId: string) {
+  /** Verifica si una opción está seleccionada */
+  isSelected(groupKey: string, optionItemId: string): boolean {
     return (this.selectedByGroup()[groupKey] ?? []).includes(optionItemId);
   }
 
-  readExtraQuantity(extraId: string) {
+  /** Lee la cantidad actual de un extra */
+  readExtraQuantity(extraId: string): number {
     return this.extraQty()[extraId] ?? 0;
   }
-  optionsForGroup(group: SelectionGroupDto) {
+
+  /** Filtra y ordena las opciones de un grupo */
+  optionsForGroup(group: SelectionGroupDto): OptionItemDto[] {
     return this.optionItems()
       .filter((item) => item.optionSetId === group.optionSetId && item.isActive)
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
-  toggleSelection(group: SelectionGroupDto, optionItem: OptionItemDto) {
+  /** Alterna la selección de una opción, respetando mínimos y máximos */
+  toggleSelection(group: SelectionGroupDto, optionItem: OptionItemDto): void {
     this.selectedByGroup.update((state) => {
       const current = state[group.key] ?? [];
       const exists = current.includes(optionItem.id);
-      const next = group.selectionMode === 0
-        ? (exists ? [] : [optionItem.id])
-        : (exists ? current.filter((id) => id !== optionItem.id) : [...current, optionItem.id]);
+      let next: string[];
+
+      if (group.selectionMode === 0) {
+        // RADIO: selección única
+        next = exists ? [] : [optionItem.id];
+      } else {
+        // CHECKBOX: selección múltiple con límite máximo
+        if (exists) {
+          // Si ya está seleccionado, lo quitamos
+          next = current.filter((id) => id !== optionItem.id);
+        } else {
+          // Si no está seleccionado, verificamos que no exceda el máximo
+          if (current.length >= group.maxSelections) {
+            // No se puede agregar más, retornamos el estado sin cambios
+            return state;
+          }
+          next = [...current, optionItem.id];
+        }
+      }
+
       return { ...state, [group.key]: next };
     });
   }
 
-  changeExtraQuantity(extraId: string, delta: number) {
+  /** Cambia la cantidad de un extra */
+  changeExtraQuantity(extraId: string, delta: number): void {
     this.extraQty.update((state) => {
       const current = state[extraId] ?? 0;
       const next = Math.max(0, current + delta);
@@ -59,7 +88,8 @@ export class CustomizationModalComponent {
     });
   }
 
-  canConfirm() {
+  /** Verifica si todos los grupos cumplen con sus restricciones */
+  canConfirm(): boolean {
     const state = this.selectedByGroup();
     return this.sortedGroups().every((group) => {
       const size = (state[group.key] ?? []).length;
@@ -67,18 +97,20 @@ export class CustomizationModalComponent {
     });
   }
 
-  submit() {
+  /** Confirma la personalización y emite el resultado */
+  submit(): void {
     if (!this.canConfirm()) {
       return;
     }
 
     const optionLookup = new Map(this.optionItems().map((item) => [item.id, item]));
-    const selections = Object.entries(this.selectedByGroup()).flatMap(([groupKey, selectedIds]) =>
-      selectedIds.map((optionItemId) => ({
-        groupKey,
-        optionItemId,
-        optionItemName: optionLookup.get(optionItemId)?.name ?? optionItemId,
-      })),
+    const selections = Object.entries(this.selectedByGroup()).flatMap(
+      ([groupKey, selectedIds]) =>
+        selectedIds.map((optionItemId) => ({
+          groupKey,
+          optionItemId,
+          optionItemName: optionLookup.get(optionItemId)?.name ?? optionItemId,
+        })),
     );
 
     const extrasLookup = new Map(this.extras().map((extra) => [extra.id, extra]));

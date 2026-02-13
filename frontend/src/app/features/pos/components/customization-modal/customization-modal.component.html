@@ -1,39 +1,122 @@
 <section class="modal" aria-label="Personalizar producto">
-  <h3>Personalizar: {{ product().name }}</h3>
+  <div class="modal-header">
+    <h3>{{ product().name }}</h3>
+  </div>
+
+  <!-- Grupos de personalización con feedback visual -->
   @for (group of sortedGroups(); track group.id) {
-    <fieldset>
-      <legend>{{ group.label }}</legend>
-      <small>Selecciona entre {{ group.minSelections }} y {{ group.maxSelections }}</small>
-      @for (item of optionsForGroup(group); track item.id) {
-        <label>
-          <input
-            [type]="group.selectionMode === 0 ? 'radio' : 'checkbox'"
-            [name]="group.key"
-            [checked]="isSelected(group.key, item.id)"
-            (change)="toggleSelection(group, item)"
-          />
-          {{ item.name }}
-        </label>
-      }
+    @let selectedCount = selectedCountForGroup(group.key);
+    @let isValid = selectedCount >= group.minSelections && selectedCount <= group.maxSelections;
+    @let isBelowMin = selectedCount < group.minSelections;
+    @let isMaxReached = selectedCount >= group.maxSelections;
+
+    <fieldset class="customization-group">
+      <div class="group-header">
+        <legend>{{ group.label }}</legend>
+
+        <!-- BADGE DE ESTADO DEL GRUPO -->
+        <span class="group-status-badge">
+          <!-- Icono dinámico según estado -->
+          @if (isValid) {
+            <span class="status-icon status-icon--success">✅</span>
+          } @else if (isBelowMin) {
+            <span class="status-icon status-icon--warning">⚠️</span>
+          } @else if (isMaxReached) {
+            <span class="status-icon status-icon--disabled">🔒</span>
+          }
+
+          <!-- Contador: selecciones actuales / máximo -->
+          <span class="status-count">
+            <strong>{{ selectedCount }}</strong>
+            <span class="status-separator">/</span>
+            {{ group.maxSelections }}
+          </span>
+          <span>seleccionados</span>
+        </span>
+      </div>
+
+      <div class="options-grid">
+        @for (item of optionsForGroup(group); track item.id) {
+          @let isSel = isSelected(group.key, item.id);
+          @let isDisabled =
+            group.selectionMode !== 0 && 
+            !isSel && 
+            isMaxReached; 
+
+          <label
+            class="option-item"
+            [class.option-item--selected]="isSel"
+            [class.option-item--disabled]="isDisabled"
+          >
+            <input
+              [type]="group.selectionMode === 0 ? 'radio' : 'checkbox'"
+              [name]="group.key"
+              [checked]="isSel"
+              [disabled]="isDisabled"
+              (change)="toggleSelection(group, item)"
+            />
+            <span class="option-label">{{ item.name }}</span>
+          </label>
+        }
+      </div>
     </fieldset>
   }
 
+  <!-- Extras - GRID DE TARJETAS RESPONSIVO -->
   @if (extras().length > 0) {
-    <fieldset>
-      <legend>Extras</legend>
-      @for (extra of extras(); track extra.id) {
-        <div>
-          <span>{{ extra.name }} (${{ extra.price.toFixed(2) }})</span>
-          <button type="button" (click)="changeExtraQuantity(extra.id, -1)">-</button>
-          <span>{{ readExtraQuantity(extra.id) }}</span>
-          <button type="button" (click)="changeExtraQuantity(extra.id, 1)">+</button>
-        </div>
-      }
+    <fieldset class="extras-section">
+      <span class="extras-title">Extras</span>
+      <div class="extras-grid">
+        @for (extra of extras(); track extra.id) {
+          <div class="extra-item">
+            <div class="extra-info">
+              <span class="extra-name">{{ extra.name }}</span>
+              <span class="extra-price">+${{ extra.price.toFixed(2) }}</span>
+            </div>
+            <div class="extra-quantity-control">
+              <span class="quantity-label">Cantidad</span>
+              <div class="quantity-buttons">
+                <button
+                  type="button"
+                  class="btn-quantity"
+                  (click)="changeExtraQuantity(extra.id, -1)"
+                  [disabled]="readExtraQuantity(extra.id) === 0"
+                  aria-label="Disminuir cantidad"
+                >
+                  −
+                </button>
+                <span class="extra-quantity-value">
+                  {{ readExtraQuantity(extra.id) }}
+                </span>
+                <button
+                  type="button"
+                  class="btn-quantity"
+                  (click)="changeExtraQuantity(extra.id, 1)"
+                  aria-label="Aumentar cantidad"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+      </div>
     </fieldset>
   }
 
-  <div class="actions">
-    <button type="button" (click)="cancelAction.emit()">Cancelar</button>
-    <button type="button" [disabled]="!canConfirm()" (click)="submit()">Agregar al carrito</button>
+  <!-- Acciones -->
+  <div class="modal-actions">
+    <button type="button" class="btn-secondary" (click)="cancelAction.emit()">
+      Cancelar
+    </button>
+    <button
+      type="button"
+      class="btn-primary"
+      [disabled]="!canConfirm()"
+      (click)="submit()"
+    >
+      <span>🛒</span>
+      Agregar al carrito
+    </button>
   </div>
 </section>
