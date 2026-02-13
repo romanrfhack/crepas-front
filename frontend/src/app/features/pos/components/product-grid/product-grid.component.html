@@ -1,11 +1,35 @@
-<section aria-label="Productos disponibles">
-  <h2>Productos</h2>
-  <div class="grid">
-    @for (product of products(); track product.id) {
-      <button type="button" class="card" (click)="addProduct.emit(product)">
-        <span class="title">{{ product.name }}</span>
-        <span>${{ product.basePrice.toFixed(2) }}</span>
-      </button>
+<section class="product-grid" aria-label="Productos disponibles">
+  <div class="grid-header">
+    <h2>Productos</h2>
+    @if (products().length > 0) {
+      <span class="product-count">{{ products().length }} artículos</span>
     }
   </div>
+
+  @if (products().length === 0) {
+    <div class="empty-products">
+      <span>🔍</span>
+      <p>No se encontraron productos</p>
+      <p>Intenta con otra categoría o búsqueda</p>
+    </div>
+  } @else {
+    <div class="grid-container">
+      @for (product of products(); track product.id) {
+        <button
+          type="button"
+          class="product-card"
+          (click)="addProduct.emit(product)"
+          [attr.aria-label]="'Agregar ' + product.name + ' al carrito'"
+        >
+          <div class="product-info">
+            <span class="product-name">{{ product.name }}</span>
+            <div class="product-price-row">
+              <span class="product-price">${{ product.basePrice.toFixed(2) }}</span>
+              <span class="add-icon" aria-hidden="true">+</span>
+            </div>
+          </div>
+        </button>
+      }
+    </div>
+  }
 </section>

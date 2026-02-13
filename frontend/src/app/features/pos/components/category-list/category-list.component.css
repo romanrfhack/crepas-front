@@ -1,17 +1,207 @@
 :host {
   display: block;
+  width: 100%;
+  height: 100%;
+  --brand-rose: #f3b6c2;
+  --brand-rose-strong: #e89aac;
+  --brand-cream: #fbf6ef;
+  --brand-cocoa: #6b3f2a;
+  --brand-ink: #0f172a;
+  --brand-muted: #475569;
+  --ring: rgba(232, 154, 172, 0.55);
+  --border: rgba(243, 182, 194, 0.35);
+  --shadow-sm: 0 8px 20px rgba(201, 141, 106, 0.12);
+  --shadow-hover: 0 12px 26px rgba(201, 141, 106, 0.2);
+  --transition: 140ms ease;
 }
 
-section {
+.category-section {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+  border-radius: var(--radius-md);
+  padding: 1rem 0.75rem;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
+  padding: 0 0.25rem 0.75rem 0.25rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.75rem;
 }
 
-button {
-  text-align: left;
-}
-
-button.active {
+.category-header h2 {
+  font-size: 1.1rem;
   font-weight: 700;
+  color: var(--brand-cocoa);
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  margin: 0;
+  position: relative;
+}
+
+.category-header h2::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 0;
+  width: 40px;
+  height: 3px;
+  background: linear-gradient(90deg, var(--brand-rose-strong), #c98d6a);
+  border-radius: 999px;
+}
+
+.category-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  max-height: 100%;
+  padding-right: 0.25rem;
+}
+
+/* Scrollbar personalizada */
+.category-list::-webkit-scrollbar {
+  width: 6px;
+}
+.category-list::-webkit-scrollbar-track {
+  background: rgba(243, 182, 194, 0.08);
+  border-radius: 10px;
+}
+.category-list::-webkit-scrollbar-thumb {
+  background: rgba(232, 154, 172, 0.4);
+  border-radius: 10px;
+  transition: background var(--transition);
+}
+.category-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(232, 154, 172, 0.7);
+}
+
+.category-item {
+  width: 100%;
+}
+
+.category-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border: none;
+  background: transparent;
+  border-radius: 12px;
+  color: var(--brand-ink);
+  font-weight: 500;
+  font-size: 0.95rem;
+  text-align: left;
+  transition: all var(--transition);
+  cursor: pointer;
+  border: 1px solid transparent;
+  position: relative;
+  overflow: hidden;
+}
+
+.category-button:hover {
+  background: rgba(243, 182, 194, 0.12);
+  border-color: var(--border);
+  color: var(--brand-cocoa);
+  transform: translateX(4px);
+}
+
+.category-button.active {
+  background: linear-gradient(135deg, var(--brand-rose-strong), #c98d6a);
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(201, 141, 106, 0.3);
+  border-color: transparent;
+}
+
+.category-button.active:hover {
+  background: linear-gradient(135deg, #d88b9c, #b87a5a);
+  transform: translateX(4px);
+  box-shadow: 0 10px 22px rgba(201, 141, 106, 0.4);
+}
+
+.category-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  word-break: break-word;
+  flex: 1;
+}
+
+.category-name::before {
+  content: '•';
+  color: var(--brand-rose-strong);
+  font-weight: 700;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.category-button.active .category-name::before {
+  color: white;
+  opacity: 0.9;
+}
+
+/* Botón "Todas" tiene un estilo ligeramente diferente, pero coherente */
+.category-button.all-button .category-name::before {
+  content: '☆';
+  font-size: 1.1rem;
+}
+
+.category-button.active .category-name::before {
+  color: white;
+}
+
+.empty-categories {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--brand-muted);
+  background: rgba(243, 182, 194, 0.08);
+  border-radius: 1rem;
+  border: 1px dashed var(--border);
+  margin: 0.5rem 0;
+}
+
+.empty-categories span {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.7;
+}
+
+.empty-categories p {
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Focus visible accesible */
+.category-button:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Responsive */
+@media (max-width: 700px) {
+  .category-section {
+    padding: 0.75rem;
+  }
+
+  .category-button {
+    padding: 0.6rem 0.9rem;
+  }
 }

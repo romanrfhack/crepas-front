@@ -1,15 +1,42 @@
-<section aria-label="Categorías de productos">
-  <h2>Categorías</h2>
-  <button type="button" [class.active]="selectedCategoryId() === null" (click)="selectCategory.emit(null)">
-    Todas
-  </button>
-  @for (category of categories(); track category.id) {
-    <button
-      type="button"
-      [class.active]="selectedCategoryId() === category.id"
-      (click)="selectCategory.emit(category.id)"
-    >
-      {{ category.name }}
-    </button>
+<section class="category-section" aria-label="Categorías de productos">
+  <div class="category-header">
+    <h2>Categorías</h2>
+  </div>
+
+  @if (categories().length === 0) {
+    <div class="empty-categories">
+      <span>📭</span>
+      <p>No hay categorías disponibles</p>
+    </div>
+  } @else {
+    <ul class="category-list">
+      <!-- Botón "Todas" -->
+      <li class="category-item">
+        <button
+          type="button"
+          class="category-button all-button"
+          [class.active]="selectedCategoryId() === null"
+          (click)="selectCategory.emit(null)"
+          [attr.aria-pressed]="selectedCategoryId() === null"
+        >
+          <span class="category-name">Todas</span>
+        </button>
+      </li>
+
+      <!-- Categorías dinámicas -->
+      @for (category of categories(); track category.id) {
+        <li class="category-item">
+          <button
+            type="button"
+            class="category-button"
+            [class.active]="selectedCategoryId() === category.id"
+            (click)="selectCategory.emit(category.id)"
+            [attr.aria-pressed]="selectedCategoryId() === category.id"
+          >
+            <span class="category-name">{{ category.name }}</span>
+          </button>
+        </li>
+      }
+    </ul>
   }
 </section>
