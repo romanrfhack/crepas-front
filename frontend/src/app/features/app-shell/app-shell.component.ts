@@ -62,7 +62,7 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
         }
 
         <main class="app-main" [class.app-main--full-width]="isFullWidthRoute()" aria-live="polite">
-          <router-outlet />
+          <router-outlet></router-outlet>
         </main>
       </div>
     </div>
