@@ -321,22 +321,6 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
   styles: [`
     :host {
       display: block;
-      /* Variables de diseño - mismas que en el POS y Admin */
-      --brand-rose: #f3b6c2;
-      --brand-rose-strong: #e89aac;
-      --brand-cream: #fbf6ef;
-      --brand-cocoa: #6b3f2a;
-      --brand-ink: #0f172a;
-      --brand-muted: #475569;
-      --ring: rgba(232, 154, 172, 0.55);
-      --border: rgba(243, 182, 194, 0.35);
-      --shadow: 0 20px 60px rgba(15, 23, 42, 0.14);
-      --shadow-sm: 0 8px 20px rgba(201, 141, 106, 0.12);
-      --shadow-hover: 0 12px 28px rgba(201, 141, 106, 0.25);
-      --radius-md: 0.75rem;
-      --radius-lg: 22px;
-      --radius-card: 18px;
-      --transition: 140ms ease;
     }
 
     .schemas-page {
