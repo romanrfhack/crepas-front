@@ -29,9 +29,11 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          echo "${{ secrets.CD_SSH_KEY }}" > ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.CD_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p ${{ secrets.CD_SSH_PORT || '22' }} -H ${{ secrets.CD_HOST }} >> ~/.ssh/known_hosts
+
+          ssh-keyscan -4 -T 10 -p ${{ secrets.CD_SSH_PORT }} -H ${{ secrets.CD_SSH_HOST }} >> ~/.ssh/known_hosts
+
 
       - name: Upload API to server
         run: |
