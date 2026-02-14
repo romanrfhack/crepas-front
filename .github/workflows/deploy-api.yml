@@ -15,7 +15,7 @@ jobs:
     env:
       SSH_HOST: ${{ secrets.CD_SSH_HOST }}
       SSH_PORT: ${{ secrets.CD_SSH_PORT }}
-      SSH_KEY:  ${{ secrets.CD_SSH_KEY }}
+      SSH_KEY:  ${{ secrets.CD_SSH_KEY_B64 }}
       SSH_USER: deploy
 
     steps:
@@ -31,17 +31,16 @@ jobs:
           dotnet restore backend
           dotnet publish backend/src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release -o out/api
 
-            - name: Setup SSH
+      - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
           # IMPORTANTE: quitar \r (CRLF) y NO agregar saltos raros
-          printf '%s' "${{ secrets.CD_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '%s' "${{ secrets.CD_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-
-          # Valida que la key sea legible (si aquí falla, el secret está mal)
           ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
+
 
           ssh-keyscan -4 -T 10 -p "${{ secrets.CD_SSH_PORT }}" -H "${{ secrets.CD_SSH_HOST }}" >> ~/.ssh/known_hosts
 
