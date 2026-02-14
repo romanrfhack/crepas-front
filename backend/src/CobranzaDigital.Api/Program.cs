@@ -22,9 +22,16 @@ using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo("/var/www/cobranzadigital/api/keys"))
-    .SetApplicationName("CobranzaDigital");
+var keysPath = builder.Configuration["DataProtection:KeysPath"]
+              ?? "/var/www/cobranzadigital/api/keys";
+
+var appName = builder.Configuration["DataProtection:ApplicationName"]
+             ?? "CobranzaDigital";
+
+builder.Services
+    .AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keysPath))
+    .SetApplicationName(appName);
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
