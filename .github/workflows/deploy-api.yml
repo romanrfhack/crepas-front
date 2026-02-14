@@ -57,4 +57,8 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p "${{ secrets.CD_SSH_PORT || '22' }}" \
             deploy@${{ secrets.CD_SSH_HOST }} \
-            "sudo systemctl daemon-reload && sudo systemctl enable cobranzadigital-api && sudo systemctl restart cobranzadigital-api && sudo systemctl status cobranzadigital-api --no-pager -l"
+            "sudo systemctl daemon-reload && \
+             sudo systemctl enable cobranzadigital-api && \
+             sudo systemctl restart cobranzadigital-api && \
+             systemctl is-active --quiet cobranzadigital-api && \
+             systemctl status cobranzadigital-api --no-pager -l"
