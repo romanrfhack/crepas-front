@@ -31,38 +31,31 @@ jobs:
           dotnet restore backend
           dotnet publish backend/src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release -o out/api
 
-      - name: Setup SSH
-        shell: bash
+            - name: Setup SSH
         run: |
-          set -euo pipefail
-
-          PORT="${SSH_PORT:-22}"
-
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          # clave privada (quita CR por si se pegó con \r\n)
-          printf '%s' "$SSH_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          # IMPORTANTE: quitar \r (CRLF) y NO agregar saltos raros
+          printf '%s' "${{ secrets.CD_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-          # prueba rápida de conectividad
-          timeout 10 bash -c "cat < /dev/null > /dev/tcp/${SSH_HOST}/${PORT}" || (echo "No hay conexión a ${SSH_HOST}:${PORT}" && exit 1)
+          # Valida que la key sea legible (si aquí falla, el secret está mal)
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
 
-          ssh-keyscan -4 -T 10 -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -4 -T 10 -p "${{ secrets.CD_SSH_PORT }}" -H "${{ secrets.CD_SSH_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Upload API to server
-        shell: bash
         run: |
-          set -euo pipefail
-          PORT="${SSH_PORT:-22}"
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p "${{ secrets.CD_SSH_PORT || '22' }}" \
+            deploy@${{ secrets.CD_SSH_HOST }} \
+            "mkdir -p /var/www/cobranzadigital/api/publish && rm -rf /var/www/cobranzadigital/api/publish/*"
 
-          ssh -p "$PORT" ${SSH_USER}@${SSH_HOST} "mkdir -p /var/www/cobranzadigital/api/publish && rm -rf /var/www/cobranzadigital/api/publish/*"
-          scp -P "$PORT" -r out/api/* ${SSH_USER}@${SSH_HOST}:/var/www/cobranzadigital/api/publish/
+          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -P "${{ secrets.CD_SSH_PORT || '22' }}" -r \
+            out/api/* deploy@${{ secrets.CD_SSH_HOST }}:/var/www/cobranzadigital/api/publish/
 
       - name: Restart service
-        shell: bash
         run: |
-          set -euo pipefail
-          PORT="${SSH_PORT:-22}"
-
-          ssh -p "$PORT" ${SSH_USER}@${SSH_HOST} "sudo systemctl daemon-reload && sudo systemctl enable cobranzadigital-api && sudo systemctl restart cobranzadigital-api && sudo systemctl status cobranzadigital-api --no-pager -l"
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p "${{ secrets.CD_SSH_PORT || '22' }}" \
+            deploy@${{ secrets.CD_SSH_HOST }} \
+            "sudo systemctl daemon-reload && sudo systemctl enable cobranzadigital-api && sudo systemctl restart cobranzadigital-api && sudo systemctl status cobranzadigital-api --no-pager -l"
