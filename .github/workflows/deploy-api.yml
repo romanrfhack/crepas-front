@@ -24,6 +24,11 @@ jobs:
           dotnet restore backend          
           dotnet publish backend/src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release -o out/api
 
+      - name: Debug SSH target
+        run: |
+          echo "HOST=${{ secrets.CD_SSH_HOST }}"
+          echo "PORT=${{ secrets.CD_SSH_PORT }}"
+          getent hosts "${{ secrets.CD_SSH_HOST }}" || true
 
       - name: Setup SSH
         run: |
