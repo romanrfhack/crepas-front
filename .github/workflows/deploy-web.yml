@@ -1,4 +1,4 @@
-name: Deploy Web (CobranzaDigital)
+name: Deploy WEB (CobranzaDigital)
 
 on:
   push:
@@ -6,7 +6,9 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/deploy-web.yml"
-  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-web-main
@@ -16,8 +18,15 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    env:
+      CD_SSH_HOST: ${{ secrets.CD_SSH_HOST }}
+      CD_SSH_PORT: ${{ secrets.CD_SSH_PORT }}
+      CD_USER: ${{ secrets.CD_USER }}
+      CD_WEB_PATH: ${{ secrets.CD_WEB_PATH }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -35,22 +44,30 @@ jobs:
         run: npm run build -- --configuration production
 
       - name: Detect build output (folder that contains index.html)
-        id: out
-        working-directory: frontend
         shell: bash
         run: |
           set -euo pipefail
-          INDEX="$(find dist -type f -name index.html | head -n 1)"
-          if [ -z "$INDEX" ]; then
-            echo "No se encontró index.html dentro de frontend/dist"
-            echo "Contenido de dist:"
-            ls -la dist || true
+
+          # Caso SSR (dist/<app>/browser)
+          if [ -f "frontend/dist/cobranza-digital/browser/index.html" ]; then
+            echo "Detected SSR output. Using: frontend/dist/cobranza-digital/browser"
+            echo "DIST_DIR=frontend/dist/cobranza-digital/browser" >> $GITHUB_ENV
+          # Caso SPA (dist/<app>)
+          elif [ -f "frontend/dist/cobranza-digital/index.html" ]; then
+            echo "Detected SPA output. Using: frontend/dist/cobranza-digital"
+            echo "DIST_DIR=frontend/dist/cobranza-digital" >> $GITHUB_ENV
+          else
+            echo "ERROR: No pude encontrar index.html en frontend/dist"
+            find frontend/dist -maxdepth 4 -type f -name index.html -print || true
             exit 1
           fi
-          OUT_DIR="$(dirname "$INDEX")"
-          echo "index=$INDEX"
-          echo "out_dir=$OUT_DIR"
-          echo "out_dir=$OUT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Show dist output
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "DIST_DIR=$DIST_DIR"
+          ls -la "$DIST_DIR"
 
       - name: Setup SSH
         shell: bash
@@ -58,43 +75,27 @@ jobs:
           set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s' "${{ secrets.CD_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
+
+          echo "${{ secrets.CD_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -4 -T 10 -p "${{ secrets.CD_SSH_PORT }}" -H "${{ secrets.CD_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+          ssh-keyscan -p "$CD_SSH_PORT" -H "$CD_SSH_HOST" >> ~/.ssh/known_hosts
 
       - name: Prepare remote folder (clean)
         shell: bash
         run: |
           set -euo pipefail
-          ssh -p "${{ secrets.CD_SSH_PORT }}" deploy@"${{ secrets.CD_SSH_HOST }}" \
-            "mkdir -p /var/www/cobranzadigital/web && rm -rf /var/www/cobranzadigital/web/*"
-
-      - name: Show dist output
-        run: |
-          pwd
-          ls -la frontend/dist
-          ls -la frontend/dist/cobranza-digital || true
-          ls -la frontend/dist/cobranza-digital/browser || true
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p "$CD_SSH_PORT" "$CD_USER@$CD_SSH_HOST" \
+            "mkdir -p '$CD_WEB_PATH' && find '$CD_WEB_PATH' -mindepth 1 -maxdepth 1 -exec rm -rf {} +"
 
       - name: Deploy via rsync
-        env:
-          CD_SSH_HOST: ${{ secrets.CD_SSH_HOST }}
-          CD_SSH_PORT: ${{ secrets.CD_SSH_PORT }}
-          CD_USER: ${{ secrets.CD_USER }}
-          CD_WEB_PATH: ${{ secrets.CD_WEB_PATH }}
+        shell: bash
         run: |
           set -euo pipefail
 
-          SRC="frontend/dist/cobranza-digital"
-          if [ -d "$SRC/browser" ]; then
-            echo "Detected SSR output. Using: $SRC/browser"
-            SRC="$SRC/browser"
-          else
-            echo "Using SPA output: $SRC"
-          fi
-
-          ls -la "$SRC"
-
-          rsync -az --delete -e "ssh -p ${CD_SSH_PORT} -o StrictHostKeyChecking=no" \
-            "$SRC"/ "${CD_USER}@${CD_SSH_HOST}:${CD_WEB_PATH}/"
-
+          # -O = no tocar timestamps de directorios (arregla Operation not permitted)
+          # --no-perms/--no-owner/--no-group para evitar attrs problemáticos
+          rsync -az --delete -O --no-perms --no-owner --no-group \
+            "$DIST_DIR"/ \
+            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p $CD_SSH_PORT" \
+            "$CD_USER@$CD_SSH_HOST:$CD_WEB_PATH/"
