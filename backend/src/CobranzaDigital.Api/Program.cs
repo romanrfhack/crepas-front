@@ -18,8 +18,14 @@ using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
+using System.IO;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo("/var/www/cobranzadigital/api/keys"))
+    .SetApplicationName("CobranzaDigital");
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConfiguration(builder.Configuration.GetSection("Logging"));
@@ -165,7 +171,11 @@ if (!app.Environment.IsEnvironment("Testing"))
     await app.Services.SeedIdentityAsync(builder.Configuration).ConfigureAwait(false);
 }
 
-if (app.Environment.IsDevelopment())
+var swaggerEnabled =
+    app.Environment.IsDevelopment() ||
+    app.Configuration.GetValue<bool>("Swagger:Enabled");
+
+if (swaggerEnabled)
 {
     app.UseSwaggerWithApiVersioning();
 }
