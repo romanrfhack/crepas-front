@@ -2,7 +2,7 @@ name: Deploy API (CobranzaDigital)
 
 on:
   push:
-    branches: [ "main" ]   # cambia si usas master u otra
+    branches: [ "main" ]
     paths:
       - "backend/**"
       - ".github/workflows/deploy-api.yml"
@@ -11,6 +11,13 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
+    env:
+      SSH_HOST: ${{ secrets.CD_SSH_HOST }}
+      SSH_PORT: ${{ secrets.CD_SSH_PORT }}
+      SSH_KEY:  ${{ secrets.CD_SSH_KEY }}
+      SSH_USER: deploy
+
     steps:
       - uses: actions/checkout@v4
 
@@ -21,30 +28,41 @@ jobs:
 
       - name: Publish API
         run: |
-          dotnet restore backend          
+          dotnet restore backend
           dotnet publish backend/src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release -o out/api
 
-      - name: Debug SSH target
-        run: |
-          echo "HOST=${{ secrets.CD_SSH_HOST }}"
-          echo "PORT=${{ secrets.CD_SSH_PORT }}"
-          getent hosts "${{ secrets.CD_SSH_HOST }}" || true
-
       - name: Setup SSH
+        shell: bash
         run: |
+          set -euo pipefail
+
+          PORT="${SSH_PORT:-22}"
+
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "${{ secrets.CD_SSH_KEY }}" > ~/.ssh/id_ed25519
+
+          # clave privada (quita CR por si se pegó con \r\n)
+          printf '%s' "$SSH_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-          ssh-keyscan -4 -T 10 -p ${{ secrets.CD_SSH_PORT }} -H ${{ secrets.CD_SSH_HOST }} >> ~/.ssh/known_hosts
+          # prueba rápida de conectividad
+          timeout 10 bash -c "cat < /dev/null > /dev/tcp/${SSH_HOST}/${PORT}" || (echo "No hay conexión a ${SSH_HOST}:${PORT}" && exit 1)
 
+          ssh-keyscan -4 -T 10 -p "$PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
 
       - name: Upload API to server
+        shell: bash
         run: |
-          ssh -p ${{ secrets.CD_SSH_PORT || '22' }} deploy@${{ secrets.CD_HOST }} "mkdir -p /var/www/cobranzadigital/api/publish && rm -rf /var/www/cobranzadigital/api/publish/*"
-          scp -P ${{ secrets.CD_SSH_PORT || '22' }} -r out/api/* deploy@${{ secrets.CD_HOST }}:/var/www/cobranzadigital/api/publish/
+          set -euo pipefail
+          PORT="${SSH_PORT:-22}"
+
+          ssh -p "$PORT" ${SSH_USER}@${SSH_HOST} "mkdir -p /var/www/cobranzadigital/api/publish && rm -rf /var/www/cobranzadigital/api/publish/*"
+          scp -P "$PORT" -r out/api/* ${SSH_USER}@${SSH_HOST}:/var/www/cobranzadigital/api/publish/
 
       - name: Restart service
+        shell: bash
         run: |
-          ssh -p ${{ secrets.CD_SSH_PORT || '22' }} deploy@${{ secrets.CD_HOST }} "sudo systemctl daemon-reload && sudo systemctl enable cobranzadigital-api && sudo systemctl restart cobranzadigital-api && sudo systemctl status cobranzadigital-api --no-pager -l"
+          set -euo pipefail
+          PORT="${SSH_PORT:-22}"
+
+          ssh -p "$PORT" ${SSH_USER}@${SSH_HOST} "sudo systemctl daemon-reload && sudo systemctl enable cobranzadigital-api && sudo systemctl restart cobranzadigital-api && sudo systemctl status cobranzadigital-api --no-pager -l"
