@@ -69,11 +69,32 @@ jobs:
           ssh -p "${{ secrets.CD_SSH_PORT }}" deploy@"${{ secrets.CD_SSH_HOST }}" \
             "mkdir -p /var/www/cobranzadigital/web && rm -rf /var/www/cobranzadigital/web/*"
 
+      - name: Show dist output
+        run: |
+          pwd
+          ls -la frontend/dist
+          ls -la frontend/dist/cobranza-digital || true
+          ls -la frontend/dist/cobranza-digital/browser || true
+
       - name: Deploy via rsync
-        shell: bash
+        env:
+          CD_SSH_HOST: ${{ secrets.CD_SSH_HOST }}
+          CD_SSH_PORT: ${{ secrets.CD_SSH_PORT }}
+          CD_USER: ${{ secrets.CD_USER }}
+          CD_WEB_PATH: ${{ secrets.CD_WEB_PATH }}
         run: |
           set -euo pipefail
-          rsync -az --delete \
-            -e "ssh -p ${{ secrets.CD_SSH_PORT }} -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes" \
-            "${{ steps.out.outputs.out_dir }}/" \
-            deploy@"${{ secrets.CD_SSH_HOST }}":/var/www/cobranzadigital/web/
+
+          SRC="frontend/dist/cobranza-digital"
+          if [ -d "$SRC/browser" ]; then
+            echo "Detected SSR output. Using: $SRC/browser"
+            SRC="$SRC/browser"
+          else
+            echo "Using SPA output: $SRC"
+          fi
+
+          ls -la "$SRC"
+
+          rsync -az --delete -e "ssh -p ${CD_SSH_PORT} -o StrictHostKeyChecking=no" \
+            "$SRC"/ "${CD_USER}@${CD_SSH_HOST}:${CD_WEB_PATH}/"
+
