@@ -21,16 +21,20 @@ interface RegisterModel {
   selector: 'app-register',
   imports: [FormField, RouterLink],
   template: `
-    <main class="auth-container">
-      <section class="auth-card" aria-labelledby="register-title">
+    <div class="auth-page">
+      <div class="auth-card">
+        <!-- Header con barra decorativa -->
         <header class="auth-header">
-          <h1 id="register-title">Crear cuenta</h1>
-          <p>Completa los datos para registrarte.</p>
+          <h1 id="register-title">&#128270; Crear cuenta</h1>
+          <p class="auth-subtitle">Completa tus datos para registrarte</p>
+          <div class="header-decoration"></div>
         </header>
 
+        <!-- Formulario -->
         <form (submit)="onSubmit($event)" class="auth-form" novalidate>
-          <div class="field">
-            <label for="register-email">Correo</label>
+          <!-- Campo email -->
+          <div class="form-field">
+            <label for="register-email">Correo electrónico</label>
             <input
               id="register-email"
               type="email"
@@ -38,13 +42,19 @@ interface RegisterModel {
               autocomplete="email"
               [attr.aria-invalid]="emailInvalid()"
               aria-required="true"
+              placeholder="ejemplo@correo.com"
+              class="form-input"
             />
             @if (emailInvalid()) {
-              <p class="field-error" role="alert">{{ emailErrorMessage() }}</p>
+              <div class="field-error" role="alert">
+                <span class="error-icon">&#9888;</span>
+                <span>{{ emailErrorMessage() }}</span>
+              </div>
             }
           </div>
 
-          <div class="field">
+          <!-- Campo contraseña -->
+          <div class="form-field">
             <label for="register-password">Contraseña</label>
             <input
               id="register-password"
@@ -53,119 +63,293 @@ interface RegisterModel {
               autocomplete="new-password"
               [attr.aria-invalid]="passwordInvalid()"
               aria-required="true"
+              placeholder="Mínimo 6 caracteres"
+              class="form-input"
             />
             @if (passwordInvalid()) {
-              <p class="field-error" role="alert">
-                {{ passwordErrorMessage() }}
-              </p>
+              <div class="field-error" role="alert">
+                <span class="error-icon">&#9888;</span>
+                <span>{{ passwordErrorMessage() }}</span>
+              </div>
             }
           </div>
 
+          <!-- Mensaje de error general -->
           @if (errorMessage()) {
-            <p class="form-error" role="alert">{{ errorMessage() }}</p>
+            <div class="error-message" role="alert">
+              <span class="error-icon">&#9888;</span>
+              <span>{{ errorMessage() }}</span>
+            </div>
           }
 
-          <button type="submit" [disabled]="submitDisabled()" class="primary-button">
+          <!-- Botón de registro -->
+          <button type="submit" [disabled]="submitDisabled()" class="btn-primary">
             @if (isSubmitting()) {
+              <span class="spinner"></span>
               <span>Registrando...</span>
             } @else {
-              <span>Crear cuenta</span>
+              <span>✨ Crear cuenta</span>
             }
           </button>
         </form>
 
+        <!-- Footer con enlace a login -->
         <footer class="auth-footer">
           <span>¿Ya tienes cuenta?</span>
-          <a routerLink="/login">Iniciar sesión</a>
+          <a routerLink="/login" class="auth-link">Iniciar sesión</a>
         </footer>
-      </section>
-    </main>
+      </div>
+    </div>
   `,
-  styles: `
-    .auth-container {
+  styles: [`
+    :host {
+      display: block;
+      /* Variables de diseño - mismas que en el POS y Admin */
+      --brand-rose: #f3b6c2;
+      --brand-rose-strong: #e89aac;
+      --brand-cream: #fbf6ef;
+      --brand-cocoa: #6b3f2a;
+      --brand-ink: #0f172a;
+      --brand-muted: #475569;
+      --ring: rgba(232, 154, 172, 0.55);
+      --border: rgba(243, 182, 194, 0.35);
+      --shadow: 0 20px 60px rgba(15, 23, 42, 0.14);
+      --shadow-sm: 0 8px 20px rgba(201, 141, 106, 0.12);
+      --radius-md: 0.75rem;
+      --radius-lg: 22px;
+      --transition: 140ms ease;
+    }
+
+    .auth-page {
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2rem 1rem;
-      background: #f5f7fb;
+      padding: 1.5rem;
+      background: linear-gradient(145deg, #f9fbfd 0%, #f1f5f9 100%);
     }
+
     .auth-card {
       width: min(420px, 100%);
-      background: #ffffff;
-      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
       padding: 2rem;
-      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-      display: grid;
-      gap: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
     }
+
+    /* Header */
+    .auth-header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
     .auth-header h1 {
       margin: 0;
-      font-size: 1.5rem;
-      color: #0f172a;
-    }
-    .auth-header p {
-      margin: 0.5rem 0 0;
-      color: #475569;
-    }
-    .auth-form {
-      display: grid;
-      gap: 1rem;
-    }
-    .field {
-      display: grid;
+      font-size: 1.75rem;
+      font-weight: 800;
+      color: var(--brand-cocoa);
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
       gap: 0.5rem;
     }
-    label {
+
+    .auth-subtitle {
+      margin: 0;
+      color: var(--brand-muted);
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+
+    .header-decoration {
+      width: 60px;
+      height: 4px;
+      background: linear-gradient(90deg, var(--brand-rose-strong), #c98d6a);
+      border-radius: 999px;
+      margin-top: 0.5rem;
+    }
+
+    /* Formulario */
+    .auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .form-field label {
       font-weight: 600;
-      color: #0f172a;
+      font-size: 0.9rem;
+      color: var(--brand-ink);
     }
-    input {
-      padding: 0.65rem 0.75rem;
-      border-radius: 8px;
-      border: 1px solid #cbd5f5;
-      font-size: 1rem;
+
+    .form-input {
+      width: 100%;
+      padding: 0.7rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(107, 63, 42, 0.16);
+      background: white;
+      font-size: 0.95rem;
+      transition: all var(--transition);
     }
-    input:focus-visible {
-      outline: 3px solid #94a3ff;
+
+    .form-input:hover {
+      border-color: rgba(232, 154, 172, 0.45);
+    }
+
+    .form-input:focus-visible {
+      outline: 3px solid var(--ring);
       outline-offset: 1px;
+      border-color: rgba(232, 154, 172, 0.55);
+      box-shadow: 0 0 0 4px rgba(232, 154, 172, 0.16);
     }
+
+    /* Errores de campo */
     .field-error {
-      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.8rem;
       color: #b42318;
-      font-size: 0.85rem;
+      background: rgba(180, 35, 24, 0.08);
+      border: 1px solid rgba(180, 35, 24, 0.2);
+      border-radius: 999px;
+      padding: 0.35rem 0.9rem;
+      margin-top: 0.15rem;
     }
-    .form-error {
-      margin: 0;
+
+    .error-icon {
+      font-size: 0.9rem;
+    }
+
+    /* Mensaje de error general */
+    .error-message {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: rgba(180, 35, 24, 0.08);
+      border: 1px solid rgba(180, 35, 24, 0.2);
+      border-radius: var(--radius-md);
       color: #b42318;
-      background: #fff1f0;
-      padding: 0.75rem;
-      border-radius: 8px;
+      font-weight: 500;
+      animation: slide-down 200ms ease-out;
     }
-    .primary-button {
+
+    @keyframes slide-down {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Botón primario */
+    .btn-primary {
+      background: linear-gradient(135deg, var(--brand-rose-strong), #c98d6a);
+      color: white;
       border: none;
       border-radius: 999px;
-      padding: 0.75rem 1.5rem;
-      background: #1d4ed8;
-      color: #ffffff;
-      font-weight: 600;
+      padding: 0.8rem 1.6rem;
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: 0.02em;
+      box-shadow: 0 8px 20px rgba(201, 141, 106, 0.25);
+      transition: transform var(--transition), filter var(--transition), box-shadow var(--transition);
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: 100%;
     }
-    .primary-button[disabled] {
+
+    .btn-primary:hover:not([disabled]) {
+      transform: translateY(-2px);
+      filter: saturate(1.1) brightness(0.98);
+      box-shadow: 0 12px 28px rgba(201, 141, 106, 0.4);
+    }
+
+    .btn-primary[disabled] {
       opacity: 0.6;
       cursor: not-allowed;
+      box-shadow: none;
+      filter: grayscale(0.4);
     }
+
+    /* Spinner para estado de carga */
+    .spinner {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Footer */
     .auth-footer {
       display: flex;
       gap: 0.5rem;
       justify-content: center;
-      color: #475569;
+      color: var(--brand-muted);
+      font-size: 0.9rem;
     }
-    .auth-footer a {
-      color: #1d4ed8;
-      font-weight: 600;
+
+    .auth-link {
+      color: var(--brand-cocoa);
+      font-weight: 700;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(107, 63, 42, 0.25);
+      padding-bottom: 1px;
+      transition: border-color var(--transition), color var(--transition);
     }
-  `,
+
+    .auth-link:hover {
+      color: #4f2d1f;
+      border-bottom-color: rgba(232, 154, 172, 0.65);
+    }
+
+    .auth-link:focus-visible {
+      outline: 3px solid var(--ring);
+      outline-offset: 2px;
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+      .auth-card {
+        padding: 1.5rem;
+      }
+
+      .auth-header h1 {
+        font-size: 1.5rem;
+      }
+
+      .btn-primary {
+        padding: 0.7rem 1.2rem;
+      }
+    }
+  `],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RegisterComponent {
@@ -178,7 +362,8 @@ export class RegisterComponent {
     email: '',
     password: '',
   });
-  // Signal Forms is experimental; this new app benefits from native reactive state and validation.
+
+  // Signal Forms (experimental)
   readonly fieldTree = form(this.model, (schemaPath) => {
     required(schemaPath.email, { message: 'Ingresa un correo.' });
     email(schemaPath.email, { message: 'Ingresa un correo válido.' });
