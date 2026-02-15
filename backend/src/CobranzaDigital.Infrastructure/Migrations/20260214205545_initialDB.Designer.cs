@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CobranzaDigital.Infrastructure.Migrations
 {
     [DbContext(typeof(CobranzaDigitalDbContext))]
-    [Migration("20260212230944_Initial")]
-    partial class Initial
+    [Migration("20260214205545_initialDB")]
+    partial class initialDB
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
