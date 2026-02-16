@@ -28,6 +28,7 @@
             class="btn-icon-small"
             (click)="startCloseShift()"
             [disabled]="loading()"
+            data-testid="open-close-shift"
             title="Cerrar turno"
             aria-label="Cerrar turno"
           >
@@ -40,6 +41,7 @@
             class="btn-icon-small"
             (click)="showOpenShiftModal.set(true)"
             [disabled]="loading()"
+            data-testid="open-shift"
             title="Abrir turno"
             aria-label="Abrir turno"
           >
@@ -112,7 +114,7 @@
     <section class="sales-list" aria-label="Ventas del turno actual">
       <h3>Ventas registradas en esta sesión</h3>
       @for (sale of shiftSales(); track sale.saleId) {
-        <div class="sale-item">
+        <div class="sale-item" [attr.data-testid]="'sale-row-' + sale.saleId">
           <div>
             <strong>{{ sale.folio }}</strong>
             <p>{{ formatDateTime(sale.occurredAtUtc) }}</p>
@@ -124,7 +126,13 @@
             }}</span>
           </div>
           @if (sale.status !== 'Void') {
-            <button type="button" (click)="openVoidModal(sale)">Cancelar</button>
+            <button
+              type="button"
+              [attr.data-testid]="'void-sale-' + sale.saleId"
+              (click)="openVoidModal(sale)"
+            >
+              Cancelar
+            </button>
           }
         </div>
       }
@@ -153,6 +161,7 @@
         [items]="cartItems()"
         [estimatedTotal]="estimatedTotal()"
         [checkoutDisabled]="!canCheckout()"
+        checkoutTestId="open-payment"
         (increase)="increaseQty($event)"
         (decrease)="decreaseQty($event)"
         (remove)="removeFromCart($event)"
@@ -282,11 +291,16 @@
               id="differenceReason"
               rows="3"
               formControlName="reason"
+              data-testid="close-reason"
               [attr.aria-required]="requiresDifferenceReason()"
               [placeholder]="
                 requiresDifferenceReason() ? 'Motivo obligatorio cuando hay diferencia' : 'Opcional'
               "
             ></textarea>
+
+            @if (closeShiftError(); as closeError) {
+              <p class="error" role="alert" data-testid="close-error">{{ closeError }}</p>
+            }
 
             <label for="closeEvidence">Notas de cierre (opcional)</label>
             <textarea id="closeEvidence" rows="2" formControlName="evidence"></textarea>
@@ -295,7 +309,12 @@
 
         <div class="modal-actions modal-actions--sticky">
           <button type="button" (click)="showCloseShiftModal.set(false)">Cancelar</button>
-          <button type="button" (click)="submitCloseShift()" [disabled]="loading()">
+          <button
+            type="button"
+            data-testid="confirm-close-shift"
+            (click)="submitCloseShift()"
+            [disabled]="loading()"
+          >
             Confirmar cierre
           </button>
         </div>
@@ -314,7 +333,7 @@
         }
         <div [formGroup]="voidForm" class="void-form">
           <label for="void-reason-code">Motivo</label>
-          <select id="void-reason-code" formControlName="reasonCode">
+          <select id="void-reason-code" data-testid="void-reason" formControlName="reasonCode">
             <option value="CashierError">CashierError</option>
             <option value="CustomerRequest">CustomerRequest</option>
             <option value="DuplicateSale">DuplicateSale</option>
@@ -324,11 +343,27 @@
           <input id="void-reason-text" type="text" formControlName="reasonText" />
 
           <label for="void-note">Nota interna (opcional)</label>
-          <textarea id="void-note" rows="2" formControlName="note"></textarea>
+          <textarea
+            id="void-note"
+            rows="2"
+            data-testid="void-note"
+            formControlName="note"
+          ></textarea>
+
+          @if (voidForbiddenError()) {
+            <p class="error" role="alert" data-testid="void-403">
+              No autorizado para cancelar esta venta.
+            </p>
+          }
         </div>
         <div class="modal-actions">
           <button type="button" (click)="showVoidModal.set(false)">Cerrar</button>
-          <button type="button" [disabled]="loading()" (click)="confirmVoidSale()">
+          <button
+            type="button"
+            data-testid="confirm-void"
+            [disabled]="loading()"
+            (click)="confirmVoidSale()"
+          >
             Confirmar cancelación
           </button>
         </div>

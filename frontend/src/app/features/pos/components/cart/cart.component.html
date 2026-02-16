@@ -7,7 +7,7 @@
     <div class="empty-cart">
       <span>🛒</span>
       <p>El carrito está vacío</p>
-      <p style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--brand-muted);">
+      <p style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--brand-muted)">
         Agrega productos desde el catálogo
       </p>
     </div>
@@ -67,6 +67,7 @@
       <button
         type="button"
         class="btn-checkout"
+        [attr.data-testid]="checkoutTestId()"
         [disabled]="items().length === 0 || checkoutDisabled()"
         (click)="checkout.emit()"
       >

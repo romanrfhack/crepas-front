@@ -16,6 +16,7 @@
               <label [for]="'payment-method-' + line.id">Método</label>
               <select
                 [id]="'payment-method-' + line.id"
+                [attr.data-testid]="'payment-method-' + index"
                 [value]="line.method"
                 (change)="updateMethod(line.id, $any($event.target).value)"
               >
@@ -29,6 +30,7 @@
               <label [for]="'payment-amount-' + line.id">Monto</label>
               <input
                 [id]="'payment-amount-' + line.id"
+                [attr.data-testid]="'payment-amount-' + index"
                 type="number"
                 min="0"
                 step="0.01"
@@ -41,6 +43,7 @@
               <label [for]="'payment-reference-' + line.id">Referencia</label>
               <input
                 [id]="'payment-reference-' + line.id"
+                [attr.data-testid]="'payment-ref-' + index"
                 type="text"
                 [value]="line.reference"
                 [disabled]="line.method === 'Cash'"
@@ -49,12 +52,16 @@
               />
             </div>
           </div>
-          <button type="button" class="btn-link" (click)="removePaymentLine(line.id)">Eliminar línea</button>
+          <button type="button" class="btn-link" (click)="removePaymentLine(line.id)">
+            Eliminar línea
+          </button>
         </div>
       }
     </div>
 
-    <button type="button" class="btn-add" (click)="addPaymentLine()">+ Agregar pago</button>
+    <button type="button" class="btn-add" data-testid="add-payment" (click)="addPaymentLine()">
+      + Agregar pago
+    </button>
 
     <div class="cash-feedback">
       <div class="change-row">
@@ -75,7 +82,12 @@
 
     <div class="modal-actions">
       <button type="button" (click)="cancelAction.emit()">Cancelar</button>
-      <button type="button" [disabled]="!canSubmit()" (click)="confirmPayment()">
+      <button
+        type="button"
+        data-testid="confirm-payment"
+        [disabled]="!canSubmit()"
+        (click)="confirmPayment()"
+      >
         <span>✅</span> Confirmar cobro
       </button>
     </div>

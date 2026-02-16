@@ -14,7 +14,10 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "prepare": "husky",
-    "test:changed": "ng test --watch=false --include='src/**/*.spec.ts'"
+    "test:changed": "ng test --watch=false --include='src/**/*.spec.ts'",
+    "e2e": "playwright test",
+    "e2e:ci": "playwright test --reporter=line",
+    "e2e:ui": "playwright test --ui"
   },
   "prettier": {
     "printWidth": 100,
@@ -60,6 +63,7 @@
     "prettier": "^3.8.1",
     "typescript": "~5.9.2",
     "typescript-eslint": "8.50.1",
-    "vitest": "^4.0.8"
+    "vitest": "^4.0.8",
+    "@playwright/test": "^1.55.0"
   }
 }
