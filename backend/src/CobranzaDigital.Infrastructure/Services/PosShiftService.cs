@@ -5,6 +5,7 @@ using System.Text.Json;
 using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Common.Exceptions;
 using CobranzaDigital.Application.Contracts.PosSales;
+using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Interfaces.PosSales;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
@@ -21,17 +22,22 @@ public sealed class PosShiftService : IPosShiftService
     private readonly CobranzaDigitalDbContext _db;
     private readonly IAuditLogger _auditLogger;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IBusinessTime _businessTime;
+    private readonly PosStoreContextService _storeContext;
 
-    public PosShiftService(CobranzaDigitalDbContext db, IAuditLogger auditLogger, IHttpContextAccessor httpContextAccessor)
+    public PosShiftService(CobranzaDigitalDbContext db, IAuditLogger auditLogger, IHttpContextAccessor httpContextAccessor, IBusinessTime businessTime, PosStoreContextService storeContext)
     {
         _db = db;
         _auditLogger = auditLogger;
         _httpContextAccessor = httpContextAccessor;
+        _businessTime = businessTime;
+        _storeContext = storeContext;
     }
 
-    public async Task<PosShiftDto?> GetCurrentShiftAsync(CancellationToken ct)
+    public async Task<PosShiftDto?> GetCurrentShiftAsync(Guid? storeId, CancellationToken ct)
     {
-        var shift = await GetLatestOpenShiftAsync(ct).ConfigureAwait(false);
+        var resolvedStoreId = (await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false)).StoreId;
+        var shift = await GetLatestOpenShiftAsync(resolvedStoreId, ct).ConfigureAwait(false);
         return shift is null ? null : Map(shift);
     }
 
@@ -43,10 +49,13 @@ public sealed class PosShiftService : IPosShiftService
             throw ValidationError("openingCashAmount", "openingCashAmount cannot be negative.");
         }
 
+        var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
+        var resolvedStoreId = (await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false)).StoreId;
+
         if (request.ClientOperationId.HasValue)
         {
             var existingByOperation = await _db.PosShifts.AsNoTracking()
-                .Where(x => x.OpenOperationId == request.ClientOperationId)
+                .Where(x => x.OpenOperationId == request.ClientOperationId && x.OpenedByUserId == userId && x.StoreId == resolvedStoreId)
                 .FirstOrDefaultAsync(ct)
                 .ConfigureAwait(false);
 
@@ -56,22 +65,22 @@ public sealed class PosShiftService : IPosShiftService
             }
         }
 
-        var existingOpen = await GetLatestOpenShiftAsync(ct).ConfigureAwait(false);
+        var existingOpen = await GetLatestOpenShiftAsync(resolvedStoreId, ct).ConfigureAwait(false);
         if (existingOpen is not null)
         {
             return Map(existingOpen);
         }
 
-        var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
         var shift = new PosShift
         {
             Id = Guid.NewGuid(),
-            OpenedAtUtc = DateTimeOffset.UtcNow,
+            OpenedAtUtc = _businessTime.UtcNow,
             OpenedByUserId = userId,
             OpenedByEmail = GetCurrentUserEmail(),
             OpeningCashAmount = openingCashAmount,
             OpenNotes = request.Notes,
-            OpenOperationId = request.ClientOperationId
+            OpenOperationId = request.ClientOperationId,
+            StoreId = resolvedStoreId
         };
 
         _db.PosShifts.Add(shift);
@@ -92,21 +101,31 @@ public sealed class PosShiftService : IPosShiftService
         return Map(shift);
     }
 
-    public async Task<ShiftClosePreviewDto> GetClosePreviewAsync(CancellationToken ct)
+    public async Task<ShiftClosePreviewDto> GetClosePreviewAsync(ShiftClosePreviewRequestDto request, CancellationToken ct)
     {
-        var openShift = await GetOpenShiftForCloseAsync(ct).ConfigureAwait(false);
-        var now = DateTimeOffset.UtcNow;
-        var salesCashTotal = await GetCashSalesTotalAsync(openShift.Id, openShift.OpenedAtUtc, now, ct).ConfigureAwait(false);
+        var storeId = (await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false)).StoreId;
+        var openShift = await GetOpenShiftForCloseAsync(request.ShiftId, storeId, ct).ConfigureAwait(false);
+        var now = _businessTime.UtcNow;
+        var breakdown = await GetPaymentBreakdownAsync(openShift.Id, openShift.OpenedAtUtc, now, ct).ConfigureAwait(false);
+        var salesCashTotal = breakdown.CashAmount;
         var expectedCashAmount = RoundMoney(openShift.OpeningCashAmount + salesCashTotal);
+        var counted = request.CashCount is { Count: > 0 }
+            ? RoundMoney(request.CashCount.Sum(x => x.DenominationValue * x.Count))
+            : null;
+        var difference = counted.HasValue ? RoundMoney(counted.Value - expectedCashAmount) : null;
 
-        return new ShiftClosePreviewDto(openShift.Id, openShift.OpenedAtUtc, openShift.OpeningCashAmount, salesCashTotal, expectedCashAmount);
+        return new ShiftClosePreviewDto(openShift.Id, openShift.OpenedAtUtc, openShift.OpeningCashAmount, salesCashTotal, expectedCashAmount, counted, difference, openShift.ClosingCashAmount, breakdown);
     }
 
     public async Task<ClosePosShiftResultDto> CloseShiftAsync(ClosePosShiftRequestDto request, CancellationToken ct)
     {
-        ValidateCountedDenominations(request.CountedDenominations);
+        if (request.CountedDenominations is { Count: > 0 })
+        {
+            ValidateCountedDenominations(request.CountedDenominations);
+        }
 
-        var openShift = await GetLatestOpenShiftForUpdateAsync(ct).ConfigureAwait(false);
+        var storeId = (await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false)).StoreId;
+        var openShift = await GetLatestOpenShiftForUpdateAsync(request.ShiftId, storeId, ct).ConfigureAwait(false);
         if (openShift is null)
         {
             if (request.ClientOperationId.HasValue)
@@ -130,11 +149,20 @@ public sealed class PosShiftService : IPosShiftService
             return MapClosed(openShift);
         }
 
-        var closedAtUtc = DateTimeOffset.UtcNow;
-        var salesCashTotal = await GetCashSalesTotalAsync(openShift.Id, openShift.OpenedAtUtc, closedAtUtc, ct).ConfigureAwait(false);
+        var closedAtUtc = _businessTime.UtcNow;
+        var breakdown = await GetPaymentBreakdownAsync(openShift.Id, openShift.OpenedAtUtc, closedAtUtc, ct).ConfigureAwait(false);
+        var salesCashTotal = breakdown.CashAmount;
         var expectedTotal = RoundMoney(openShift.OpeningCashAmount + salesCashTotal);
-        var countedTotal = RoundMoney(request.CountedDenominations.Sum(x => x.DenominationValue * x.Count));
+        var countedTotal = request.CountedDenominations is { Count: > 0 }
+            ? RoundMoney(request.CountedDenominations.Sum(x => x.DenominationValue * x.Count))
+            : expectedTotal;
         var difference = RoundMoney(countedTotal - expectedTotal);
+
+        var threshold = (await _db.PosSettings.AsNoTracking().FirstAsync(ct).ConfigureAwait(false)).CashDifferenceThreshold;
+        if (Math.Abs(difference) > threshold && string.IsNullOrWhiteSpace(request.CloseReason))
+        {
+            throw ValidationError("closeReason", "closeReason is required when cash difference exceeds threshold.");
+        }
 
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
         var before = new
@@ -152,8 +180,11 @@ public sealed class PosShiftService : IPosShiftService
         openShift.ClosingCashAmount = countedTotal;
         openShift.ExpectedCashAmount = expectedTotal;
         openShift.CashDifference = difference;
-        openShift.DenominationsJson = JsonSerializer.Serialize(request.CountedDenominations);
+        openShift.DenominationsJson = request.CountedDenominations is { Count: > 0 }
+            ? JsonSerializer.Serialize(request.CountedDenominations)
+            : openShift.DenominationsJson;
         openShift.CloseNotes = request.ClosingNotes;
+        openShift.CloseReason = request.CloseReason;
         openShift.CloseOperationId = request.ClientOperationId;
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -172,13 +203,15 @@ public sealed class PosShiftService : IPosShiftService
                 openShift.ExpectedCashAmount,
                 openShift.CashDifference,
                 SalesCashTotal = salesCashTotal,
-                request.CountedDenominations
+                Breakdown = breakdown,
+                request.CountedDenominations,
+                request.CloseReason
             },
             Source: "POS",
             Notes: "Shift closed",
             OccurredAtUtc: DateTime.UtcNow), ct).ConfigureAwait(false);
 
-        return new ClosePosShiftResultDto(openShift.Id, openShift.OpenedAtUtc, closedAtUtc, openShift.OpeningCashAmount, salesCashTotal, expectedTotal, countedTotal, difference, openShift.CloseNotes);
+        return new ClosePosShiftResultDto(openShift.Id, openShift.OpenedAtUtc, closedAtUtc, openShift.OpeningCashAmount, salesCashTotal, expectedTotal, countedTotal, difference, openShift.CloseNotes, openShift.CloseReason);
     }
 
     private static PosShiftDto Map(PosShift shift) => new(
@@ -192,7 +225,8 @@ public sealed class PosShiftService : IPosShiftService
         shift.ClosedByEmail,
         shift.ClosingCashAmount,
         shift.OpenNotes,
-        shift.CloseNotes);
+        shift.CloseNotes,
+        shift.StoreId);
 
     private static ClosePosShiftResultDto MapClosed(PosShift shift)
     {
@@ -202,18 +236,19 @@ public sealed class PosShiftService : IPosShiftService
         var closedAt = shift.ClosedAtUtc ?? DateTimeOffset.UtcNow;
         var salesCashTotal = RoundMoney(expected - shift.OpeningCashAmount);
 
-        return new ClosePosShiftResultDto(shift.Id, shift.OpenedAtUtc, closedAt, shift.OpeningCashAmount, salesCashTotal, expected, counted, difference, shift.CloseNotes);
+        return new ClosePosShiftResultDto(shift.Id, shift.OpenedAtUtc, closedAt, shift.OpeningCashAmount, salesCashTotal, expected, counted, difference, shift.CloseNotes, shift.CloseReason);
     }
 
-    private async Task<PosShift> GetOpenShiftForCloseAsync(CancellationToken ct)
+    private async Task<PosShift> GetOpenShiftForCloseAsync(Guid? shiftId, Guid storeId, CancellationToken ct)
     {
-        var openShift = await GetLatestOpenShiftForUpdateAsync(ct).ConfigureAwait(false);
+        var openShift = await GetLatestOpenShiftForUpdateAsync(shiftId, storeId, ct).ConfigureAwait(false);
         return openShift ?? throw new ConflictException("No open shift found.");
     }
 
-    private async Task<PosShift?> GetLatestOpenShiftAsync(CancellationToken ct)
+    private async Task<PosShift?> GetLatestOpenShiftAsync(Guid storeId, CancellationToken ct)
     {
-        var openShiftsQuery = _db.PosShifts.AsNoTracking().Where(x => x.ClosedAtUtc == null);
+        var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
+        var openShiftsQuery = _db.PosShifts.AsNoTracking().Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId);
 
         if (_db.Database.IsSqlite())
         {
@@ -225,9 +260,14 @@ public sealed class PosShiftService : IPosShiftService
         return await openShiftsQuery.OrderByDescending(x => x.OpenedAtUtc).FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
-    private async Task<PosShift?> GetLatestOpenShiftForUpdateAsync(CancellationToken ct)
+    private async Task<PosShift?> GetLatestOpenShiftForUpdateAsync(Guid? shiftId, Guid storeId, CancellationToken ct)
     {
-        var openShiftsQuery = _db.PosShifts.Where(x => x.ClosedAtUtc == null);
+        var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
+        var openShiftsQuery = _db.PosShifts.Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId);
+        if (shiftId.HasValue)
+        {
+            openShiftsQuery = openShiftsQuery.Where(x => x.Id == shiftId.Value);
+        }
 
         if (_db.Database.IsSqlite())
         {
@@ -239,45 +279,32 @@ public sealed class PosShiftService : IPosShiftService
         return await openShiftsQuery.OrderByDescending(x => x.OpenedAtUtc).FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
-    private async Task<decimal> GetCashSalesTotalAsync(Guid shiftId, DateTimeOffset openedAtUtc, DateTimeOffset untilUtc, CancellationToken ct)
+    private async Task<PaymentBreakdownDto> GetPaymentBreakdownAsync(Guid shiftId, DateTimeOffset openedAtUtc, DateTimeOffset untilUtc, CancellationToken ct)
     {
-        if (_db.Database.IsSqlite())
-        {
-            var saleIds = (await _db.Sales.AsNoTracking()
-                .Select(x => new { x.Id, x.ShiftId, x.Status, x.OccurredAtUtc })
-                .ToListAsync(ct)
-                .ConfigureAwait(false))
-                .Where(x => x.ShiftId == shiftId)
-                .Where(x => x.Status == SaleStatus.Completed)
-                .Where(x => x.OccurredAtUtc >= openedAtUtc && x.OccurredAtUtc <= untilUtc)
-                .Select(x => x.Id)
-                .ToList();
-
-            if (saleIds.Count == 0)
-            {
-                return 0m;
-            }
-
-            var cashPayments = await _db.Payments.AsNoTracking()
-                .Where(x => saleIds.Contains(x.SaleId))
-                .Where(x => x.Method == PaymentMethod.Cash)
-                .Select(x => x.Amount)
-                .ToListAsync(ct)
-                .ConfigureAwait(false);
-
-            return RoundMoney(cashPayments.Sum());
-        }
-
-        var total = await _db.Sales.AsNoTracking()
-            .Join(_db.Payments.AsNoTracking(), sale => sale.Id, payment => payment.SaleId, (sale, payment) => new { sale, payment })
-            .Where(x => x.sale.ShiftId == shiftId)
-            .Where(x => x.sale.Status == SaleStatus.Completed)
-            .Where(x => x.sale.OccurredAtUtc >= openedAtUtc && x.sale.OccurredAtUtc <= untilUtc)
-            .Where(x => x.payment.Method == PaymentMethod.Cash)
-            .SumAsync(x => (decimal?)x.payment.Amount, ct)
+        var sales = await _db.Sales.AsNoTracking()
+            .Where(x => x.ShiftId == shiftId)
+            .Where(x => x.Status == SaleStatus.Completed)
+            .Where(x => x.OccurredAtUtc >= openedAtUtc && x.OccurredAtUtc <= untilUtc)
+            .Select(x => x.Id)
+            .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        return RoundMoney(total ?? 0m);
+        if (sales.Count == 0)
+        {
+            return new PaymentBreakdownDto(0m, 0m, 0m, 0);
+        }
+
+        var payments = await _db.Payments.AsNoTracking()
+            .Where(x => sales.Contains(x.SaleId))
+            .Select(x => new { x.Method, x.Amount })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return new PaymentBreakdownDto(
+            RoundMoney(payments.Where(x => x.Method == PaymentMethod.Cash).Sum(x => x.Amount)),
+            RoundMoney(payments.Where(x => x.Method == PaymentMethod.Card).Sum(x => x.Amount)),
+            RoundMoney(payments.Where(x => x.Method == PaymentMethod.Transfer).Sum(x => x.Amount)),
+            sales.Count);
     }
 
     private static decimal RoundMoney(decimal amount) => decimal.Round(amount, 2, MidpointRounding.AwayFromZero);

@@ -14,22 +14,35 @@ public sealed record OpenPosShiftRequestDto
 
     public Guid? ClientOperationId { get; init; }
 
+    public Guid? StoreId { get; init; }
+
     public decimal ResolveOpeningCashAmount() => StartingCashAmount ?? OpeningCashAmount ?? 0m;
 }
 
 public sealed record CountedDenominationDto(decimal DenominationValue, int Count);
 
 public sealed record ClosePosShiftRequestDto(
-    IReadOnlyCollection<CountedDenominationDto> CountedDenominations,
+    Guid? ShiftId,
+    IReadOnlyCollection<CountedDenominationDto>? CountedDenominations,
     string? ClosingNotes,
-    Guid? ClientOperationId);
+    Guid? ClientOperationId,
+    string? CloseReason,
+    Guid? StoreId);
+
+public sealed record ShiftClosePreviewRequestDto(Guid? ShiftId, IReadOnlyCollection<CountedDenominationDto>? CashCount, Guid? StoreId);
+
+public sealed record PaymentBreakdownDto(decimal CashAmount, decimal CardAmount, decimal TransferAmount, int TotalSalesCount);
 
 public sealed record ShiftClosePreviewDto(
     Guid ShiftId,
     DateTimeOffset OpenedAtUtc,
     decimal OpeningCashAmount,
     decimal SalesCashTotal,
-    decimal ExpectedCashAmount);
+    decimal ExpectedCashAmount,
+    decimal? CountedCashAmount,
+    decimal? Difference,
+    decimal? LastCashCount,
+    PaymentBreakdownDto Breakdown);
 
 public sealed record ClosePosShiftResultDto(
     Guid ShiftId,
@@ -40,7 +53,8 @@ public sealed record ClosePosShiftResultDto(
     decimal ExpectedCashAmount,
     decimal CountedCashAmount,
     decimal Difference,
-    string? CloseNotes);
+    string? CloseNotes,
+    string? CloseReason);
 
 public sealed record PosShiftDto(
     Guid Id,
@@ -53,4 +67,5 @@ public sealed record PosShiftDto(
     string? ClosedByEmail,
     decimal? ClosingCashAmount,
     string? OpenNotes,
-    string? CloseNotes);
+    string? CloseNotes,
+    Guid StoreId);

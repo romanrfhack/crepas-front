@@ -26,4 +26,10 @@ public sealed class PosSalesController : ControllerBase
     {
         return _service.CreateSaleAsync(request, ct);
     }
+
+    [HttpPost("{saleId:guid}/void")]
+    public Task<VoidSaleResponseDto> VoidSale(Guid saleId, [FromBody] VoidSaleRequestDto request, CancellationToken ct)
+    {
+        return _service.VoidSaleAsync(saleId, request, ct);
+    }
 }

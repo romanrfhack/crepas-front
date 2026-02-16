@@ -4,6 +4,7 @@ using System.Security.Claims;
 using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Common.Exceptions;
 using CobranzaDigital.Application.Contracts.PosSales;
+using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Interfaces.PosSales;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Options;
@@ -26,24 +27,34 @@ public sealed class PosSalesService : IPosSalesService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<PosSalesService> _logger;
     private readonly PosOptions _posOptions;
+    private readonly IBusinessTime _businessTime;
+    private readonly PosStoreContextService _storeContext;
+    private readonly IPointsReversalService _pointsReversalService;
 
     public PosSalesService(
         CobranzaDigitalDbContext db,
         IAuditLogger auditLogger,
         IHttpContextAccessor httpContextAccessor,
         ILogger<PosSalesService> logger,
-        IOptions<PosOptions> posOptions)
+        IOptions<PosOptions> posOptions,
+        IBusinessTime businessTime,
+        PosStoreContextService storeContext,
+        IPointsReversalService pointsReversalService)
     {
         _db = db;
         _auditLogger = auditLogger;
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
         _posOptions = posOptions.Value;
+        _businessTime = businessTime;
+        _storeContext = storeContext;
+        _pointsReversalService = pointsReversalService;
     }
 
     public async Task<CreateSaleResponseDto> CreateSaleAsync(CreateSaleRequestDto request, CancellationToken ct)
     {
-        ValidateRequest(request);
+        var payments = ResolvePayments(request);
+        ValidateRequest(request, payments);
 
         // SQL Server retry strategies require user transactions to be created inside ExecuteAsync.
         var strategy = _db.Database.CreateExecutionStrategy();
@@ -51,12 +62,14 @@ public sealed class PosSalesService : IPosSalesService
         {
             var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
             var correlationId = GetCorrelationId();
+            var (storeId, _) = await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false);
 
             Guid? openShiftId = null;
             if (_posOptions.RequireOpenShiftForSales)
             {
                 openShiftId = await _db.PosShifts.AsNoTracking()
-                    .Where(x => x.ClosedAtUtc == null)
+                    .Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId)
+                    .OrderByDescending(x => x.OpenedAtUtc)
                     .Select(x => (Guid?)x.Id)
                     .FirstOrDefaultAsync(ct)
                     .ConfigureAwait(false);
@@ -139,6 +152,7 @@ public sealed class PosSalesService : IPosSalesService
                 CorrelationId = correlationId,
                 ClientSaleId = request.ClientSaleId,
                 ShiftId = openShiftId,
+                StoreId = storeId,
                 Status = SaleStatus.Completed
             };
 
@@ -205,22 +219,27 @@ public sealed class PosSalesService : IPosSalesService
             sale.Subtotal = subtotal;
             sale.Total = subtotal;
 
-            if (request.Payment.Amount != sale.Total)
+            var totalPaid = RoundMoney(payments.Sum(x => x.Amount));
+            if (totalPaid != sale.Total)
             {
-                throw ValidationError("payment.amount", "Payment amount must match sale total.");
+                throw ValidationError("payments.amount", "Payments total must match sale total.");
             }
 
             _db.Sales.Add(sale);
-            _db.Payments.Add(new Payment
+            foreach (var payment in payments)
             {
-                Id = Guid.NewGuid(),
-                SaleId = sale.Id,
-                Method = request.Payment.Method,
-                Amount = request.Payment.Amount,
-                Reference = request.Payment.Method == PaymentMethod.Cash
-                    ? null
-                    : request.Payment.Reference?.Trim()
-            });
+                _db.Payments.Add(new Payment
+                {
+                    Id = Guid.NewGuid(),
+                    SaleId = sale.Id,
+                    Method = payment.Method,
+                    Amount = payment.Amount,
+                    CreatedAtUtc = _businessTime.UtcNow,
+                    Reference = payment.Method == PaymentMethod.Cash
+                        ? null
+                        : payment.Reference?.Trim()
+                });
+            }
 
             IDbContextTransaction tx = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             try
@@ -232,7 +251,7 @@ public sealed class PosSalesService : IPosSalesService
                     EntityType: "Sale",
                     EntityId: sale.Id.ToString("D"),
                     Before: null,
-                    After: new { sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Total, sale.ShiftId, Items = request.Items.Count },
+                    After: new { sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Total, sale.ShiftId, sale.StoreId, Items = request.Items.Count, Payments = payments.Count },
                     Source: "POS",
                     Notes: "Sale created",
                     OccurredAtUtc: DateTime.UtcNow), ct).ConfigureAwait(false);
@@ -258,37 +277,16 @@ public sealed class PosSalesService : IPosSalesService
 
     public async Task<DailySummaryDto> GetDailySummaryAsync(DateOnly forDate, CancellationToken ct)
     {
-        // Keep report boundaries as DateTimeOffset because Sale.OccurredAtUtc is DateTimeOffset.
-        var fromDate = new DateTimeOffset(forDate.Year, forDate.Month, forDate.Day, 0, 0, 0, TimeSpan.Zero);
-        var toExclusive = fromDate.AddDays(1);
-        var isSqlite = _db.Database.IsSqlite();
+        var rawSales = await _db.Sales.AsNoTracking()
+            .Where(x => x.Status == SaleStatus.Completed)
+            .Select(x => new { x.Id, x.Total, x.OccurredAtUtc })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
-        List<(Guid Id, decimal Total)> sales;
-
-        if (isSqlite)
-        {
-            var rawSales = await _db.Sales.AsNoTracking()
-                .Select(x => new { x.Id, x.Total, x.Status, x.OccurredAtUtc })
-                .ToListAsync(ct)
-                .ConfigureAwait(false);
-
-            sales = rawSales
-                .Where(x => x.OccurredAtUtc >= fromDate && x.OccurredAtUtc < toExclusive)
-                .Where(x => x.Status == SaleStatus.Completed)
-                .Select(x => (x.Id, x.Total))
-                .ToList();
-        }
-        else
-        {
-            sales = (await _db.Sales.AsNoTracking()
-                .Where(x => x.OccurredAtUtc >= fromDate && x.OccurredAtUtc < toExclusive)
-                .Where(x => x.Status == SaleStatus.Completed)
-                .Select(x => new { x.Id, x.Total })
-                .ToListAsync(ct)
-                .ConfigureAwait(false))
-                .Select(x => (x.Id, x.Total))
-                .ToList();
-        }
+        var sales = rawSales
+            .Where(x => _businessTime.ToBusinessDate(x.OccurredAtUtc) == forDate)
+            .Select(x => (x.Id, x.Total))
+            .ToList();
 
         var saleIds = sales.Select(x => x.Id).ToArray();
         var totalItems = saleIds.Length == 0
@@ -320,72 +318,35 @@ public sealed class PosSalesService : IPosSalesService
             throw ValidationError("dateTo", "dateTo must be greater than or equal to dateFrom.");
         }
 
-        var fromDate = new DateTimeOffset(dateFrom.Year, dateFrom.Month, dateFrom.Day, 0, 0, 0, TimeSpan.Zero);
-        var toExclusiveDate = dateTo.AddDays(1);
-        var toExclusive = new DateTimeOffset(toExclusiveDate.Year, toExclusiveDate.Month, toExclusiveDate.Day, 0, 0, 0, TimeSpan.Zero);
-        var isSqlite = _db.Database.IsSqlite();
-        List<TopProductDto> rows;
+        var sales = await _db.Sales.AsNoTracking()
+            .Where(x => x.Status == SaleStatus.Completed)
+            .Select(x => new { x.Id, x.OccurredAtUtc })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
-        if (isSqlite)
-        {
-            var sales = await _db.Sales.AsNoTracking()
-                .Select(x => new { x.Id, x.Status, x.OccurredAtUtc })
+        var saleIds = sales
+            .Where(x =>
+            {
+                var businessDate = _businessTime.ToBusinessDate(x.OccurredAtUtc);
+                return businessDate >= dateFrom && businessDate <= dateTo;
+            })
+            .Select(x => x.Id)
+            .ToHashSet();
+
+        var rows = saleIds.Count == 0
+            ? []
+            : (await _db.SaleItems.AsNoTracking()
+                .Where(x => saleIds.Contains(x.SaleId))
+                .Select(x => new { x.ProductId, x.ProductNameSnapshot, x.Quantity, x.LineTotal })
                 .ToListAsync(ct)
-                .ConfigureAwait(false);
-
-            var saleIds = sales
-                .Where(x => x.OccurredAtUtc >= fromDate && x.OccurredAtUtc < toExclusive)
-                .Where(x => x.Status == SaleStatus.Completed)
-                .Select(x => x.Id)
-                .ToHashSet();
-
-            if (saleIds.Count == 0)
-            {
-                rows = [];
-            }
-            else
-            {
-                var items = await _db.SaleItems.AsNoTracking()
-                    .Where(x => saleIds.Contains(x.SaleId))
-                    .Select(x => new { x.ProductId, x.ProductNameSnapshot, x.Quantity, x.LineTotal })
-                    .ToListAsync(ct)
-                    .ConfigureAwait(false);
-
-                rows = items
-                    .GroupBy(x => new { x.ProductId, x.ProductNameSnapshot })
-                    .Select(grouped => new TopProductDto(
-                        grouped.Key.ProductId,
-                        grouped.Key.ProductNameSnapshot,
-                        grouped.Sum(x => x.Quantity),
-                        grouped.Sum(x => x.LineTotal)))
-                    .ToList();
-            }
-        }
-        else
-        {
-            var baseQuery =
-                from sale in _db.Sales.AsNoTracking()
-                join item in _db.SaleItems.AsNoTracking() on sale.Id equals item.SaleId
-                where sale.OccurredAtUtc >= fromDate && sale.OccurredAtUtc < toExclusive
-                where sale.Status == SaleStatus.Completed
-                select new
-                {
-                    item.ProductId,
-                    item.ProductNameSnapshot,
-                    item.Quantity,
-                    item.LineTotal
-                };
-
-            rows = await baseQuery
+                .ConfigureAwait(false))
                 .GroupBy(x => new { x.ProductId, x.ProductNameSnapshot })
                 .Select(grouped => new TopProductDto(
                     grouped.Key.ProductId,
                     grouped.Key.ProductNameSnapshot,
                     grouped.Sum(x => x.Quantity),
                     grouped.Sum(x => x.LineTotal)))
-                .ToListAsync(ct)
-                .ConfigureAwait(false);
-        }
+                .ToList();
 
         rows = rows
             .OrderByDescending(x => x.Qty)
@@ -399,27 +360,110 @@ public sealed class PosSalesService : IPosSalesService
         return rows;
     }
 
+    public async Task<VoidSaleResponseDto> VoidSaleAsync(Guid saleId, VoidSaleRequestDto request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.ReasonCode))
+        {
+            throw ValidationError("reasonCode", "reasonCode is required.");
+        }
+
+        var sale = await _db.Sales.FirstOrDefaultAsync(x => x.Id == saleId, ct).ConfigureAwait(false)
+            ?? throw new NotFoundException("Sale not found.");
+
+        if (sale.Status == SaleStatus.Void)
+        {
+            if (request.ClientVoidId.HasValue && sale.ClientVoidId == request.ClientVoidId)
+            {
+                return new VoidSaleResponseDto(sale.Id, sale.Status, sale.VoidedAtUtc ?? _businessTime.UtcNow);
+            }
+
+            throw new ConflictException("Sale has already been voided.");
+        }
+
+        if (request.ClientVoidId.HasValue)
+        {
+            var existing = await _db.Sales.AsNoTracking().FirstOrDefaultAsync(x => x.ClientVoidId == request.ClientVoidId, ct).ConfigureAwait(false);
+            if (existing is not null)
+            {
+                return new VoidSaleResponseDto(existing.Id, existing.Status, existing.VoidedAtUtc ?? _businessTime.UtcNow);
+            }
+        }
+
+        if (!Enum.TryParse<VoidReasonCode>(request.ReasonCode, true, out _))
+        {
+            throw ValidationError("reasonCode", "Unknown void reason code.");
+        }
+
+        var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
+        var user = _httpContextAccessor.HttpContext?.User;
+        var isManager = user?.IsInRole("Manager") == true || user?.IsInRole("Admin") == true;
+        if (!isManager)
+        {
+            var isOwnShift = sale.ShiftId.HasValue && await _db.PosShifts.AsNoTracking().AnyAsync(
+                x => x.Id == sale.ShiftId.Value && x.OpenedByUserId == userId,
+                ct).ConfigureAwait(false);
+
+            if (!isOwnShift || _businessTime.ToBusinessDate(sale.OccurredAtUtc) != _businessTime.BusinessDate)
+            {
+                throw new ForbiddenException("Cashier can only void own-shift sales from current business day.");
+            }
+        }
+
+        sale.Status = SaleStatus.Void;
+        sale.VoidedAtUtc = _businessTime.UtcNow;
+        sale.VoidedByUserId = userId;
+        sale.VoidReasonCode = request.ReasonCode.Trim();
+        sale.VoidReasonText = request.ReasonText?.Trim();
+        sale.VoidNote = request.Note?.Trim();
+        sale.ClientVoidId = request.ClientVoidId;
+
+        if (sale.LoyaltyPointsAwarded.GetValueOrDefault() > 0)
+        {
+            await _pointsReversalService.ReversePointsForSaleAsync(sale.Id, sale.LoyaltyPointsAwarded.Value, userId, _businessTime.UtcNow, ct).ConfigureAwait(false);
+        }
+
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        await _auditLogger.LogAsync(new AuditEntry(
+            Action: "SaleVoid",
+            UserId: userId,
+            CorrelationId: GetCorrelationId(),
+            EntityType: "Sale",
+            EntityId: sale.Id.ToString("D"),
+            Before: new { Status = SaleStatus.Completed },
+            After: new { sale.Status, sale.VoidedAtUtc, sale.VoidReasonCode, sale.VoidReasonText },
+            Source: "POS",
+            Notes: "Sale voided",
+            OccurredAtUtc: DateTime.UtcNow), ct).ConfigureAwait(false);
+
+        return new VoidSaleResponseDto(sale.Id, sale.Status, sale.VoidedAtUtc.Value);
+    }
+
     private static string GenerateFolio(DateTimeOffset timestamp)
     {
         return $"POS-{timestamp:yyyyMMddHHmmssfff}";
     }
 
-    private static void ValidateRequest(CreateSaleRequestDto request)
+    private static void ValidateRequest(CreateSaleRequestDto request, IReadOnlyCollection<CreatePaymentRequestDto> payments)
     {
         if (request.Items.Count == 0)
         {
             throw ValidationError("items", "At least one sale item is required.");
         }
 
-        if (request.Payment.Amount <= 0)
+        if (payments.Count == 0)
         {
-            throw ValidationError("payment.amount", "Payment amount must be greater than zero.");
+            throw ValidationError("payments", "At least one payment is required.");
         }
 
-        if (request.Payment.Method is PaymentMethod.Card or PaymentMethod.Transfer
-            && string.IsNullOrWhiteSpace(request.Payment.Reference))
+        if (payments.Any(x => x.Amount <= 0))
         {
-            throw ValidationError("payment.reference", "Payment reference is required for Card and Transfer methods.");
+            throw ValidationError("payments.amount", "Payment amount must be greater than zero.");
+        }
+
+        if (payments.Any(x => x.Method is PaymentMethod.Card or PaymentMethod.Transfer && string.IsNullOrWhiteSpace(x.Reference)))
+        {
+            throw ValidationError("payments.reference", "Payment reference is required for Card and Transfer methods.");
         }
 
         if (request.Items.Any(x => x.Quantity <= 0))
@@ -432,6 +476,23 @@ public sealed class PosSalesService : IPosSalesService
             throw ValidationError("items.extras.quantity", "Extra quantity must be greater than zero.");
         }
     }
+
+    private static IReadOnlyList<CreatePaymentRequestDto> ResolvePayments(CreateSaleRequestDto request)
+    {
+        if (request.Payments is { Count: > 0 })
+        {
+            return request.Payments;
+        }
+
+        if (request.Payment is not null)
+        {
+            return [request.Payment];
+        }
+
+        return [];
+    }
+
+    private static decimal RoundMoney(decimal amount) => decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
 
     private static ValidationException ValidationError(string key, string message)
     {

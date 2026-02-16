@@ -90,7 +90,10 @@ public static class DependencyInjection
         services.AddScoped<IUserAdminService, UserAdminService>();
         services.AddScoped<ITokenService, JwtTokenService>();
         services.AddTransient<IDateTime, SystemDateTime>();
+        services.AddSingleton<IBusinessTime, BusinessTime>();
         services.AddScoped<IPosCatalogService, PosCatalogService>();
+        services.AddScoped<PosStoreContextService>();
+        services.AddScoped<IPointsReversalService, NoOpPointsReversalService>();
         services.AddScoped<IPosSalesService, PosSalesService>();
         services.AddScoped<IPosShiftService, PosShiftService>();
 

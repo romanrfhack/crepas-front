@@ -22,9 +22,9 @@ public sealed class PosShiftsController : ControllerBase
     }
 
     [HttpGet("current")]
-    public async Task<ActionResult<PosShiftDto>> GetCurrent(CancellationToken ct)
+    public async Task<ActionResult<PosShiftDto>> GetCurrent([FromQuery] Guid? storeId, CancellationToken ct)
     {
-        var shift = await _service.GetCurrentShiftAsync(ct);
+        var shift = await _service.GetCurrentShiftAsync(storeId, ct);
         return shift is null ? NoContent() : Ok(shift);
     }
 
@@ -36,8 +36,12 @@ public sealed class PosShiftsController : ControllerBase
     }
 
     [HttpGet("close-preview")]
-    public Task<ShiftClosePreviewDto> GetClosePreview(CancellationToken ct) =>
-        _service.GetClosePreviewAsync(ct);
+    public Task<ShiftClosePreviewDto> GetClosePreview([FromQuery] Guid? shiftId, [FromQuery] Guid? storeId, CancellationToken ct) =>
+        _service.GetClosePreviewAsync(new ShiftClosePreviewRequestDto(shiftId, null, storeId), ct);
+
+    [HttpPost("close-preview")]
+    public Task<ShiftClosePreviewDto> GetClosePreviewV2([FromBody] ShiftClosePreviewRequestDto request, CancellationToken ct) =>
+        _service.GetClosePreviewAsync(request, ct);
 
     [HttpPost("close")]
     public Task<ClosePosShiftResultDto> Close([FromBody] ClosePosShiftRequestDto request, CancellationToken ct) =>
