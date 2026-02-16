@@ -16,7 +16,52 @@ describe('PaymentModalComponent', () => {
     fixture.detectChanges();
   });
 
-  it('should emit mixed payments when totals match', () => {
+  it('invalidates submit when payment total does not match expected total', () => {
+    const firstLineId = component.paymentLines()[0]?.id;
+    expect(firstLineId).toBeTruthy();
+
+    component.updateAmount(firstLineId!, 60);
+
+    expect(component.hasDifference()).toBe(true);
+    expect(component.canSubmit()).toBe(false);
+  });
+
+  it('requires references for card and transfer payments', () => {
+    const firstLineId = component.paymentLines()[0]?.id;
+    expect(firstLineId).toBeTruthy();
+
+    component.updateMethod(firstLineId!, 'Card');
+    component.updateAmount(firstLineId!, 80);
+
+    expect(component.hasInvalidReference()).toBe(true);
+    expect(component.canSubmit()).toBe(false);
+
+    component.updateReference(firstLineId!, 'AUTH-123');
+
+    expect(component.hasInvalidReference()).toBe(false);
+    expect(component.canSubmit()).toBe(true);
+  });
+
+  it('allows multiple payment lines and recalculates totals', () => {
+    const firstLineId = component.paymentLines()[0]?.id;
+    expect(firstLineId).toBeTruthy();
+
+    component.updateAmount(firstLineId!, 30);
+    component.addPaymentLine();
+
+    const secondLine = component.paymentLines()[1];
+    expect(secondLine).toBeTruthy();
+
+    component.updateMethod(secondLine.id, 'Transfer');
+    component.updateAmount(secondLine.id, 50);
+    component.updateReference(secondLine.id, 'SPEI-REF-01');
+
+    expect(component.paidTotal()).toBe(80);
+    expect(component.difference()).toBe(0);
+    expect(component.canSubmit()).toBe(true);
+  });
+
+  it('emits mixed payments with references only for non-cash methods', () => {
     let submitted: unknown;
     component.submitPayment.subscribe((payload) => {
       submitted = payload;
@@ -42,14 +87,5 @@ describe('PaymentModalComponent', () => {
         { method: 'Card', amount: 50, reference: 'AUTH-123' },
       ],
     });
-  });
-
-  it('should require references for card and transfer payments', () => {
-    const firstLineId = component.paymentLines()[0]?.id;
-    component.updateMethod(firstLineId!, 'Card');
-    component.updateAmount(firstLineId!, 80);
-
-    expect(component.hasInvalidReference()).toBeTrue();
-    expect(component.canSubmit()).toBeFalse();
   });
 });

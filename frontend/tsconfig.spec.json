@@ -6,5 +6,6 @@
     "outDir": "./out-tsc/spec",
     "types": ["vitest/globals"]
   },
+  "files": ["src/test-setup.ts", "src/test-providers.ts"],
   "include": ["src/**/*.d.ts", "src/**/*.spec.ts"]
 }
