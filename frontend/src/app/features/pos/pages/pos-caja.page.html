@@ -193,7 +193,7 @@
   }
 
   @if (showOpenShiftModal()) {
-    <section class="modal" aria-label="Abrir turno">
+    <section class="modal" aria-label="Abrir turno" data-testid="open-shift-modal">
       <div class="modal-card">
         <h2>Abrir turno</h2>
         <p>Antes de confirmar cobros necesitas abrir tu turno con efectivo inicial.</p>
@@ -219,7 +219,11 @@
             >
               Cancelar
             </button>
-            <button type="submit" [disabled]="openShiftForm.invalid || loading()">
+            <button
+              type="submit"
+              [disabled]="openShiftForm.invalid || loading()"
+              data-testid="confirm-open-shift"
+            >
               Confirmar apertura
             </button>
           </div>
