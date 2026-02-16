@@ -38,13 +38,13 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore
-        run: dotnet restore backend/CobranzaDigital.sln
+        run: dotnet restore backend/CobranzaDigital.slnx
 
       - name: Build
-        run: dotnet build backend/CobranzaDigital.sln -c Release --no-restore
+        run: dotnet build backend/CobranzaDigital.slnx -c Release --no-restore
 
       - name: Test
-        run: dotnet test backend/CobranzaDigital.sln -c Release --no-build
+        run: dotnet test backend/CobranzaDigital.slnx -c Release --no-build
 
   build-and-deploy:
     needs: test
