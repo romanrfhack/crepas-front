@@ -67,12 +67,16 @@ public sealed class PosSalesService : IPosSalesService
             Guid? openShiftId = null;
             if (_posOptions.RequireOpenShiftForSales)
             {
-                openShiftId = await _db.PosShifts.AsNoTracking()
+                var openShiftCandidates = await _db.PosShifts.AsNoTracking()
                     .Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId)
+                    .Select(x => new { x.Id, x.OpenedAtUtc })
+                    .ToListAsync(ct)
+                    .ConfigureAwait(false);
+
+                openShiftId = openShiftCandidates
                     .OrderByDescending(x => x.OpenedAtUtc)
                     .Select(x => (Guid?)x.Id)
-                    .FirstOrDefaultAsync(ct)
-                    .ConfigureAwait(false);
+                    .FirstOrDefault();
 
                 if (!openShiftId.HasValue)
                 {
