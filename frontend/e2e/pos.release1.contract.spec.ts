@@ -275,9 +275,18 @@ const openPosCaja = async (page: Page) => {
 
 const ensureShiftOpen = async (page: Page) => {
   const openShiftButton = page.getByTestId('open-shift');
-  if (await openShiftButton.isVisible()) {
+  const openShiftModal = page.getByTestId('open-shift-modal');
+  const confirmOpenShiftButton = page.getByTestId('confirm-open-shift');
+
+  if (!(await openShiftModal.isVisible()) && (await openShiftButton.isVisible())) {
     await openShiftButton.click();
-    await page.getByRole('button', { name: 'Confirmar apertura' }).click();
+    await expect(openShiftModal).toBeVisible();
+  }
+
+  if (await openShiftModal.isVisible()) {
+    await expect(confirmOpenShiftButton).toBeVisible();
+    await confirmOpenShiftButton.click();
+    await expect(openShiftModal).toBeHidden();
   }
 };
 
