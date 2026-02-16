@@ -122,7 +122,9 @@ export interface CreateSaleRequestDto {
   clientSaleId: string | null;
   occurredAtUtc: string | null;
   items: CreateSaleItemRequestDto[];
-  payment: CreatePaymentRequestDto;
+  payments: CreatePaymentRequestDto[];
+  payment?: CreatePaymentRequestDto;
+  storeId?: string;
 }
 
 export interface SaleResponseDto {
@@ -150,6 +152,20 @@ export interface TopProductDto {
 export interface OpenShiftRequestDto {
   startingCashAmount: number;
   notes: string | null;
+  storeId?: string;
+}
+
+export interface ShiftClosePreviewRequestDto {
+  shiftId?: string;
+  cashCount?: CountedDenominationDto[];
+  storeId?: string;
+}
+
+export interface PaymentBreakdownDto {
+  cashAmount: number;
+  cardAmount: number;
+  transferAmount: number;
+  totalSalesCount: number;
 }
 
 export interface CountedDenominationDto {
@@ -158,9 +174,12 @@ export interface CountedDenominationDto {
 }
 
 export interface CloseShiftRequestDto {
-  countedDenominations: CountedDenominationDto[];
-  closingNotes: string | null;
-  clientOperationId: string;
+  shiftId?: string;
+  countedDenominations?: CountedDenominationDto[];
+  closeReason?: string;
+  closingNotes?: string | null;
+  clientOperationId?: string;
+  storeId?: string;
 }
 
 export interface ShiftClosePreviewDto {
@@ -169,6 +188,10 @@ export interface ShiftClosePreviewDto {
   openingCashAmount: number;
   salesCashTotal: number;
   expectedCashAmount: number;
+  countedCashAmount?: number | null;
+  difference?: number | null;
+  lastCashCount?: number | null;
+  breakdown?: PaymentBreakdownDto;
 }
 
 export interface CloseShiftResultDto {
@@ -181,6 +204,7 @@ export interface CloseShiftResultDto {
   countedCashAmount: number;
   difference: number;
   closeNotes: string | null;
+  closeReason?: string | null;
 }
 
 export interface PosShiftDto {
@@ -196,6 +220,28 @@ export interface PosShiftDto {
   expectedClosingAmount?: number | null;
   openNotes: string | null;
   closeNotes: string | null;
+  storeId?: string;
+}
+
+export interface SaleVoidRequestDto {
+  reasonCode: string;
+  reasonText?: string;
+  note?: string;
+  clientVoidId?: string;
+}
+
+export interface SaleVoidResponseDto {
+  saleId: string;
+  status: 'Completed' | 'Void';
+  voidedAtUtc: string;
+}
+
+export interface SaleListItemUi {
+  saleId: string;
+  folio: string;
+  total: number;
+  occurredAtUtc: string;
+  status: 'Completed' | 'Void';
 }
 
 export interface CartSelection {

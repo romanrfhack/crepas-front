@@ -35,13 +35,17 @@ import {
   CatalogSnapshotDto,
   CreateSaleRequestDto,
   PosShiftDto,
-  ShiftClosePreviewDto,
   ProductDto,
+  SaleListItemUi,
   SaleResponseDto,
+  SaleVoidRequestDto,
+  ShiftClosePreviewDto,
 } from '../models/pos.models';
 import { PosCatalogSnapshotService } from '../services/pos-catalog-snapshot.service';
 import { PosSalesApiService } from '../services/pos-sales-api.service';
 import { PosShiftApiService } from '../services/pos-shift-api.service';
+import { PosTimezoneService } from '../services/pos-timezone.service';
+import { StoreContextService } from '../services/store-context.service';
 
 @Component({
   selector: 'app-pos-caja-page',
@@ -62,10 +66,8 @@ export class PosCajaPage implements OnDestroy {
   private readonly salesApi = inject(PosSalesApiService);
   private readonly shiftApi = inject(PosShiftApiService);
   private readonly formBuilder = inject(FormBuilder);
-  private readonly shortDateTimeFormatter = new Intl.DateTimeFormat('es-MX', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
+  private readonly timezone = inject(PosTimezoneService);
+  private readonly storeContext = inject(StoreContextService);
 
   readonly snapshot = signal<CatalogSnapshotDto | null>(null);
   readonly selectedCategoryId = signal<string | null>(null);
@@ -82,11 +84,16 @@ export class PosCajaPage implements OnDestroy {
   readonly closePreview = signal<ShiftClosePreviewDto | null>(null);
   readonly closeResult = signal<CloseShiftResultDto | null>(null);
   readonly cartExpanded = signal(false);
+  readonly shiftSales = signal<SaleListItemUi[]>([]);
+  readonly showVoidModal = signal(false);
+  readonly selectedSaleForVoid = signal<SaleListItemUi | null>(null);
 
   private autoCollapseTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly correlationId = signal(crypto.randomUUID());
   readonly inProgressClientSaleId = signal<string | null>(null);
+  readonly inProgressCloseOperationId = signal<string | null>(null);
+  readonly inProgressVoidOperationId = signal<string | null>(null);
   readonly requireOpenShift = environment.posRequireOpenShift;
 
   readonly denominations = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5];
@@ -108,6 +115,12 @@ export class PosCajaPage implements OnDestroy {
         ]),
       ),
     ),
+  });
+
+  readonly voidForm = this.formBuilder.nonNullable.group({
+    reasonCode: ['CashierError', [Validators.required]],
+    reasonText: [''],
+    note: [''],
   });
 
   private readonly countsValues = toSignal(
@@ -133,7 +146,7 @@ export class PosCajaPage implements OnDestroy {
     }
 
     return {
-      openedAt: this.formatDateTime(shift.openedAtUtc),
+      openedAt: this.timezone.formatDateTime(shift.openedAtUtc),
       openingCashAmount: shift.openingCashAmount,
     };
   });
@@ -143,10 +156,11 @@ export class PosCajaPage implements OnDestroy {
   readonly countedTotal = computed(() => this.centsToMoney(this.countedTotalCents()));
 
   readonly closeDifference = computed(() =>
-    this.centsToMoney(this.closeExpectedCents() - this.countedTotalCents()),
+    this.centsToMoney(this.countedTotalCents() - this.closeExpectedCents()),
   );
-  readonly requiresDifferenceReason = computed(() => this.closeDifference() !== 0);
-  readonly largeDifferenceWarning = computed(() => Math.abs(this.closeDifference()) >= 200);
+
+  readonly thresholdExceeded = computed(() => Math.abs(this.closeDifference()) > 0.009);
+  readonly requiresDifferenceReason = computed(() => this.thresholdExceeded());
 
   readonly products = computed(() => {
     const current = this.snapshot()?.products.filter((item) => item.isActive) ?? [];
@@ -197,9 +211,9 @@ export class PosCajaPage implements OnDestroy {
   }
 
   constructor() {
+    this.storeContext.setActiveStoreId(this.storeContext.getActiveStoreId());
     void this.loadSnapshot();
     void this.loadCurrentShift();
-    console.debug('[POS Caja] correlationId', this.correlationId());
   }
 
   async loadSnapshot(forceRefresh = false) {
@@ -261,8 +275,10 @@ export class PosCajaPage implements OnDestroy {
     this.errorMessage.set(null);
 
     try {
-      const preview = await this.shiftApi.getClosePreview();
-      this.closePreview.set(preview);
+      const preview = await this.shiftApi.closePreviewV2({
+        shiftId: this.currentShift()?.id,
+      });
+      this.closePreview.set(this.normalizePreview(preview));
       this.closeResult.set(null);
       this.closeShiftForm.reset({
         reason: '',
@@ -274,6 +290,22 @@ export class PosCajaPage implements OnDestroy {
       this.errorMessage.set('No se pudo obtener la vista previa del cierre de turno.');
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  async refreshClosePreviewWithCashCount() {
+    if (!this.showCloseShiftModal() || !this.currentShift()) {
+      return;
+    }
+
+    try {
+      const preview = await this.shiftApi.closePreviewV2({
+        shiftId: this.currentShift()?.id,
+        cashCount: this.buildCountedDenominations(),
+      });
+      this.closePreview.set(this.normalizePreview(preview));
+    } catch {
+      this.errorMessage.set('No se pudo recalcular el preview de cierre con el arqueo capturado.');
     }
   }
 
@@ -292,13 +324,19 @@ export class PosCajaPage implements OnDestroy {
     this.errorMessage.set(null);
 
     const { reason, evidence } = this.closeShiftForm.getRawValue();
+    const clientOperationId = this.inProgressCloseOperationId() ?? crypto.randomUUID();
+    this.inProgressCloseOperationId.set(clientOperationId);
 
     try {
-      const closeNotes = [reason, evidence].filter((value) => !!value?.trim()).join(' | ');
-      const result = await this.shiftApi.closeShift(
-        this.buildCountedDenominations(),
-        closeNotes || null,
-      );
+      const closeNotes = evidence?.trim() ? evidence.trim() : null;
+      const closeReason = reason?.trim() ? reason.trim() : undefined;
+      const result = await this.shiftApi.closeShift({
+        shiftId: shift.id,
+        countedDenominations: this.buildCountedDenominations(),
+        closeReason,
+        closingNotes: closeNotes,
+        clientOperationId,
+      });
       this.closeResult.set(result);
       this.currentShift.set({
         ...shift,
@@ -307,8 +345,18 @@ export class PosCajaPage implements OnDestroy {
         closeNotes: result.closeNotes,
       });
       this.showCloseShiftModal.set(false);
-    } catch {
-      this.errorMessage.set('No se pudo cerrar el turno.');
+      this.inProgressCloseOperationId.set(null);
+    } catch (error) {
+      const httpError = error as HttpErrorResponse;
+      if (httpError.status === 400) {
+        this.errorMessage.set('El backend requiere motivo de diferencia para finalizar el cierre.');
+      } else if (httpError.status === 0) {
+        this.errorMessage.set(
+          'Error de red. Puedes reintentar y se reutilizará el mismo clientOperationId para evitar duplicados.',
+        );
+      } else {
+        this.errorMessage.set('No se pudo cerrar el turno.');
+      }
     } finally {
       this.loading.set(false);
     }
@@ -396,21 +444,88 @@ export class PosCajaPage implements OnDestroy {
             }))
           : null,
       })),
-      payment: {
-        method: event.method,
-        amount: this.estimatedTotal(),
-        reference: event.reference,
-      },
+      payments: event.payments,
+      ...(this.storeContext.getActiveStoreId() ? { storeId: this.storeContext.getActiveStoreId()! } : {}),
     };
 
     try {
       const response = await this.salesApi.createSale(payload, this.correlationId());
       this.saleSuccess.set(response);
+      this.shiftSales.update((sales) => [
+        {
+          saleId: response.saleId,
+          folio: response.folio,
+          total: response.total,
+          occurredAtUtc: response.occurredAtUtc,
+          status: 'Completed',
+        },
+        ...sales,
+      ]);
       this.cartItems.set([]);
       this.showPayment.set(false);
       this.inProgressClientSaleId.set(null);
+      await this.refreshClosePreviewWithCashCount();
     } catch (error) {
       await this.handleSaleError(error);
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  openVoidModal(sale: SaleListItemUi) {
+    this.selectedSaleForVoid.set(sale);
+    this.voidForm.reset({
+      reasonCode: 'CashierError',
+      reasonText: '',
+      note: '',
+    });
+    this.showVoidModal.set(true);
+  }
+
+  async confirmVoidSale() {
+    const sale = this.selectedSaleForVoid();
+    if (!sale || this.voidForm.invalid || this.loading()) {
+      return;
+    }
+
+    this.loading.set(true);
+    this.errorMessage.set(null);
+
+    const clientVoidId = this.inProgressVoidOperationId() ?? crypto.randomUUID();
+    this.inProgressVoidOperationId.set(clientVoidId);
+
+    const { reasonCode, reasonText, note } = this.voidForm.getRawValue();
+    const payload: SaleVoidRequestDto = {
+      reasonCode,
+      reasonText: reasonText.trim() || undefined,
+      note: note.trim() || undefined,
+      clientVoidId,
+    };
+
+    try {
+      await this.salesApi.voidSale(sale.saleId, payload, this.correlationId());
+      this.shiftSales.update((sales) =>
+        sales.map((current) =>
+          current.saleId === sale.saleId ? { ...current, status: 'Void' } : current,
+        ),
+      );
+      this.showVoidModal.set(false);
+      this.selectedSaleForVoid.set(null);
+      this.inProgressVoidOperationId.set(null);
+      await this.refreshClosePreviewWithCashCount();
+    } catch (error) {
+      const httpError = error as HttpErrorResponse;
+      if (httpError.status === 403) {
+        this.errorMessage.set(
+          'No autorizado para cancelar esta venta. Solo Manager/Admin o el Cashier dueño del turno vigente pueden anularla.',
+        );
+      } else if (httpError.status === 0) {
+        this.errorMessage.set(
+          'Error de red. Puedes reintentar y se reutilizará el mismo clientVoidId para evitar duplicados.',
+        );
+      } else {
+        this.errorMessage.set('No fue posible cancelar la venta.');
+      }
     } finally {
       this.loading.set(false);
     }
@@ -437,7 +552,7 @@ export class PosCajaPage implements OnDestroy {
   }
 
   private closeExpectedCents() {
-    return this.moneyToCents(this.closeExpectedAmount());
+    return this.moneyToCents(this.closePreview()?.expectedCashAmount ?? 0);
   }
 
   private normalizeCounts(counts: readonly number[]) {
@@ -461,6 +576,20 @@ export class PosCajaPage implements OnDestroy {
     }
 
     return normalized;
+  }
+
+  private normalizePreview(preview: ShiftClosePreviewDto): ShiftClosePreviewDto {
+    return {
+      ...preview,
+      countedCashAmount: preview.countedCashAmount ?? null,
+      difference: preview.difference ?? null,
+      breakdown: preview.breakdown ?? {
+        cashAmount: preview.salesCashTotal,
+        cardAmount: 0,
+        transferAmount: 0,
+        totalSalesCount: 0,
+      },
+    };
   }
 
   private moneyToCents(value: number) {
@@ -549,11 +678,11 @@ export class PosCajaPage implements OnDestroy {
     return code.includes('open_shift') || title.includes('turno') || detail.includes('open shift');
   }
 
-  private formatDateTime(value: string) {
-    return this.shortDateTimeFormatter.format(new Date(value));
-  }
-
   private round2(value: number) {
     return Math.round(value * 100) / 100;
+  }
+
+  formatDateTime(value: string) {
+    return this.timezone.formatDateTime(value);
   }
 }

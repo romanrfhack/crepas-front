@@ -17,7 +17,7 @@ describe('PosSalesApiService', () => {
         clientSaleId: 'sale-id',
         occurredAtUtc: null,
         items: [],
-        payment: { method: 'Cash', amount: 10, reference: null },
+        payments: [{ method: 'Cash', amount: 10, reference: null }],
       },
       'corr-123',
     );

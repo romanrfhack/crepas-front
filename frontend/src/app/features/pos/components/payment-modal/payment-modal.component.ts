@@ -1,7 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { CreatePaymentRequestDto, PaymentMethod, PaymentUiState } from '../../models/pos.models';
+import { CreatePaymentRequestDto, PaymentMethod } from '../../models/pos.models';
 
-export type PaymentSubmitEvent = CreatePaymentRequestDto;
+interface PaymentLine {
+  id: string;
+  method: PaymentMethod;
+  amount: number;
+  reference: string;
+}
+
+export interface PaymentSubmitEvent {
+  payments: CreatePaymentRequestDto[];
+}
 
 @Component({
   selector: 'app-pos-payment-modal',
@@ -15,62 +24,99 @@ export class PaymentModalComponent {
   readonly submitPayment = output<PaymentSubmitEvent>();
   readonly cancelAction = output<void>();
 
-  readonly uiState = signal<PaymentUiState>({
-    method: 'Cash',
-    reference: '',
-    receivedAmount: 0,
-    change: 0,
-  });
+  readonly paymentLines = signal<PaymentLine[]>([
+    { id: crypto.randomUUID(), method: 'Cash', amount: 0, reference: '' },
+  ]);
 
-  readonly method = computed(() => this.uiState().method);
-  readonly reference = computed(() => this.uiState().reference);
-  readonly receivedAmount = computed(() => this.uiState().receivedAmount ?? 0);
+  readonly paidTotal = computed(() =>
+    this.round2(this.paymentLines().reduce((sum, line) => sum + this.sanitizeAmount(line.amount), 0)),
+  );
+  readonly difference = computed(() => this.round2(this.total() - this.paidTotal()));
+  readonly hasDifference = computed(() => Math.abs(this.difference()) > 0.009);
+  readonly hasInvalidReference = computed(() =>
+    this.paymentLines().some(
+      (line) => (line.method === 'Card' || line.method === 'Transfer') && !line.reference.trim(),
+    ),
+  );
+  readonly hasInvalidAmount = computed(() =>
+    this.paymentLines().some((line) => this.sanitizeAmount(line.amount) <= 0),
+  );
+  readonly canSubmit = computed(
+    () => !this.loading() && !this.hasDifference() && !this.hasInvalidReference() && !this.hasInvalidAmount(),
+  );
 
-  readonly changeAmount = computed(() => {
-    const { method, receivedAmount } = this.uiState();
-    if (method !== 'Cash') {
-      return 0;
-    }
-
-    return Math.max(0, (receivedAmount ?? 0) - this.total());
-  });
-
-  readonly insufficientCash = computed(() => this.method() === 'Cash' && this.receivedAmount() < this.total());
-
-  selectMethod(method: PaymentMethod) {
-    this.uiState.update((current) => ({
-      ...current,
-      method,
-      receivedAmount: method === 'Cash' ? current.receivedAmount ?? 0 : undefined,
-      change: method === 'Cash' ? this.changeAmount() : undefined,
-    }));
+  addPaymentLine() {
+    this.paymentLines.update((lines) => [
+      ...lines,
+      { id: crypto.randomUUID(), method: 'Cash', amount: 0, reference: '' },
+    ]);
   }
 
-  updateReceivedAmount(amount: number) {
-    const nextAmount = Number.isFinite(amount) ? amount : 0;
-    this.uiState.update((current) => ({
-      ...current,
-      receivedAmount: nextAmount,
-      change: Math.max(0, nextAmount - this.total()),
-    }));
+  removePaymentLine(lineId: string) {
+    this.paymentLines.update((lines) => {
+      if (lines.length <= 1) {
+        return lines;
+      }
+
+      return lines.filter((line) => line.id !== lineId);
+    });
   }
 
-  updateReference(reference: string) {
-    this.uiState.update((current) => ({ ...current, reference }));
+  updateMethod(lineId: string, method: PaymentMethod) {
+    this.paymentLines.update((lines) =>
+      lines.map((line) => {
+        if (line.id !== lineId) {
+          return line;
+        }
+
+        return {
+          ...line,
+          method,
+          reference: method === 'Cash' ? '' : line.reference,
+        };
+      }),
+    );
+  }
+
+  updateAmount(lineId: string, amount: number) {
+    const nextAmount = this.sanitizeAmount(amount);
+    this.paymentLines.update((lines) =>
+      lines.map((line) => (line.id === lineId ? { ...line, amount: nextAmount } : line)),
+    );
+  }
+
+  updateReference(lineId: string, reference: string) {
+    this.paymentLines.update((lines) =>
+      lines.map((line) => (line.id === lineId ? { ...line, reference } : line)),
+    );
   }
 
   confirmPayment() {
-    if (this.insufficientCash()) {
+    if (!this.canSubmit()) {
       return;
     }
 
-    const total = this.total();
-    const reference = this.reference().trim();
-
     this.submitPayment.emit({
-      method: this.method(),
-      amount: total,
-      reference: reference.length > 0 ? reference : null,
+      payments: this.paymentLines().map((line) => {
+        const reference = line.reference.trim();
+        return {
+          method: line.method,
+          amount: this.round2(this.sanitizeAmount(line.amount)),
+          reference: line.method === 'Cash' ? null : reference || null,
+        };
+      }),
     });
+  }
+
+  private sanitizeAmount(value: number): number {
+    if (!Number.isFinite(value) || value < 0) {
+      return 0;
+    }
+
+    return value;
+  }
+
+  private round2(value: number): number {
+    return Math.round(value * 100) / 100;
   }
 }

@@ -67,6 +67,27 @@
     </div>
   </div>
 
+  @if (shiftSales().length > 0) {
+    <section class="sales-list" aria-label="Ventas del turno actual">
+      <h3>Ventas registradas en esta sesión</h3>
+      @for (sale of shiftSales(); track sale.saleId) {
+        <div class="sale-item">
+          <div>
+            <strong>{{ sale.folio }}</strong>
+            <p>{{ formatDateTime(sale.occurredAtUtc) }}</p>
+          </div>
+          <div>
+            <strong>${{ sale.total.toFixed(2) }}</strong>
+            <span [class.void-chip]="sale.status === 'Void'">{{ sale.status === 'Void' ? 'ANULADA' : 'COMPLETADA' }}</span>
+          </div>
+          @if (sale.status !== 'Void') {
+            <button type="button" (click)="openVoidModal(sale)">Cancelar</button>
+          }
+        </div>
+      }
+    </section>
+  }
+
   @if (cartItems().length > 0) {
     <button
       type="button"
@@ -164,11 +185,13 @@
 
           @if (closePreview(); as preview) {
             <div class="close-summary">
+              <p>Apertura: <strong>${{ preview.openingCashAmount.toFixed(2) }}</strong></p>
+              <p>Ventas efectivo turno: <strong>${{ preview.salesCashTotal.toFixed(2) }}</strong></p>
+              <p># Ventas: <strong>{{ preview.breakdown?.totalSalesCount ?? 0 }}</strong></p>
+              <p>Tarjeta: <strong>${{ (preview.breakdown?.cardAmount ?? 0).toFixed(2) }}</strong></p>
               <p>
-                Apertura: <strong>${{ preview.openingCashAmount.toFixed(2) }}</strong>
-              </p>
-              <p>
-                Ventas efectivo turno: <strong>${{ preview.salesCashTotal.toFixed(2) }}</strong>
+                Transferencia:
+                <strong>${{ (preview.breakdown?.transferAmount ?? 0).toFixed(2) }}</strong>
               </p>
             </div>
           }
@@ -184,26 +207,16 @@
                   step="1"
                   inputmode="numeric"
                   [formControl]="getCountControl(index)"
+                  (change)="refreshClosePreviewWithCashCount()"
                 />
               </div>
             }
           </div>
 
           <div class="close-summary">
-            <p>
-              Esperado: <strong>${{ closeExpectedAmount().toFixed(2) }}</strong>
-            </p>
-            <p>
-              Contado: <strong>${{ countedTotal().toFixed(2) }}</strong>
-            </p>
-            <p>
-              Diferencia: <strong>${{ closeDifference().toFixed(2) }}</strong>
-            </p>
-            @if (largeDifferenceWarning()) {
-              <p class="shift-banner shift-banner--warning" role="alert">
-                La diferencia es mayor o igual a $200.00, verifica antes de confirmar.
-              </p>
-            }
+            <p>Esperado: <strong>${{ closeExpectedAmount().toFixed(2) }}</strong></p>
+            <p>Contado: <strong>${{ countedTotal().toFixed(2) }}</strong></p>
+            <p>Diferencia: <strong>${{ closeDifference().toFixed(2) }}</strong></p>
           </div>
 
           <div [formGroup]="closeShiftForm">
@@ -218,7 +231,7 @@
               "
             ></textarea>
 
-            <label for="closeEvidence">Evidencia (opcional)</label>
+            <label for="closeEvidence">Notas de cierre (opcional)</label>
             <textarea id="closeEvidence" rows="2" formControlName="evidence"></textarea>
           </div>
         </div>
@@ -228,6 +241,35 @@
           <button type="button" (click)="submitCloseShift()" [disabled]="loading()">
             Confirmar cierre
           </button>
+        </div>
+      </div>
+    </section>
+  }
+
+  @if (showVoidModal()) {
+    <section class="modal" aria-label="Cancelar venta">
+      <div class="modal-card">
+        <h2>Cancelar venta</h2>
+        @if (selectedSaleForVoid(); as selectedSale) {
+          <p>Folio: <strong>{{ selectedSale.folio }}</strong></p>
+        }
+        <div [formGroup]="voidForm" class="void-form">
+          <label for="void-reason-code">Motivo</label>
+          <select id="void-reason-code" formControlName="reasonCode">
+            <option value="CashierError">CashierError</option>
+            <option value="CustomerRequest">CustomerRequest</option>
+            <option value="DuplicateSale">DuplicateSale</option>
+            <option value="Other">Other</option>
+          </select>
+          <label for="void-reason-text">Descripción (opcional)</label>
+          <input id="void-reason-text" type="text" formControlName="reasonText" />
+
+          <label for="void-note">Nota interna (opcional)</label>
+          <textarea id="void-note" rows="2" formControlName="note"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" (click)="showVoidModal.set(false)">Cerrar</button>
+          <button type="button" [disabled]="loading()" (click)="confirmVoidSale()">Confirmar cancelación</button>
         </div>
       </div>
     </section>

@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { DailySummaryDto, TopProductDto } from '../models/pos.models';
 import { PosSalesApiService } from '../services/pos-sales-api.service';
 import { CommonModule } from '@angular/common';
+import { PosTimezoneService } from '../services/pos-timezone.service';
 
 @Component({
   selector: 'app-pos-reportes-page',
@@ -482,8 +483,9 @@ import { CommonModule } from '@angular/common';
 })
 export class PosReportesPage {
   private readonly api = inject(PosSalesApiService);
+  private readonly timezone = inject(PosTimezoneService);
 
-  readonly date = new Date().toISOString().slice(0, 10);
+  date = this.timezone.todayIsoDate();
   readonly summary = signal<DailySummaryDto | null>(null);
   readonly topProducts = signal<TopProductDto[]>([]);
   readonly csvContent = computed(() => {
