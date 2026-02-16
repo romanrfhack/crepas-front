@@ -16,11 +16,17 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.Property(x => x.Subtotal).HasColumnType("decimal(18,2)");
         builder.Property(x => x.Total).HasColumnType("decimal(18,2)");
         builder.Property(x => x.CorrelationId).HasMaxLength(64);
+        builder.Property(x => x.VoidReasonCode).HasMaxLength(50);
+        builder.Property(x => x.VoidReasonText).HasMaxLength(200);
+        builder.Property(x => x.VoidNote).HasMaxLength(500);
         builder.Property(x => x.Status).HasConversion<int>();
         builder.HasIndex(x => x.OccurredAtUtc);
         builder.HasIndex(x => x.ClientSaleId).IsUnique();
+        builder.HasIndex(x => x.ClientVoidId).IsUnique();
+        builder.HasIndex(x => x.StoreId);
         builder.HasIndex(x => x.ShiftId);
         builder.HasOne<PosShift>().WithMany().HasForeignKey(x => x.ShiftId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -39,9 +45,13 @@ public sealed class PosShiftConfiguration : IEntityTypeConfiguration<PosShift>
         builder.Property(x => x.ExpectedCashAmount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.CashDifference).HasColumnType("decimal(18,2)");
         builder.Property(x => x.DenominationsJson).HasMaxLength(4000);
+        builder.Property(x => x.CloseReason).HasMaxLength(500);
+        builder.HasIndex(x => x.StoreId);
         builder.HasIndex(x => x.OpenOperationId).IsUnique();
         builder.HasIndex(x => x.CloseOperationId).IsUnique();
+        builder.HasIndex(x => new { x.OpenedByUserId, x.StoreId, x.ClosedAtUtc }).IsUnique();
         builder.HasIndex(x => x.ClosedAtUtc);
+        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -101,7 +111,31 @@ public sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(x => x.Method).HasConversion<int>();
         builder.Property(x => x.Amount).HasColumnType("decimal(18,2)");
         builder.Property(x => x.Reference).HasMaxLength(200);
+        builder.Property(x => x.CreatedAtUtc);
         builder.HasIndex(x => x.SaleId);
         builder.HasOne<Sale>().WithMany().HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class StoreConfiguration : IEntityTypeConfiguration<Store>
+{
+    public void Configure(EntityTypeBuilder<Store> builder)
+    {
+        builder.ToTable("Stores");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.TimeZoneId).HasMaxLength(100).IsRequired();
+        builder.HasIndex(x => x.Name).IsUnique();
+    }
+}
+
+public sealed class PosSettingsConfiguration : IEntityTypeConfiguration<PosSettings>
+{
+    public void Configure(EntityTypeBuilder<PosSettings> builder)
+    {
+        builder.ToTable("PosSettings");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.CashDifferenceThreshold).HasColumnType("decimal(18,2)");
+        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.DefaultStoreId).OnDelete(DeleteBehavior.Restrict);
     }
 }

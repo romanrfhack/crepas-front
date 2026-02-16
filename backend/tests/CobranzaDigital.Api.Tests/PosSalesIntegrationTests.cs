@@ -284,6 +284,117 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Assert.Contains(top!, x => x.ProductId == productB.Id);
     }
 
+    [Fact]
+    public async Task CreateSale_WithMixedPayments_Works_And_ClosePreview_UsesCashPortionOnly()
+    {
+        await CloseAnyOpenShiftAsync();
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local", initialCash: 100m);
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"Bebidas-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Latte", categoryId = category.Id, basePrice = 120m, isActive = true });
+
+        using var saleReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        saleReq.Content = JsonContent.Create(new
+        {
+            clientSaleId = Guid.NewGuid(),
+            items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
+            payments = new[]
+            {
+                new { method = "Cash", amount = 20m },
+                new { method = "Card", amount = 100m, reference = "MIXED-001" }
+            }
+        });
+
+        using var saleResp = await _client.SendAsync(saleReq);
+        Assert.Equal(HttpStatusCode.OK, saleResp.StatusCode);
+
+        using var previewReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/close-preview", token);
+        using var previewResp = await _client.SendAsync(previewReq);
+        var preview = await previewResp.Content.ReadFromJsonAsync<ShiftClosePreviewResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, previewResp.StatusCode);
+        Assert.NotNull(preview);
+        Assert.Equal(20m, preview!.SalesCashTotal);
+        Assert.Equal(120m, preview.ExpectedCashAmount);
+    }
+
+    [Fact]
+    public async Task VoidSale_ExcludesSaleFromClosePreview()
+    {
+        await CloseAnyOpenShiftAsync();
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local", initialCash: 0m);
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"Void-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Mocha", categoryId = category.Id, basePrice = 90m, isActive = true });
+
+        var saleId = Guid.NewGuid();
+        using (var saleReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token))
+        {
+            saleReq.Content = JsonContent.Create(new
+            {
+                clientSaleId = saleId,
+                items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
+                payment = new { method = "Cash", amount = 90m }
+            });
+            using var saleResp = await _client.SendAsync(saleReq);
+            Assert.Equal(HttpStatusCode.OK, saleResp.StatusCode);
+            var payload = await saleResp.Content.ReadFromJsonAsync<CreateSaleResponse>();
+            saleId = payload!.SaleId;
+        }
+
+        using (var voidReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{saleId}/void", token))
+        {
+            voidReq.Content = JsonContent.Create(new { reasonCode = "CashierError", reasonText = "captura", note = "test", clientVoidId = Guid.NewGuid() });
+            using var voidResp = await _client.SendAsync(voidReq);
+            Assert.Equal(HttpStatusCode.OK, voidResp.StatusCode);
+        }
+
+        using var previewReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/close-preview", token);
+        using var previewResp = await _client.SendAsync(previewReq);
+        var preview = await previewResp.Content.ReadFromJsonAsync<ShiftClosePreviewResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, previewResp.StatusCode);
+        Assert.NotNull(preview);
+        Assert.Equal(0m, preview!.SalesCashTotal);
+    }
+
+    [Fact]
+    public async Task VoidSale_IsIdempotent_ByClientVoidId()
+    {
+        await CloseAnyOpenShiftAsync();
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local", initialCash: 0m);
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"VoidIdem-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Flat White", categoryId = category.Id, basePrice = 70m, isActive = true });
+
+        using var saleReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        saleReq.Content = JsonContent.Create(new
+        {
+            clientSaleId = Guid.NewGuid(),
+            items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
+            payment = new { method = "Cash", amount = 70m }
+        });
+        using var saleResp = await _client.SendAsync(saleReq);
+        var created = await saleResp.Content.ReadFromJsonAsync<CreateSaleResponse>();
+        Assert.Equal(HttpStatusCode.OK, saleResp.StatusCode);
+
+        var clientVoidId = Guid.NewGuid();
+        var body = new { reasonCode = "CashierError", reasonText = "error", note = "idempotent", clientVoidId };
+
+        using var voidReq1 = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{created!.SaleId}/void", token);
+        voidReq1.Content = JsonContent.Create(body);
+        using var voidResp1 = await _client.SendAsync(voidReq1);
+        Assert.Equal(HttpStatusCode.OK, voidResp1.StatusCode);
+
+        using var voidReq2 = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{created.SaleId}/void", token);
+        voidReq2.Content = JsonContent.Create(body);
+        using var voidResp2 = await _client.SendAsync(voidReq2);
+        Assert.Equal(HttpStatusCode.OK, voidResp2.StatusCode);
+    }
+
     private async Task CreateSaleAsync(string token, Guid productId, int quantity, decimal total)
     {
         using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
@@ -363,9 +474,9 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     private sealed record ProductResponse(Guid Id, string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive, Guid? CustomizationSchemaId);
     private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive);
     private sealed record CreateSaleResponse(Guid SaleId, string Folio, DateTimeOffset OccurredAtUtc, decimal Total);
-    private sealed record PosShiftResponse(Guid Id, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc, decimal OpeningCashAmount, decimal? ClosingCashAmount, string? Notes);
-    private sealed record ShiftClosePreviewResponse(Guid ShiftId, DateTimeOffset OpenedAtUtc, decimal OpeningCashAmount, decimal SalesCashTotal, decimal ExpectedCashAmount);
-    private sealed record CloseShiftResultResponse(Guid ShiftId, DateTimeOffset OpenedAtUtc, DateTimeOffset ClosedAtUtc, decimal OpeningCashAmount, decimal SalesCashTotal, decimal ExpectedCashAmount, decimal CountedCashAmount, decimal Difference, string? CloseNotes);
+    private sealed record PosShiftResponse(Guid Id, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc, decimal OpeningCashAmount, decimal? ClosingCashAmount, string? Notes, Guid StoreId);
+    private sealed record ShiftClosePreviewResponse(Guid ShiftId, DateTimeOffset OpenedAtUtc, decimal OpeningCashAmount, decimal SalesCashTotal, decimal ExpectedCashAmount, decimal? CountedCashAmount, decimal? Difference);
+    private sealed record CloseShiftResultResponse(Guid ShiftId, DateTimeOffset OpenedAtUtc, DateTimeOffset ClosedAtUtc, decimal OpeningCashAmount, decimal SalesCashTotal, decimal ExpectedCashAmount, decimal CountedCashAmount, decimal Difference, string? CloseNotes, string? CloseReason);
     private sealed record DailySummaryResponse(DateOnly Date, int TotalTickets, decimal TotalAmount, int TotalItems, decimal AvgTicket);
     private sealed record TopProductResponse(Guid ProductId, string ProductNameSnapshot, int Qty, decimal Amount);
 }

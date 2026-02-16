@@ -29,7 +29,16 @@ public sealed class Sale : Entity
     public string? CorrelationId { get; set; }
     public Guid? ClientSaleId { get; set; }
     public Guid? ShiftId { get; set; }
+    public Guid StoreId { get; set; }
     public SaleStatus Status { get; set; } = SaleStatus.Completed;
+    public DateTimeOffset? VoidedAtUtc { get; set; }
+    public Guid? VoidedByUserId { get; set; }
+    public string? VoidReasonCode { get; set; }
+    public string? VoidReasonText { get; set; }
+    public string? VoidNote { get; set; }
+    public Guid? ClientVoidId { get; set; }
+    public int? LoyaltyPointsAwarded { get; set; }
+    public Guid? LoyaltyEarnTransactionId { get; set; }
 }
 
 public sealed class PosShift : Entity
@@ -49,6 +58,25 @@ public sealed class PosShift : Entity
     public string? CloseNotes { get; set; }
     public Guid? OpenOperationId { get; set; }
     public Guid? CloseOperationId { get; set; }
+    public Guid StoreId { get; set; }
+    public string? CloseReason { get; set; }
+}
+
+public sealed class Store : Entity
+{
+    public string Name { get; set; } = string.Empty;
+    public bool IsActive { get; set; } = true;
+    public string TimeZoneId { get; set; } = "America/Mexico_City";
+    public DateTimeOffset CreatedAtUtc { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+}
+
+public sealed class PosSettings : Entity
+{
+    public bool MultiStoreEnabled { get; set; }
+    public int MaxStoresAllowed { get; set; } = 1;
+    public decimal CashDifferenceThreshold { get; set; } = 0m;
+    public Guid DefaultStoreId { get; set; }
 }
 
 public sealed class SaleItem : Entity
@@ -88,4 +116,14 @@ public sealed class Payment : Entity
     public PaymentMethod Method { get; set; }
     public decimal Amount { get; set; }
     public string? Reference { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; set; }
+}
+
+public enum VoidReasonCode
+{
+    CustomerRequest = 0,
+    CashierError = 1,
+    FraudSuspected = 2,
+    DuplicateCharge = 3,
+    Other = 4
 }

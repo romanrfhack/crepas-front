@@ -151,7 +151,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthorizationPolicies.PosAdmin, policy =>
         policy.RequireRole("Admin"));
     options.AddPolicy(AuthorizationPolicies.PosOperator, policy =>
-        policy.RequireRole("Admin", "Cashier"));
+        policy.RequireRole("Admin", "Cashier", "Manager"));
     options.AddPolicy(AuthorizationPolicies.RequireScope, policy =>
         policy.RequireClaim("scope", AuthorizationPolicies.RequiredScopeValue));
 });
@@ -176,6 +176,8 @@ if (!app.Environment.IsEnvironment("Testing"))
 {
     await app.Services.SeedIdentityAsync(builder.Configuration).ConfigureAwait(false);
 }
+
+await PosBootstrapper.SeedAsync(app.Services).ConfigureAwait(false);
 
 var swaggerEnabled =
     app.Environment.IsDevelopment() ||
