@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Data, NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
@@ -20,7 +27,12 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
       <!-- HEADER con gradiente y diseño refinado -->
       <header class="app-header">
         <div class="brand">
-          <span class="brand-title">Cobranza Digital</span>
+          <div class="brand-heading">
+            <span class="brand-title">Cobranza Digital</span>
+            @if (pageTitle()) {
+              <span class="page-title">· {{ pageTitle() }}</span>
+            }
+          </div>
           <span class="brand-subtitle">Panel protegido</span>
         </div>
         <div class="header-actions">
@@ -77,11 +89,7 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
           </aside>
         }
 
-        <main
-          class="app-main"
-          [class.app-main--full-width]="isFullWidthRoute()"
-          aria-live="polite"
-        >
+        <main class="app-main" [class.app-main--full-width]="isFullWidthRoute()" aria-live="polite">
           <router-outlet></router-outlet>
         </main>
       </div>
@@ -113,7 +121,13 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
       color: var(--brand-ink);
       display: flex;
       flex-direction: column;
-      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      font-family:
+        system-ui,
+        -apple-system,
+        'Segoe UI',
+        Roboto,
+        'Helvetica Neue',
+        sans-serif;
     }
 
     /* ===== HEADER ELEGANTE ===== */
@@ -139,6 +153,13 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
       gap: 0.2rem;
     }
 
+    .brand-heading {
+      display: flex;
+      align-items: baseline;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+
     .brand-title {
       font-size: 1.35rem;
       font-weight: 800;
@@ -156,6 +177,12 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
       color: var(--brand-muted);
       text-transform: uppercase;
       letter-spacing: 0.03em;
+    }
+
+    .page-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--brand-muted);
     }
 
     .header-actions {
@@ -230,8 +257,13 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
+      0%,
+      100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.6;
+      }
     }
 
     /* Botón de cerrar sesión (outline) */
@@ -449,6 +481,7 @@ export class AppShellComponent {
     { initialValue: this.getActiveRouteData() },
   );
   readonly isFullWidthRoute = computed(() => this.activeRouteData()?.['fullWidth'] === true);
+  readonly pageTitle = computed(() => this.activeRouteData()?.['title'] ?? '');
 
   private readonly sidenavStorageKey = computed(
     () => `${SIDENAV_STORAGE_KEY}:${this.authService.sessionScopeSig()}`,

@@ -95,6 +95,7 @@ export class PosCajaPage implements OnDestroy {
   readonly inProgressCloseOperationId = signal<string | null>(null);
   readonly inProgressVoidOperationId = signal<string | null>(null);
   readonly requireOpenShift = environment.posRequireOpenShift;
+  readonly showCorrelationId = !environment.production;
 
   readonly denominations = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5];
 
@@ -445,7 +446,9 @@ export class PosCajaPage implements OnDestroy {
           : null,
       })),
       payments: event.payments,
-      ...(this.storeContext.getActiveStoreId() ? { storeId: this.storeContext.getActiveStoreId()! } : {}),
+      ...(this.storeContext.getActiveStoreId()
+        ? { storeId: this.storeContext.getActiveStoreId()! }
+        : {}),
     };
 
     try {
