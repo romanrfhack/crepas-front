@@ -12,7 +12,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace CobranzaDigital.Api.Tests;
 
 public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiFactory>
+    , IAsyncLifetime
 {
+    private const string TestDataPrefix = "IT-PosShift";
     private readonly CobranzaDigitalApiFactory _factory;
     private readonly HttpClient _client;
 
@@ -22,25 +24,28 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
         _client = factory.CreateClient();
     }
 
+    public Task InitializeAsync() => CleanupTestDataAsync();
+
+    public Task DisposeAsync() => CleanupTestDataAsync();
+
     [Fact]
     public async Task CreateSale_MixedPayments_OK_AndClosePreviewExpectedCashOnlyCashPortion()
     {
-        var cashier = await CreateCashierAsync("cashier.mixedpayments@test.local");
-        await CloseAnyOpenShiftAsync();
-
-        await OpenShiftAsync(cashier.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000101"));
-        var productId = await SeedOrGetAnyProductIdAsync();
+        var cashier = await CreateCashierAsync("cashier.mixedpayments");
+        var storeId = await EnsureOpenShiftAsync(cashier.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000101"));
+        var product = await CreateProductAsync(expectedBasePrice: 120m);
 
         await CreateSaleAsync(
             cashier.Token,
             clientSaleId: Guid.Parse("00000000-0000-0000-0000-000000000111"),
-            productId,
+            product.ProductId,
             quantity: 1,
             payments:
             [
                 new PaymentInput("Cash", 20m, null),
                 new PaymentInput("Card", 100m, "MIXED-REF-001")
-            ]);
+            ],
+            storeId);
 
         using var currentReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/current", cashier.Token);
         using var currentResp = await _client.SendAsync(currentReq);
@@ -62,18 +67,17 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
     [Fact]
     public async Task ClosePreview_WithCashCount_ReturnsCountedAndDifference()
     {
-        var cashier = await CreateCashierAsync("cashier.previewcount@test.local");
-        await CloseAnyOpenShiftAsync();
-
-        await OpenShiftAsync(cashier.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000201"));
-        var productId = await SeedOrGetAnyProductIdAsync();
+        var cashier = await CreateCashierAsync("cashier.previewcount");
+        var storeId = await EnsureOpenShiftAsync(cashier.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000201"));
+        var product = await CreateProductAsync(expectedBasePrice: 30m);
 
         await CreateSaleAsync(
             cashier.Token,
             clientSaleId: Guid.Parse("00000000-0000-0000-0000-000000000211"),
-            productId,
+            product.ProductId,
             quantity: 1,
-            payments: [new PaymentInput("Cash", 30m, null)]);
+            payments: [new PaymentInput("Cash", 30m, null)],
+            storeId);
 
         using var previewReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/close-preview", cashier.Token);
         previewReq.Content = JsonContent.Create(new
@@ -96,18 +100,17 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
     [Fact]
     public async Task CloseShift_WhenDifferenceExceedsThreshold_RequiresCloseReason()
     {
-        var cashier = await CreateCashierAsync("cashier.threshold@test.local");
-        await CloseAnyOpenShiftAsync();
-
-        await OpenShiftAsync(cashier.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000301"));
-        var productId = await SeedOrGetAnyProductIdAsync();
+        var cashier = await CreateCashierAsync("cashier.threshold");
+        var storeId = await EnsureOpenShiftAsync(cashier.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000301"));
+        var product = await CreateProductAsync(expectedBasePrice: 20m);
 
         await CreateSaleAsync(
             cashier.Token,
             clientSaleId: Guid.Parse("00000000-0000-0000-0000-000000000311"),
-            productId,
+            product.ProductId,
             quantity: 1,
-            payments: [new PaymentInput("Cash", 20m, null)]);
+            payments: [new PaymentInput("Cash", 20m, null)],
+            storeId);
 
         await SetCashDifferenceThresholdAsync(1m);
 
@@ -136,18 +139,17 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
     [Fact]
     public async Task VoidSale_ExcludedFromClosePreview()
     {
-        var cashier = await CreateCashierAsync("cashier.voidexcluded@test.local");
-        await CloseAnyOpenShiftAsync();
-
-        await OpenShiftAsync(cashier.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000401"));
-        var productId = await SeedOrGetAnyProductIdAsync();
+        var cashier = await CreateCashierAsync("cashier.voidexcluded");
+        var storeId = await EnsureOpenShiftAsync(cashier.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000401"));
+        var product = await CreateProductAsync(expectedBasePrice: 120m);
 
         var createdSale = await CreateSaleAsync(
             cashier.Token,
             clientSaleId: Guid.Parse("00000000-0000-0000-0000-000000000411"),
-            productId,
+            product.ProductId,
             quantity: 1,
-            payments: [new PaymentInput("Cash", 120m, null)]);
+            payments: [new PaymentInput("Cash", 120m, null)],
+            storeId);
 
         var beforeVoidPreview = await GetClosePreviewAsync(cashier.Token);
         Assert.Equal(120m, beforeVoidPreview.ExpectedCashAmount);
@@ -172,18 +174,17 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
     [Fact]
     public async Task VoidSale_Idempotent_ByClientVoidId()
     {
-        var cashier = await CreateCashierAsync("cashier.voididempotent@test.local");
-        await CloseAnyOpenShiftAsync();
-
-        await OpenShiftAsync(cashier.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000501"));
-        var productId = await SeedOrGetAnyProductIdAsync();
+        var cashier = await CreateCashierAsync("cashier.voididempotent");
+        var storeId = await EnsureOpenShiftAsync(cashier.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000501"));
+        var product = await CreateProductAsync(expectedBasePrice: 40m);
 
         var createdSale = await CreateSaleAsync(
             cashier.Token,
             clientSaleId: Guid.Parse("00000000-0000-0000-0000-000000000511"),
-            productId,
+            product.ProductId,
             quantity: 1,
-            payments: [new PaymentInput("Cash", 40m, null)]);
+            payments: [new PaymentInput("Cash", 40m, null)],
+            storeId);
 
         var clientVoidId = Guid.Parse("00000000-0000-0000-0000-000000000512");
         var voidBody = new { reasonCode = "CashierError", reasonText = "correction", note = "idempotent", clientVoidId };
@@ -214,19 +215,18 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
     [Fact]
     public async Task VoidSale_CashierCannotVoidOtherCashier_403()
     {
-        var cashierA = await CreateCashierAsync("cashier.void.owner@test.local");
-        var cashierB = await CreateCashierAsync("cashier.void.other@test.local");
-        await CloseAnyOpenShiftAsync();
-
-        await OpenShiftAsync(cashierA.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000601"));
-        var productId = await SeedOrGetAnyProductIdAsync();
+        var cashierA = await CreateCashierAsync("cashier.void.owner");
+        var cashierB = await CreateCashierAsync("cashier.void.other");
+        var storeId = await EnsureOpenShiftAsync(cashierA.Token, openingCashAmount: 0m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000601"));
+        var product = await CreateProductAsync(expectedBasePrice: 50m);
 
         var createdSale = await CreateSaleAsync(
             cashierA.Token,
             clientSaleId: Guid.Parse("00000000-0000-0000-0000-000000000611"),
-            productId,
+            product.ProductId,
             quantity: 1,
-            payments: [new PaymentInput("Cash", 50m, null)]);
+            payments: [new PaymentInput("Cash", 50m, null)],
+            storeId);
 
         using var voidReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{createdSale.SaleId}/void", cashierB.Token);
         voidReq.Content = JsonContent.Create(new
@@ -244,20 +244,20 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
     [Fact]
     public async Task StoreIdOmitted_UsesDefaultStore_ForShiftAndSale()
     {
-        var cashier = await CreateCashierAsync("cashier.defaultstore@test.local");
-        await CloseAnyOpenShiftAsync();
+        var cashier = await CreateCashierAsync("cashier.defaultstore");
 
         var defaultStoreId = await GetDefaultStoreIdAsync();
-        await OpenShiftAsync(cashier.Token, openingCashAmount: 10m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000701"));
+        var resolvedStoreId = await EnsureOpenShiftAsync(cashier.Token, openingCashAmount: 10m, clientOperationId: Guid.Parse("00000000-0000-0000-0000-000000000701"));
         var currentShift = await GetCurrentShiftAsync(cashier.Token);
 
-        var productId = await SeedOrGetAnyProductIdAsync();
+        var product = await CreateProductAsync(expectedBasePrice: 10m);
         var sale = await CreateSaleAsync(
             cashier.Token,
             clientSaleId: Guid.Parse("00000000-0000-0000-0000-000000000711"),
-            productId,
+            product.ProductId,
             quantity: 1,
-            payments: [new PaymentInput("Cash", 10m, null)]);
+            payments: [new PaymentInput("Cash", 10m, null)],
+            resolvedStoreId);
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
@@ -268,42 +268,40 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Assert.Equal(defaultStoreId, dbSale.StoreId);
     }
 
-    private async Task<Guid> SeedOrGetAnyProductIdAsync()
+    private async Task<(Guid ProductId, decimal BasePrice)> CreateProductAsync(decimal expectedBasePrice)
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
 
-        var existingProduct = await db.Products.AsNoTracking().Where(x => x.IsActive).Select(x => x.Id).FirstOrDefaultAsync();
-        if (existingProduct != Guid.Empty)
+        var uniqueSuffix = Guid.NewGuid().ToString("N");
+        var category = new Category
         {
-            return existingProduct;
-        }
-
-        var category = await db.Categories.FirstOrDefaultAsync(x => x.IsActive);
-        if (category is null)
-        {
-            category = new Category
-            {
-                Id = Guid.Parse("10000000-0000-0000-0000-000000000001"),
-                Name = "Integration Tests",
-                SortOrder = 1,
-                IsActive = true
-            };
-            db.Categories.Add(category);
-        }
+            Id = Guid.NewGuid(),
+            Name = $"{TestDataPrefix}-Category-{uniqueSuffix}",
+            SortOrder = 1,
+            IsActive = true
+        };
+        db.Categories.Add(category);
 
         var product = new Product
         {
-            Id = Guid.Parse("10000000-0000-0000-0000-000000000002"),
-            Name = "Integration Product",
+            Id = Guid.NewGuid(),
+            Name = $"{TestDataPrefix}-Product-{uniqueSuffix}",
             CategoryId = category.Id,
-            BasePrice = 120m,
+            BasePrice = expectedBasePrice,
             IsActive = true
         };
 
         db.Products.Add(product);
         await db.SaveChangesAsync();
-        return product.Id;
+
+        var persistedPrice = await db.Products.AsNoTracking()
+            .Where(x => x.Id == product.Id)
+            .Select(x => x.BasePrice)
+            .SingleAsync();
+
+        Assert.Equal(expectedBasePrice, persistedPrice);
+        return (product.Id, persistedPrice);
     }
 
     private async Task SetCashDifferenceThresholdAsync(decimal threshold)
@@ -343,17 +341,21 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
         return await db.PosSettings.AsNoTracking().Select(x => x.DefaultStoreId).FirstAsync();
     }
 
-    private async Task OpenShiftAsync(string token, decimal openingCashAmount, Guid clientOperationId)
+    private async Task<Guid> EnsureOpenShiftAsync(string token, decimal openingCashAmount, Guid clientOperationId, Guid? storeId = null)
     {
+        var resolvedStoreId = storeId ?? await GetDefaultStoreIdAsync();
+
         using var openReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/open", token);
         openReq.Content = JsonContent.Create(new
         {
             openingCashAmount,
-            clientOperationId
+            clientOperationId,
+            storeId = resolvedStoreId
         });
 
         using var openResp = await _client.SendAsync(openReq);
         Assert.Equal(HttpStatusCode.OK, openResp.StatusCode);
+        return resolvedStoreId;
     }
 
     private async Task<CreateSaleResponse> CreateSaleAsync(
@@ -361,12 +363,16 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Guid clientSaleId,
         Guid productId,
         int quantity,
-        IReadOnlyCollection<PaymentInput> payments)
+        IReadOnlyCollection<PaymentInput> payments,
+        Guid? storeId = null)
     {
+        var resolvedStoreId = storeId ?? await GetDefaultStoreIdAsync();
+
         using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
         req.Content = JsonContent.Create(new
         {
             clientSaleId,
+            storeId = resolvedStoreId,
             items = new[]
             {
                 new
@@ -392,35 +398,55 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
         return created!;
     }
 
-    private async Task CloseAnyOpenShiftAsync()
+    private async Task CleanupTestDataAsync()
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
 
-        var openShifts = await db.PosShifts.Where(x => x.ClosedAtUtc == null).ToListAsync();
-        if (openShifts.Count == 0)
+        var testUserIds = await db.Users
+            .Where(x => x.Email != null && EF.Functions.Like(x.Email, $"%+{TestDataPrefix.ToLowerInvariant()}-%"))
+            .Select(x => x.Id)
+            .ToArrayAsync();
+
+        if (testUserIds.Length > 0)
         {
-            return;
+            var saleIds = await db.Sales
+                .Where(x => testUserIds.Contains(x.CreatedByUserId) || (x.VoidedByUserId.HasValue && testUserIds.Contains(x.VoidedByUserId.Value)))
+                .Select(x => x.Id)
+                .ToArrayAsync();
+
+            var saleItemIds = saleIds.Length == 0
+                ? []
+                : await db.SaleItems.Where(x => saleIds.Contains(x.SaleId)).Select(x => x.Id).ToArrayAsync();
+
+            if (saleItemIds.Length > 0)
+            {
+                await db.SaleItemSelections.Where(x => saleItemIds.Contains(x.SaleItemId)).ExecuteDeleteAsync();
+                await db.SaleItemExtras.Where(x => saleItemIds.Contains(x.SaleItemId)).ExecuteDeleteAsync();
+            }
+
+            if (saleIds.Length > 0)
+            {
+                await db.Payments.Where(x => saleIds.Contains(x.SaleId)).ExecuteDeleteAsync();
+                await db.SaleItems.Where(x => saleIds.Contains(x.SaleId)).ExecuteDeleteAsync();
+                await db.Sales.Where(x => saleIds.Contains(x.Id)).ExecuteDeleteAsync();
+            }
+
+            await db.PosShifts.Where(x => testUserIds.Contains(x.OpenedByUserId)).ExecuteDeleteAsync();
         }
 
-        var closedAtUtc = DateTimeOffset.UtcNow;
-        foreach (var shift in openShifts)
-        {
-            shift.ClosedAtUtc = closedAtUtc;
-            shift.ClosingCashAmount ??= shift.OpeningCashAmount;
-            shift.CloseNotes ??= "Closed by integration test setup.";
-        }
-
-        await db.SaveChangesAsync();
+        await db.Products.Where(x => EF.Functions.Like(x.Name, $"{TestDataPrefix}-%")).ExecuteDeleteAsync();
+        await db.Categories.Where(x => EF.Functions.Like(x.Name, $"{TestDataPrefix}-%")).ExecuteDeleteAsync();
     }
 
     private async Task<(string Email, string Token)> CreateCashierAsync(string email)
     {
+        var uniqueEmail = $"{email}+{TestDataPrefix.ToLowerInvariant()}-{Guid.NewGuid():N}@test.local";
         var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
-        _ = await RegisterAndGetAccessTokenAsync(email, "User1234!");
-        await SetUserRolesAsync(adminToken, email, ["Cashier"]);
-        var cashierToken = await LoginAndGetAccessTokenAsync(email, "User1234!");
-        return (email, cashierToken);
+        _ = await RegisterAndGetAccessTokenAsync(uniqueEmail, "User1234!");
+        await SetUserRolesAsync(adminToken, uniqueEmail, ["Cashier"]);
+        var cashierToken = await LoginAndGetAccessTokenAsync(uniqueEmail, "User1234!");
+        return (uniqueEmail, cashierToken);
     }
 
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
