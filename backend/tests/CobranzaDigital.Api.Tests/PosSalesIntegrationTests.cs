@@ -263,7 +263,8 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         await CreateSaleAsync(token, productA.Id, quantity: 2, total: 60m);
         await CreateSaleAsync(token, productB.Id, quantity: 1, total: 35m);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var mexicoTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Mexico_City");
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, mexicoTimeZone).DateTime);
 
         using var dailyReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/daily-summary?date={today:yyyy-MM-dd}", token);
         using var dailyResp = await _client.SendAsync(dailyReq);
