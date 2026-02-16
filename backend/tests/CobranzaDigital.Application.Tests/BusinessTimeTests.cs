@@ -1,4 +1,5 @@
 using CobranzaDigital.Infrastructure.Services;
+using Xunit;
 
 namespace CobranzaDigital.Application.Tests;
 

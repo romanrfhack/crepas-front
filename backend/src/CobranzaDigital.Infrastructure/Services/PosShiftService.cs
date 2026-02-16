@@ -111,8 +111,8 @@ public sealed class PosShiftService : IPosShiftService
         var expectedCashAmount = RoundMoney(openShift.OpeningCashAmount + salesCashTotal);
         var counted = request.CashCount is { Count: > 0 }
             ? RoundMoney(request.CashCount.Sum(x => x.DenominationValue * x.Count))
-            : null;
-        var difference = counted.HasValue ? RoundMoney(counted.Value - expectedCashAmount) : null;
+            : (decimal?)null;
+        var difference = counted.HasValue ? RoundMoney(counted.Value - expectedCashAmount) : (decimal?)null;
 
         return new ShiftClosePreviewDto(openShift.Id, openShift.OpenedAtUtc, openShift.OpeningCashAmount, salesCashTotal, expectedCashAmount, counted, difference, openShift.ClosingCashAmount, breakdown);
     }

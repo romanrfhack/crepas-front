@@ -1,6 +1,7 @@
 using CobranzaDigital.Domain.Entities;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CobranzaDigital.Infrastructure.Persistence;
 

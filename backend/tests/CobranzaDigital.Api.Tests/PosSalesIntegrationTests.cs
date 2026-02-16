@@ -301,8 +301,8 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
             items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
             payments = new[]
             {
-                new { method = "Cash", amount = 20m },
-                new { method = "Card", amount = 100m, reference = "MIXED-001" }
+                new { method = "Cash", amount = 20m, reference = (string?)null },
+                new { method = "Card", amount = 100m, reference = (string?)"MIXED-001" }
             }
         });
 

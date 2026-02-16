@@ -417,12 +417,14 @@ public sealed class PosSalesService : IPosSalesService
         sale.VoidNote = request.Note?.Trim();
         sale.ClientVoidId = request.ClientVoidId;
 
-        if (sale.LoyaltyPointsAwarded.GetValueOrDefault() > 0)
+        if (sale.LoyaltyPointsAwarded.HasValue && sale.LoyaltyPointsAwarded.Value > 0)
         {
             await _pointsReversalService.ReversePointsForSaleAsync(sale.Id, sale.LoyaltyPointsAwarded.Value, userId, _businessTime.UtcNow, ct).ConfigureAwait(false);
         }
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        var voidedAtUtc = sale.VoidedAtUtc!.Value;
 
         await _auditLogger.LogAsync(new AuditEntry(
             Action: "SaleVoid",
@@ -436,7 +438,7 @@ public sealed class PosSalesService : IPosSalesService
             Notes: "Sale voided",
             OccurredAtUtc: DateTime.UtcNow), ct).ConfigureAwait(false);
 
-        return new VoidSaleResponseDto(sale.Id, sale.Status, sale.VoidedAtUtc.Value);
+        return new VoidSaleResponseDto(sale.Id, sale.Status, voidedAtUtc);
     }
 
     private static string GenerateFolio(DateTimeOffset timestamp)

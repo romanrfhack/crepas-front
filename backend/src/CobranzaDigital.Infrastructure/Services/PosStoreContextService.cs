@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CobranzaDigital.Infrastructure.Services;
 
-internal sealed class PosStoreContextService
+public sealed class PosStoreContextService
 {
     private readonly CobranzaDigitalDbContext _db;
 
