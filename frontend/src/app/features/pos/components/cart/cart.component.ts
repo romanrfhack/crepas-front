@@ -15,4 +15,5 @@ export class CartComponent {
   readonly increase = output<string>();
   readonly checkout = output<void>();
   readonly checkoutDisabled = input<boolean>(false);
+  readonly checkoutTestId = input<string | null>(null);
 }

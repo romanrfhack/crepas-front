@@ -87,6 +87,8 @@ export class PosCajaPage implements OnDestroy {
   readonly shiftSales = signal<SaleListItemUi[]>([]);
   readonly showVoidModal = signal(false);
   readonly selectedSaleForVoid = signal<SaleListItemUi | null>(null);
+  readonly closeShiftError = signal<string | null>(null);
+  readonly voidForbiddenError = signal(false);
 
   private autoCollapseTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -274,6 +276,7 @@ export class PosCajaPage implements OnDestroy {
 
     this.loading.set(true);
     this.errorMessage.set(null);
+    this.closeShiftError.set(null);
 
     try {
       const preview = await this.shiftApi.closePreviewV2({
@@ -317,12 +320,15 @@ export class PosCajaPage implements OnDestroy {
     }
 
     if (this.requiresDifferenceReason() && !this.closeShiftForm.controls.reason.value.trim()) {
-      this.errorMessage.set('Debes capturar un motivo cuando exista diferencia en cierre de caja.');
+      this.closeShiftError.set(
+        'Debes capturar un motivo cuando exista diferencia en cierre de caja.',
+      );
       return;
     }
 
     this.loading.set(true);
     this.errorMessage.set(null);
+    this.closeShiftError.set(null);
 
     const { reason, evidence } = this.closeShiftForm.getRawValue();
     const clientOperationId = this.inProgressCloseOperationId() ?? crypto.randomUUID();
@@ -346,17 +352,20 @@ export class PosCajaPage implements OnDestroy {
         closeNotes: result.closeNotes,
       });
       this.showCloseShiftModal.set(false);
+      this.closeShiftError.set(null);
       this.inProgressCloseOperationId.set(null);
     } catch (error) {
       const httpError = error as HttpErrorResponse;
       if (httpError.status === 400) {
-        this.errorMessage.set('El backend requiere motivo de diferencia para finalizar el cierre.');
+        this.closeShiftError.set(
+          'El backend requiere motivo de diferencia para finalizar el cierre.',
+        );
       } else if (httpError.status === 0) {
-        this.errorMessage.set(
+        this.closeShiftError.set(
           'Error de red. Puedes reintentar y se reutilizará el mismo clientOperationId para evitar duplicados.',
         );
       } else {
-        this.errorMessage.set('No se pudo cerrar el turno.');
+        this.closeShiftError.set('No se pudo cerrar el turno.');
       }
     } finally {
       this.loading.set(false);
@@ -483,6 +492,7 @@ export class PosCajaPage implements OnDestroy {
       note: '',
     });
     this.showVoidModal.set(true);
+    this.voidForbiddenError.set(false);
   }
 
   async confirmVoidSale() {
@@ -493,6 +503,7 @@ export class PosCajaPage implements OnDestroy {
 
     this.loading.set(true);
     this.errorMessage.set(null);
+    this.voidForbiddenError.set(false);
 
     const clientVoidId = this.inProgressVoidOperationId() ?? crypto.randomUUID();
     this.inProgressVoidOperationId.set(clientVoidId);
@@ -519,6 +530,7 @@ export class PosCajaPage implements OnDestroy {
     } catch (error) {
       const httpError = error as HttpErrorResponse;
       if (httpError.status === 403) {
+        this.voidForbiddenError.set(true);
         this.errorMessage.set(
           'No autorizado para cancelar esta venta. Solo Manager/Admin o el Cashier dueño del turno vigente pueden anularla.',
         );
