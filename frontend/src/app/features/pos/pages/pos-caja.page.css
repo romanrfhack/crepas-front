@@ -142,6 +142,41 @@
   padding: 0.5rem 0.75rem;
 }
 
+.sales-list {
+  margin-top: 1rem;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.8rem;
+}
+
+.sale-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.6rem;
+  align-items: center;
+  border-bottom: 1px solid rgba(107, 63, 42, 0.12);
+  padding: 0.5rem 0;
+}
+
+.sale-item p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--brand-muted);
+}
+
+.void-chip {
+  color: #b42318;
+  font-weight: 700;
+  margin-left: 0.5rem;
+}
+
+.void-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -182,6 +217,7 @@
 }
 
 .modal-card input,
+.modal-card select,
 .modal-card textarea,
 .toolbar input[type='search'] {
   width: 100%;
@@ -196,12 +232,14 @@
 }
 
 .modal-card input:hover,
+.modal-card select:hover,
 .modal-card textarea:hover,
 .toolbar input[type='search']:hover {
   border-color: rgba(232, 154, 172, 0.45);
 }
 
 .modal-card input:focus-visible,
+.modal-card select:focus-visible,
 .modal-card textarea:focus-visible,
 .toolbar input[type='search']:focus-visible {
   outline: 3px solid var(--ring);

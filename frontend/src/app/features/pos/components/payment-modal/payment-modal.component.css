@@ -160,6 +160,47 @@ input[type='number']:focus-visible {
   margin-top: 0.25rem;
 }
 
+.line-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.line-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.line-title {
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+  color: var(--brand-cocoa);
+}
+
+.line-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.65rem;
+}
+
+.btn-link {
+  background: transparent;
+  border: none;
+  color: #92400e;
+  font-weight: 600;
+  margin-top: 0.4rem;
+}
+
+.btn-add {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  width: fit-content;
+}
+
 .change-row {
   display: flex;
   justify-content: space-between;

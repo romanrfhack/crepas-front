@@ -7,66 +7,75 @@
       <span class="total-amount">${{ total().toFixed(2) }}</span>
     </div>
 
-    <div class="form-group">
-      <label for="payment-method">Método de pago</label>
-      <select
-        id="payment-method"
-        [value]="method()"
-        (change)="selectMethod($any($event.target).value)"
-      >
-        <option value="Cash">Efectivo</option>
-        <option value="Card">Tarjeta</option>
-        <option value="Transfer">Transferencia</option>
-      </select>
+    <div class="line-items">
+      @for (line of paymentLines(); track line.id; let index = $index) {
+        <div class="line-item">
+          <p class="line-title">Pago #{{ index + 1 }}</p>
+          <div class="line-grid">
+            <div class="form-group">
+              <label [for]="'payment-method-' + line.id">Método</label>
+              <select
+                [id]="'payment-method-' + line.id"
+                [value]="line.method"
+                (change)="updateMethod(line.id, $any($event.target).value)"
+              >
+                <option value="Cash">Efectivo</option>
+                <option value="Card">Tarjeta</option>
+                <option value="Transfer">Transferencia</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label [for]="'payment-amount-' + line.id">Monto</label>
+              <input
+                [id]="'payment-amount-' + line.id"
+                type="number"
+                min="0"
+                step="0.01"
+                [value]="line.amount"
+                (input)="updateAmount(line.id, +$any($event.target).value || 0)"
+              />
+            </div>
+
+            <div class="form-group">
+              <label [for]="'payment-reference-' + line.id">Referencia</label>
+              <input
+                [id]="'payment-reference-' + line.id"
+                type="text"
+                [value]="line.reference"
+                [disabled]="line.method === 'Cash'"
+                (input)="updateReference(line.id, $any($event.target).value)"
+                placeholder="Voucher / folio"
+              />
+            </div>
+          </div>
+          <button type="button" class="btn-link" (click)="removePaymentLine(line.id)">Eliminar línea</button>
+        </div>
+      }
     </div>
 
-    @if (method() === 'Cash') {
-      <div class="form-group">
-        <label for="received-amount">Recibí</label>
-        <input
-          id="received-amount"
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0.00"
-          [value]="receivedAmount()"
-          (input)="updateReceivedAmount(+$any($event.target).value || 0)"
-        />
-      </div>
+    <button type="button" class="btn-add" (click)="addPaymentLine()">+ Agregar pago</button>
 
-      <div class="cash-feedback">
-        <div class="change-row">
-          <span>Cambio</span>
-          <strong>${{ changeAmount().toFixed(2) }}</strong>
-        </div>
-        @if (insufficientCash()) {
-          <p class="error" role="alert">
-            El monto recibido debe ser mayor o igual al total
-          </p>
-        }
+    <div class="cash-feedback">
+      <div class="change-row">
+        <span>Total pagado</span>
+        <strong>${{ paidTotal().toFixed(2) }}</strong>
       </div>
-    }
-
-    @if (method() === 'Transfer' || method() === 'Card') {
-      <div class="form-group">
-        <label for="payment-reference">Referencia (opcional)</label>
-        <input
-          id="payment-reference"
-          type="text"
-          [value]="reference()"
-          (input)="updateReference($any($event.target).value)"
-          placeholder="Número de voucher, folio, etc."
-        />
+      <div class="change-row">
+        <span>Diferencia</span>
+        <strong>${{ difference().toFixed(2) }}</strong>
       </div>
-    }
+      @if (hasDifference()) {
+        <p class="error" role="alert">La suma de pagos debe coincidir exactamente con el total.</p>
+      }
+      @if (hasInvalidReference()) {
+        <p class="error" role="alert">Tarjeta y transferencia requieren referencia.</p>
+      }
+    </div>
 
     <div class="modal-actions">
       <button type="button" (click)="cancelAction.emit()">Cancelar</button>
-      <button
-        type="button"
-        [disabled]="loading() || insufficientCash()"
-        (click)="confirmPayment()"
-      >
+      <button type="button" [disabled]="!canSubmit()" (click)="confirmPayment()">
         <span>✅</span> Confirmar cobro
       </button>
     </div>

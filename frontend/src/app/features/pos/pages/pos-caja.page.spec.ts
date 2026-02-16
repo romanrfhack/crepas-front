@@ -5,6 +5,8 @@ import { PosCatalogSnapshotService } from '../services/pos-catalog-snapshot.serv
 import { PosSalesApiService } from '../services/pos-sales-api.service';
 import { CreateSaleRequestDto } from '../models/pos.models';
 import { PosShiftApiService } from '../services/pos-shift-api.service';
+import { PosTimezoneService } from '../services/pos-timezone.service';
+import { StoreContextService } from '../services/store-context.service';
 
 describe('PosCajaPage', () => {
   let fixture: ComponentFixture<PosCajaPage>;
@@ -62,7 +64,7 @@ describe('PosCajaPage', () => {
               openNotes: null,
               closeNotes: null,
             }),
-            getClosePreview: async () => ({
+            closePreviewV2: async () => ({
               shiftId: 'shift-1',
               openedAtUtc: '2026-02-12T10:00:00Z',
               openingCashAmount: 100,
@@ -70,16 +72,14 @@ describe('PosCajaPage', () => {
               expectedCashAmount: 350,
             }),
             closeShift: async () => ({
-              id: 'shift-2',
+              shiftId: 'shift-2',
               openedAtUtc: '2026-02-12T11:00:00Z',
-              openedByUserId: 'u1',
-              openedByEmail: 'cashier@local',
-              openingCashAmount: 100,
               closedAtUtc: '2026-02-12T20:00:00Z',
-              closedByUserId: 'u1',
-              closedByEmail: 'cashier@local',
-              closingCashAmount: 100,
-              openNotes: null,
+              openingCashAmount: 100,
+              salesCashTotal: 250,
+              expectedCashAmount: 350,
+              countedCashAmount: 350,
+              difference: 0,
               closeNotes: null,
             }),
           },
@@ -102,6 +102,14 @@ describe('PosCajaPage', () => {
             },
           },
         },
+        PosTimezoneService,
+        {
+          provide: StoreContextService,
+          useValue: {
+            getActiveStoreId: () => null,
+            setActiveStoreId: () => undefined,
+          },
+        },
       ],
     }).compileComponents();
 
@@ -122,15 +130,11 @@ describe('PosCajaPage', () => {
 
   it('should reuse the same clientSaleId when retrying after network error', async () => {
     await fixture.componentInstance.confirmPayment({
-      method: 'Cash',
-      amount: 10,
-      reference: null,
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
     });
 
     await fixture.componentInstance.confirmPayment({
-      method: 'Cash',
-      amount: 10,
-      reference: null,
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
     });
 
     expect(salesCalls.length).toBe(2);
@@ -146,50 +150,25 @@ describe('PosCajaPage', () => {
     hundredControl.setValue(2);
 
     expect(fixture.componentInstance.countedTotal()).toBe(200);
-    expect(fixture.componentInstance.closeDifference()).toBe(150);
+    expect(fixture.componentInstance.closeDifference()).toBe(-150);
 
     const fiftyCentControl = fixture.componentInstance.getCountControl(10);
     fiftyCentControl.setValue(3);
 
     expect(fixture.componentInstance.countedTotal()).toBe(201.5);
-    expect(fixture.componentInstance.closeDifference()).toBe(148.5);
+    expect(fixture.componentInstance.closeDifference()).toBe(-148.5);
   });
 
-  it('should always send payment amount as sale total and omit cash ui-only fields', async () => {
-    fixture.componentInstance.cartItems.set([
-      {
-        id: 'cart-1',
-        productId: 'product-1',
-        productName: 'Latte',
-        basePrice: 80,
-        quantity: 1,
-        selections: [],
-        extras: [],
-      },
-    ]);
-
+  it('should always send payments array', async () => {
     await fixture.componentInstance.confirmPayment({
-      method: 'Cash',
-      amount: 200,
-      reference: null,
+      payments: [
+        { method: 'Cash', amount: 4, reference: null },
+        { method: 'Card', amount: 6, reference: 'AUTH-123' },
+      ],
     });
 
     expect(salesCalls.length).toBe(1);
-    expect(salesCalls[0]?.payload.payment.amount).toBe(80);
-    expect(salesCalls[0]?.payload.payment.method).toBe('Cash');
-    expect('receivedAmount' in (salesCalls[0]?.payload.payment ?? {})).toBeFalsy();
-    expect('change' in (salesCalls[0]?.payload.payment ?? {})).toBeFalsy();
-  });
-
-  it('should send card payments with sale total amount', async () => {
-    await fixture.componentInstance.confirmPayment({
-      method: 'Card',
-      amount: 999,
-      reference: 'AUTH-123',
-    });
-
-    expect(salesCalls.length).toBe(1);
-    expect(salesCalls[0]?.payload.payment.amount).toBe(10);
-    expect(salesCalls[0]?.payload.payment.method).toBe('Card');
+    expect(salesCalls[0]?.payload.payments.length).toBe(2);
+    expect(salesCalls[0]?.payload.payments[1]?.reference).toBe('AUTH-123');
   });
 });

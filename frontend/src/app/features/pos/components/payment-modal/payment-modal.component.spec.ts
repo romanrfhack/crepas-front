@@ -16,33 +16,40 @@ describe('PaymentModalComponent', () => {
     fixture.detectChanges();
   });
 
-  it('should emit total as amount for cash payments', () => {
+  it('should emit mixed payments when totals match', () => {
     let submitted: unknown;
     component.submitPayment.subscribe((payload) => {
       submitted = payload;
     });
 
-    component.updateReceivedAmount(200);
+    const firstLineId = component.paymentLines()[0]?.id;
+    expect(firstLineId).toBeTruthy();
+
+    component.updateAmount(firstLineId!, 30);
+    component.addPaymentLine();
+
+    const secondLine = component.paymentLines()[1];
+    expect(secondLine).toBeTruthy();
+
+    component.updateMethod(secondLine.id, 'Card');
+    component.updateAmount(secondLine.id, 50);
+    component.updateReference(secondLine.id, 'AUTH-123');
     component.confirmPayment();
 
     expect(submitted).toEqual({
-      method: 'Cash',
-      amount: 80,
-      reference: null,
+      payments: [
+        { method: 'Cash', amount: 30, reference: null },
+        { method: 'Card', amount: 50, reference: 'AUTH-123' },
+      ],
     });
-    expect(component.changeAmount()).toBe(120);
   });
 
-  it('should block cash confirmation when received amount is less than total', () => {
-    let submitted: unknown;
-    component.submitPayment.subscribe((payload) => {
-      submitted = payload;
-    });
+  it('should require references for card and transfer payments', () => {
+    const firstLineId = component.paymentLines()[0]?.id;
+    component.updateMethod(firstLineId!, 'Card');
+    component.updateAmount(firstLineId!, 80);
 
-    component.updateReceivedAmount(79.99);
-    component.confirmPayment();
-
-    expect(component.insufficientCash()).toBeTruthy();
-    expect(submitted).toBeFalsy();
+    expect(component.hasInvalidReference()).toBeTrue();
+    expect(component.canSubmit()).toBeFalse();
   });
 });

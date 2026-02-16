@@ -5,46 +5,65 @@ import { environment } from '../../../../environments/environment';
 import {
   CloseShiftRequestDto,
   CloseShiftResultDto,
-  CountedDenominationDto,
   OpenShiftRequestDto,
   PosShiftDto,
+  ShiftClosePreviewRequestDto,
   ShiftClosePreviewDto,
 } from '../models/pos.models';
+import { StoreContextService } from './store-context.service';
 
 @Injectable({ providedIn: 'root' })
 export class PosShiftApiService {
   private readonly http = inject(HttpClient);
+  private readonly storeContext = inject(StoreContextService);
   private readonly baseUrl = `${environment.apiBaseUrl}/v1/pos/shifts`;
 
   async getCurrentShift() {
+    const storeId = this.storeContext.getActiveStoreId();
+    const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : '';
     const response = await firstValueFrom(
-      this.http.get<PosShiftDto>(`${this.baseUrl}/current`, { observe: 'response' }),
+      this.http.get<PosShiftDto>(`${this.baseUrl}/current${query}`, { observe: 'response' }),
     );
 
     return this.parseCurrentShiftResponse(response);
   }
 
   getClosePreview() {
-    return firstValueFrom(this.http.get<ShiftClosePreviewDto>(`${this.baseUrl}/close-preview`));
+    const storeId = this.storeContext.getActiveStoreId();
+    const query = storeId ? `?storeId=${encodeURIComponent(storeId)}` : '';
+    return firstValueFrom(this.http.get<ShiftClosePreviewDto>(`${this.baseUrl}/close-preview${query}`));
+  }
+
+  closePreviewV2(payload: ShiftClosePreviewRequestDto) {
+    const storeId = this.storeContext.getActiveStoreId();
+    const requestPayload: ShiftClosePreviewRequestDto = {
+      ...payload,
+      ...(storeId ? { storeId } : {}),
+    };
+
+    return firstValueFrom(this.http.post<ShiftClosePreviewDto>(`${this.baseUrl}/close-preview`, requestPayload));
   }
 
   openShift(startingCashAmount: number, notes?: string | null) {
+    const storeId = this.storeContext.getActiveStoreId();
     const payload: OpenShiftRequestDto = {
       startingCashAmount,
       notes: notes?.trim() ? notes.trim() : null,
+      ...(storeId ? { storeId } : {}),
     };
 
     return firstValueFrom(this.http.post<PosShiftDto>(`${this.baseUrl}/open`, payload));
   }
 
-  closeShift(countedDenominations: CountedDenominationDto[], closingNotes: string | null) {
-    const payload: CloseShiftRequestDto = {
-      countedDenominations,
-      closingNotes: closingNotes?.trim() ? closingNotes.trim() : null,
-      clientOperationId: crypto.randomUUID(),
+  closeShift(payload: CloseShiftRequestDto) {
+    const storeId = this.storeContext.getActiveStoreId();
+    const requestPayload: CloseShiftRequestDto = {
+      ...payload,
+      countedDenominations: payload.countedDenominations ?? [],
+      ...(storeId ? { storeId } : {}),
     };
 
-    return firstValueFrom(this.http.post<CloseShiftResultDto>(`${this.baseUrl}/close`, payload));
+    return firstValueFrom(this.http.post<CloseShiftResultDto>(`${this.baseUrl}/close`, requestPayload));
   }
 
   private parseCurrentShiftResponse(response: HttpResponse<PosShiftDto>) {

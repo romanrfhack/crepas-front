@@ -5,6 +5,8 @@ import { environment } from '../../../../environments/environment';
 import {
   CreateSaleRequestDto,
   DailySummaryDto,
+  SaleVoidRequestDto,
+  SaleVoidResponseDto,
   SaleResponseDto,
   TopProductDto,
 } from '../models/pos.models';
@@ -17,6 +19,16 @@ export class PosSalesApiService {
   createSale(payload: CreateSaleRequestDto, correlationId: string) {
     return firstValueFrom(
       this.http.post<SaleResponseDto>(`${this.baseUrl}/v1/pos/sales`, payload, {
+        headers: new HttpHeaders({
+          'X-Correlation-Id': correlationId,
+        }),
+      }),
+    );
+  }
+
+  voidSale(saleId: string, payload: SaleVoidRequestDto, correlationId: string) {
+    return firstValueFrom(
+      this.http.post<SaleVoidResponseDto>(`${this.baseUrl}/v1/pos/sales/${saleId}/void`, payload, {
         headers: new HttpHeaders({
           'X-Correlation-Id': correlationId,
         }),
