@@ -226,6 +226,41 @@ public sealed class PosSalesService : IPosSalesService
             var totalPaid = RoundMoney(payments.Sum(x => x.Amount));
             if (totalPaid != sale.Total)
             {
+                var debugItems = request.Items.Select(item =>
+                {
+                    var product = products[item.ProductId];
+                    var requestedExtras = item.Extras ?? [];
+                    var extrasTotal = requestedExtras.Sum(extraRow => extras[extraRow.ExtraId].Price * extraRow.Quantity);
+
+                    return new
+                    {
+                        item.ProductId,
+                        ProductName = product.Name,
+                        ProductBasePrice = product.BasePrice,
+                        item.Quantity,
+                        Extras = requestedExtras.Select(extraRow => new
+                        {
+                            extraRow.ExtraId,
+                            ExtraName = extras[extraRow.ExtraId].Name,
+                            ExtraUnitPrice = extras[extraRow.ExtraId].Price,
+                            extraRow.Quantity,
+                            LineTotal = extras[extraRow.ExtraId].Price * extraRow.Quantity
+                        }).ToArray(),
+                        ItemTotal = (product.BasePrice * item.Quantity) + extrasTotal
+                    };
+                }).ToArray();
+
+                _logger.LogWarning(
+                    "Validation error creating sale due to payment mismatch. SaleId={SaleId}, StoreId={StoreId}, ShiftId={ShiftId}, ClientSaleId={ClientSaleId}, SaleTotal={SaleTotal}, TotalPaid={TotalPaid}, Items={Items}, Payments={Payments}",
+                    sale.Id,
+                    storeId,
+                    openShiftId,
+                    request.ClientSaleId,
+                    sale.Total,
+                    totalPaid,
+                    debugItems,
+                    payments.Select(payment => new { payment.Method, payment.Amount, payment.Reference }).ToArray());
+
                 throw ValidationError("payments.amount", "Payments total must match sale total.");
             }
 
