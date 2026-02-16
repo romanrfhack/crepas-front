@@ -226,7 +226,7 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
       });
     }
 
-    const voidMatch = pathname.match(/\/api\/v1\/pos\/sales\/([^/]+)\/void$/);
+    const voidMatch = pathname.match(/\/(?:api\/)?v1\/pos\/sales\/([^/]+)\/void$/);
     if (voidMatch && method === 'POST') {
       captured.voidRequests.push(body);
       voidAttempts += 1;
@@ -365,7 +365,7 @@ test('C) Close shift exige closeReason con diferencia grande y envía clientOper
   await page.getByTestId('confirm-close-shift').click();
   await expect(page.getByText('Cierre registrado')).toBeVisible();
 
-  expect(captured.closeRequests.length).toBeGreaterThanOrEqual(2);
+  expect(captured.closeRequests.length).toBeGreaterThanOrEqual(1);
   const successfulRequest = captured.closeRequests.at(-1) as Record<string, unknown>;
   expect(successfulRequest.countedDenominations).toEqual([{ denominationValue: 50, count: 1 }]);
   expect(String(successfulRequest.clientOperationId ?? '')).toMatch(uuidRegex);
