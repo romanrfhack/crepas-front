@@ -119,7 +119,7 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
         });
 
         using var closeWithoutReasonResp = await _client.SendAsync(closeWithoutReason);
-        Assert.Contains(closeWithoutReasonResp.StatusCode, [HttpStatusCode.BadRequest, HttpStatusCode.UnprocessableEntity]);
+        Assert.Contains(closeWithoutReasonResp.StatusCode, new[] { HttpStatusCode.BadRequest, HttpStatusCode.UnprocessableEntity });
 
         using var closeWithReason = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/close", cashier.Token);
         closeWithReason.Content = JsonContent.Create(new
