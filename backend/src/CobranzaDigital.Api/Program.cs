@@ -158,6 +158,13 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+if (app.Environment.IsEnvironment("Testing") || app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+    await dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
+}
+
 var jwtLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("JwtStartup");
 if (app.Environment.IsEnvironment("Testing") || jwtLogger.IsEnabled(LogLevel.Debug))
 {

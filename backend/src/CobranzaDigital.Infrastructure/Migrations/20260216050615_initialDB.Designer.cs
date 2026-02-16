@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CobranzaDigital.Infrastructure.Migrations
 {
     [DbContext(typeof(CobranzaDigitalDbContext))]
-    [Migration("20260214205545_initialDB")]
+    [Migration("20260216050615_initialDB")]
     partial class initialDB
     {
         /// <inheritdoc />
@@ -239,6 +239,9 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<int>("Method")
                         .HasColumnType("int");
 
@@ -256,6 +259,31 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.ToTable("Payments", (string)null);
                 });
 
+            modelBuilder.Entity("CobranzaDigital.Domain.Entities.PosSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("CashDifferenceThreshold")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("DefaultStoreId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("MaxStoresAllowed")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("MultiStoreEnabled")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DefaultStoreId");
+
+                    b.ToTable("PosSettings", (string)null);
+                });
+
             modelBuilder.Entity("CobranzaDigital.Domain.Entities.PosShift", b =>
                 {
                     b.Property<Guid>("Id")
@@ -271,6 +299,10 @@ namespace CobranzaDigital.Infrastructure.Migrations
 
                     b.Property<Guid?>("CloseOperationId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CloseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<DateTimeOffset?>("ClosedAtUtc")
                         .HasColumnType("datetimeoffset");
@@ -312,6 +344,9 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.Property<decimal>("OpeningCashAmount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CloseOperationId")
@@ -323,6 +358,12 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.HasIndex("OpenOperationId")
                         .IsUnique()
                         .HasFilter("[OpenOperationId] IS NOT NULL");
+
+                    b.HasIndex("StoreId");
+
+                    b.HasIndex("OpenedByUserId", "StoreId", "ClosedAtUtc")
+                        .IsUnique()
+                        .HasFilter("[ClosedAtUtc] IS NOT NULL");
 
                     b.ToTable("PosShifts", (string)null);
                 });
@@ -456,6 +497,9 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.Property<Guid?>("ClientSaleId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ClientVoidId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("CorrelationId")
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
@@ -473,6 +517,12 @@ namespace CobranzaDigital.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<Guid?>("LoyaltyEarnTransactionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("LoyaltyPointsAwarded")
+                        .HasColumnType("int");
+
                     b.Property<DateTimeOffset>("OccurredAtUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -482,11 +532,32 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<decimal>("Subtotal")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("Total")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("VoidNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("VoidReasonCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("VoidReasonText")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTimeOffset?>("VoidedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("VoidedByUserId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
@@ -494,9 +565,15 @@ namespace CobranzaDigital.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("[ClientSaleId] IS NOT NULL");
 
+                    b.HasIndex("ClientVoidId")
+                        .IsUnique()
+                        .HasFilter("[ClientVoidId] IS NOT NULL");
+
                     b.HasIndex("OccurredAtUtc");
 
                     b.HasIndex("ShiftId");
+
+                    b.HasIndex("StoreId");
 
                     b.ToTable("Sales", (string)null);
                 });
@@ -658,6 +735,39 @@ namespace CobranzaDigital.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("SelectionGroups", (string)null);
+                });
+
+            modelBuilder.Entity("CobranzaDigital.Domain.Entities.Store", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Stores", (string)null);
                 });
 
             modelBuilder.Entity("CobranzaDigital.Infrastructure.Identity.ApplicationRole", b =>
@@ -890,6 +1000,24 @@ namespace CobranzaDigital.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CobranzaDigital.Domain.Entities.PosSettings", b =>
+                {
+                    b.HasOne("CobranzaDigital.Domain.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("DefaultStoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CobranzaDigital.Domain.Entities.PosShift", b =>
+                {
+                    b.HasOne("CobranzaDigital.Domain.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CobranzaDigital.Domain.Entities.Product", b =>
                 {
                     b.HasOne("CobranzaDigital.Domain.Entities.Category", null)
@@ -934,6 +1062,12 @@ namespace CobranzaDigital.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("ShiftId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("CobranzaDigital.Domain.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CobranzaDigital.Domain.Entities.SaleItem", b =>

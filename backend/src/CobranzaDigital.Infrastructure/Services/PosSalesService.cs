@@ -69,7 +69,7 @@ public sealed class PosSalesService : IPosSalesService
             {
                 openShiftId = await _db.PosShifts.AsNoTracking()
                     .Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId)
-                    .OrderByDescending(x => x.OpenedAtUtc)
+                    .OrderByDescending(x => x.OpenedAtUtc.UtcDateTime)
                     .Select(x => (Guid?)x.Id)
                     .FirstOrDefaultAsync(ct)
                     .ConfigureAwait(false);

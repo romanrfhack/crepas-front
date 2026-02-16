@@ -129,32 +129,6 @@ namespace CobranzaDigital.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "PosShifts",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OpenedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    OpenedByUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OpenedByEmail = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
-                    OpeningCashAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    ClosedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
-                    ClosedByUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    ClosedByEmail = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
-                    ClosingCashAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: true),
-                    ExpectedCashAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: true),
-                    CashDifference = table.Column<decimal>(type: "decimal(18,2)", nullable: true),
-                    DenominationsJson = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: true),
-                    OpenNotes = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
-                    CloseNotes = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
-                    OpenOperationId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    CloseOperationId = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PosShifts", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "RefreshTokens",
                 columns: table => new
                 {
@@ -169,6 +143,22 @@ namespace CobranzaDigital.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_RefreshTokens", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Stores",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    IsActive = table.Column<bool>(type: "bit", nullable: false),
+                    TimeZoneId = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    CreatedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    UpdatedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Stores", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -361,28 +351,56 @@ namespace CobranzaDigital.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Sales",
+                name: "PosSettings",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Folio = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    OccurredAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    Currency = table.Column<string>(type: "nvarchar(3)", maxLength: 3, nullable: false),
-                    Subtotal = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    Total = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    CreatedByUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    CorrelationId = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
-                    ClientSaleId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    ShiftId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    Status = table.Column<int>(type: "int", nullable: false)
+                    MultiStoreEnabled = table.Column<bool>(type: "bit", nullable: false),
+                    MaxStoresAllowed = table.Column<int>(type: "int", nullable: false),
+                    CashDifferenceThreshold = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    DefaultStoreId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Sales", x => x.Id);
+                    table.PrimaryKey("PK_PosSettings", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Sales_PosShifts_ShiftId",
-                        column: x => x.ShiftId,
-                        principalTable: "PosShifts",
+                        name: "FK_PosSettings_Stores_DefaultStoreId",
+                        column: x => x.DefaultStoreId,
+                        principalTable: "Stores",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "PosShifts",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    OpenedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    OpenedByUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    OpenedByEmail = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
+                    OpeningCashAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    ClosedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    ClosedByUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    ClosedByEmail = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
+                    ClosingCashAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: true),
+                    ExpectedCashAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: true),
+                    CashDifference = table.Column<decimal>(type: "decimal(18,2)", nullable: true),
+                    DenominationsJson = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: true),
+                    OpenNotes = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
+                    CloseNotes = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
+                    OpenOperationId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    CloseOperationId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    StoreId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    CloseReason = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PosShifts", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_PosShifts_Stores_StoreId",
+                        column: x => x.StoreId,
+                        principalTable: "Stores",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
@@ -434,6 +452,72 @@ namespace CobranzaDigital.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Sales",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Folio = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    OccurredAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    Currency = table.Column<string>(type: "nvarchar(3)", maxLength: 3, nullable: false),
+                    Subtotal = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    Total = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    CreatedByUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    CorrelationId = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
+                    ClientSaleId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    ShiftId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    StoreId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Status = table.Column<int>(type: "int", nullable: false),
+                    VoidedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    VoidedByUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    VoidReasonCode = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
+                    VoidReasonText = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
+                    VoidNote = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
+                    ClientVoidId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    LoyaltyPointsAwarded = table.Column<int>(type: "int", nullable: true),
+                    LoyaltyEarnTransactionId = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Sales", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Sales_PosShifts_ShiftId",
+                        column: x => x.ShiftId,
+                        principalTable: "PosShifts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Sales_Stores_StoreId",
+                        column: x => x.StoreId,
+                        principalTable: "Stores",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "ProductGroupOverrideAllowedItems",
+                columns: table => new
+                {
+                    ProductGroupOverrideId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    OptionItemId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ProductGroupOverrideAllowedItems", x => new { x.ProductGroupOverrideId, x.OptionItemId });
+                    table.ForeignKey(
+                        name: "FK_ProductGroupOverrideAllowedItems_OptionItems_OptionItemId",
+                        column: x => x.OptionItemId,
+                        principalTable: "OptionItems",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_ProductGroupOverrideAllowedItems_ProductGroupOverrides_ProductGroupOverrideId",
+                        column: x => x.ProductGroupOverrideId,
+                        principalTable: "ProductGroupOverrides",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Payments",
                 columns: table => new
                 {
@@ -441,7 +525,8 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     SaleId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Method = table.Column<int>(type: "int", nullable: false),
                     Amount = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    Reference = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true)
+                    Reference = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
+                    CreatedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -483,30 +568,6 @@ namespace CobranzaDigital.Infrastructure.Migrations
                         principalTable: "Sales",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "ProductGroupOverrideAllowedItems",
-                columns: table => new
-                {
-                    ProductGroupOverrideId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OptionItemId = table.Column<Guid>(type: "uniqueidentifier", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ProductGroupOverrideAllowedItems", x => new { x.ProductGroupOverrideId, x.OptionItemId });
-                    table.ForeignKey(
-                        name: "FK_ProductGroupOverrideAllowedItems_OptionItems_OptionItemId",
-                        column: x => x.OptionItemId,
-                        principalTable: "OptionItems",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_ProductGroupOverrideAllowedItems_ProductGroupOverrides_ProductGroupOverrideId",
-                        column: x => x.ProductGroupOverrideId,
-                        principalTable: "ProductGroupOverrides",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -652,6 +713,11 @@ namespace CobranzaDigital.Infrastructure.Migrations
                 column: "SaleId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PosSettings_DefaultStoreId",
+                table: "PosSettings",
+                column: "DefaultStoreId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PosShifts_ClosedAtUtc",
                 table: "PosShifts",
                 column: "ClosedAtUtc");
@@ -664,11 +730,23 @@ namespace CobranzaDigital.Infrastructure.Migrations
                 filter: "[CloseOperationId] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
+                name: "IX_PosShifts_OpenedByUserId_StoreId_ClosedAtUtc",
+                table: "PosShifts",
+                columns: new[] { "OpenedByUserId", "StoreId", "ClosedAtUtc" },
+                unique: true,
+                filter: "[ClosedAtUtc] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PosShifts_OpenOperationId",
                 table: "PosShifts",
                 column: "OpenOperationId",
                 unique: true,
                 filter: "[OpenOperationId] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PosShifts_StoreId",
+                table: "PosShifts",
+                column: "StoreId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ProductGroupOverrideAllowedItems_OptionItemId",
@@ -747,6 +825,13 @@ namespace CobranzaDigital.Infrastructure.Migrations
                 filter: "[ClientSaleId] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Sales_ClientVoidId",
+                table: "Sales",
+                column: "ClientVoidId",
+                unique: true,
+                filter: "[ClientVoidId] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Sales_OccurredAtUtc",
                 table: "Sales",
                 column: "OccurredAtUtc");
@@ -757,6 +842,11 @@ namespace CobranzaDigital.Infrastructure.Migrations
                 column: "ShiftId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Sales_StoreId",
+                table: "Sales",
+                column: "StoreId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_SelectionGroups_OptionSetId",
                 table: "SelectionGroups",
                 column: "OptionSetId");
@@ -765,6 +855,12 @@ namespace CobranzaDigital.Infrastructure.Migrations
                 name: "IX_SelectionGroups_SchemaId_Key",
                 table: "SelectionGroups",
                 columns: new[] { "SchemaId", "Key" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Stores_Name",
+                table: "Stores",
+                column: "Name",
                 unique: true);
         }
 
@@ -794,6 +890,9 @@ namespace CobranzaDigital.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "Payments");
+
+            migrationBuilder.DropTable(
+                name: "PosSettings");
 
             migrationBuilder.DropTable(
                 name: "ProductGroupOverrideAllowedItems");
@@ -845,6 +944,9 @@ namespace CobranzaDigital.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "PosShifts");
+
+            migrationBuilder.DropTable(
+                name: "Stores");
         }
     }
 }
