@@ -35,11 +35,23 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
     private const string TestJwtIssuer = "CobranzaDigital.Tests";
     private const string TestJwtAudience = "CobranzaDigital.Tests.Api";
     private const string TestJwtSigningKey = "THIS_IS_A_SECURE_TEST_SIGNING_KEY_123456";
+    private readonly bool _useSqlServerForTests;
+    private readonly string? _sqlServerConnectionString;
     private readonly string _sqliteConnectionString = $"Data Source=file:{Guid.NewGuid():N}?mode=memory&cache=shared";
     private readonly SemaphoreSlim _initializationLock = new(1, 1);
     private SqliteConnection? _sqliteConnection;
     private bool _isInitialized;
     private static readonly string ApiContentRoot = ResolveApiContentRoot();
+
+    public CobranzaDigitalApiFactory()
+    {
+        _sqlServerConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+            ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
+
+        _useSqlServerForTests =
+            string.Equals(Environment.GetEnvironmentVariable("TESTS_USE_SQLSERVER"), "true", StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrWhiteSpace(_sqlServerConnectionString);
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -54,9 +66,6 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
 
             var settings = new Dictionary<string, string?>
             {
-                ["ConnectionStrings:Sqlite"] = _sqliteConnectionString,
-                ["DatabaseOptions:Provider"] = "Sqlite",
-                ["DatabaseOptions:ConnectionStringName"] = "Sqlite",
                 ["Features:UserAdmin"] = "true",
                 ["IdentitySeed:AdminEmail"] = "admin@test.local",
                 ["IdentitySeed:AdminPassword"] = "Admin1234!",
@@ -77,7 +86,27 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
                 ["Authentication:Jwt:Key"] = TestJwtSigningKey
             };
 
+            if (_useSqlServerForTests)
+            {
+                if (string.IsNullOrWhiteSpace(_sqlServerConnectionString))
+                {
+                    throw new InvalidOperationException(
+                        "SQL Server integration tests require ConnectionStrings__DefaultConnection or ConnectionStrings__SqlServer.");
+                }
+
+                settings["ConnectionStrings:SqlServer"] = _sqlServerConnectionString;
+                settings["DatabaseOptions:Provider"] = "SqlServer";
+                settings["DatabaseOptions:ConnectionStringName"] = "SqlServer";
+            }
+            else
+            {
+                settings["ConnectionStrings:Sqlite"] = _sqliteConnectionString;
+                settings["DatabaseOptions:Provider"] = "Sqlite";
+                settings["DatabaseOptions:ConnectionStringName"] = "Sqlite";
+            }
+
             config.AddInMemoryCollection(settings);
+            config.AddEnvironmentVariables();
         });
 
         builder.ConfigureServices(services =>
@@ -89,16 +118,26 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             services.RemoveAll<DbConnection>();
             services.RemoveAll<SqliteConnection>();
 
-            _sqliteConnection = new SqliteConnection(_sqliteConnectionString);
-            _sqliteConnection.Open();
-
-            services.AddSingleton(_sqliteConnection);
-            services.AddSingleton<DbConnection>(_sqliteConnection);
-
-            services.AddDbContext<CobranzaDigitalDbContext>(options =>
+            if (_useSqlServerForTests)
             {
-                options.UseSqlite(_sqliteConnection);
-            });
+                services.AddDbContext<CobranzaDigitalDbContext>(options =>
+                {
+                    options.UseSqlServer(_sqlServerConnectionString);
+                });
+            }
+            else
+            {
+                _sqliteConnection = new SqliteConnection(_sqliteConnectionString);
+                _sqliteConnection.Open();
+
+                services.AddSingleton(_sqliteConnection);
+                services.AddSingleton<DbConnection>(_sqliteConnection);
+
+                services.AddDbContext<CobranzaDigitalDbContext>(options =>
+                {
+                    options.UseSqlite(_sqliteConnection);
+                });
+            }
 
             services.PostConfigureAll<JwtBearerOptions>(options =>
             {
