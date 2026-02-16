@@ -1,38 +1,79 @@
 <section class="pos-caja">
-  <header>
-    <h1>Caja POS</h1>
-    <p>
-      CorrelationId: <code>{{ correlationId() }}</code>
-    </p>
+  <header class="pos-header">
+    <div class="pos-header-row">
+      <div class="search-wrapper">
+        <input
+          type="search"
+          placeholder="Buscar producto..."
+          [value]="searchTerm()"
+          (input)="searchTerm.set($any($event.target).value)"
+        />
+      </div>
 
-    @if (openedShiftSummary(); as shiftSummary) {
-      <p class="shift-banner" role="status">
-        Turno abierto desde {{ shiftSummary.openedAt }} · Efectivo inicial: ${{
-          shiftSummary.openingCashAmount.toFixed(2)
-        }}
-      </p>
-    } @else {
-      <p class="shift-banner shift-banner--warning" role="alert">
-        No hay turno abierto para operar.
-      </p>
-    }
+      <div class="shift-indicator">
+        @if (openedShiftSummary(); as shift) {
+          <span
+            class="shift-badge shift-badge--open"
+            [title]="
+              'Abierto desde ' +
+              shift.openedAt +
+              ' · Inicial: $' +
+              shift.openingCashAmount.toFixed(2)
+            "
+          >
+            Turno abierto
+          </span>
+          <button
+            type="button"
+            class="btn-icon-small"
+            (click)="startCloseShift()"
+            [disabled]="loading()"
+            title="Cerrar turno"
+            aria-label="Cerrar turno"
+          >
+            🔒
+          </button>
+        } @else {
+          <span class="shift-badge shift-badge--closed">Turno cerrado</span>
+          <button
+            type="button"
+            class="btn-icon-small"
+            (click)="showOpenShiftModal.set(true)"
+            [disabled]="loading()"
+            title="Abrir turno"
+            aria-label="Abrir turno"
+          >
+            🔓
+          </button>
+        }
+      </div>
 
-    <div class="toolbar">
-      <input
-        type="search"
-        placeholder="Buscar producto"
-        [value]="searchTerm()"
-        (input)="searchTerm.set($any($event.target).value)"
-      />
-      <button type="button" (click)="loadSnapshot(true)">Refrescar catálogo</button>
-      <button type="button" (click)="loadCurrentShift()">Actualizar turno</button>
-      <button type="button" (click)="showOpenShiftModal.set(true)" [disabled]="hasOpenShift()">
-        Abrir turno
-      </button>
-      <button type="button" (click)="startCloseShift()" [disabled]="!hasOpenShift()">
-        Cerrar turno
-      </button>
-      <a href="/app/pos/reportes">Ir a reportes</a>
+      <div class="action-buttons">
+        <button
+          type="button"
+          class="btn-icon-small"
+          (click)="loadSnapshot(true)"
+          title="Refrescar catálogo"
+          aria-label="Refrescar catálogo"
+        >
+          🔄
+        </button>
+        <button
+          type="button"
+          class="btn-icon-small"
+          (click)="loadCurrentShift()"
+          title="Actualizar turno"
+          aria-label="Actualizar turno"
+        >
+          ⏱️
+        </button>
+      </div>
+
+      @if (showCorrelationId && correlationId(); as cid) {
+        <span class="correlation-id" [title]="'Correlation ID: ' + cid">
+          {{ cid.slice(0, 8) }}...
+        </span>
+      }
     </div>
   </header>
 
@@ -78,7 +119,9 @@
           </div>
           <div>
             <strong>${{ sale.total.toFixed(2) }}</strong>
-            <span [class.void-chip]="sale.status === 'Void'">{{ sale.status === 'Void' ? 'ANULADA' : 'COMPLETADA' }}</span>
+            <span [class.void-chip]="sale.status === 'Void'">{{
+              sale.status === 'Void' ? 'ANULADA' : 'COMPLETADA'
+            }}</span>
           </div>
           @if (sale.status !== 'Void') {
             <button type="button" (click)="openVoidModal(sale)">Cancelar</button>
@@ -185,10 +228,18 @@
 
           @if (closePreview(); as preview) {
             <div class="close-summary">
-              <p>Apertura: <strong>${{ preview.openingCashAmount.toFixed(2) }}</strong></p>
-              <p>Ventas efectivo turno: <strong>${{ preview.salesCashTotal.toFixed(2) }}</strong></p>
-              <p># Ventas: <strong>{{ preview.breakdown?.totalSalesCount ?? 0 }}</strong></p>
-              <p>Tarjeta: <strong>${{ (preview.breakdown?.cardAmount ?? 0).toFixed(2) }}</strong></p>
+              <p>
+                Apertura: <strong>${{ preview.openingCashAmount.toFixed(2) }}</strong>
+              </p>
+              <p>
+                Ventas efectivo turno: <strong>${{ preview.salesCashTotal.toFixed(2) }}</strong>
+              </p>
+              <p>
+                # Ventas: <strong>{{ preview.breakdown?.totalSalesCount ?? 0 }}</strong>
+              </p>
+              <p>
+                Tarjeta: <strong>${{ (preview.breakdown?.cardAmount ?? 0).toFixed(2) }}</strong>
+              </p>
               <p>
                 Transferencia:
                 <strong>${{ (preview.breakdown?.transferAmount ?? 0).toFixed(2) }}</strong>
@@ -214,9 +265,15 @@
           </div>
 
           <div class="close-summary">
-            <p>Esperado: <strong>${{ closeExpectedAmount().toFixed(2) }}</strong></p>
-            <p>Contado: <strong>${{ countedTotal().toFixed(2) }}</strong></p>
-            <p>Diferencia: <strong>${{ closeDifference().toFixed(2) }}</strong></p>
+            <p>
+              Esperado: <strong>${{ closeExpectedAmount().toFixed(2) }}</strong>
+            </p>
+            <p>
+              Contado: <strong>${{ countedTotal().toFixed(2) }}</strong>
+            </p>
+            <p>
+              Diferencia: <strong>${{ closeDifference().toFixed(2) }}</strong>
+            </p>
           </div>
 
           <div [formGroup]="closeShiftForm">
@@ -251,7 +308,9 @@
       <div class="modal-card">
         <h2>Cancelar venta</h2>
         @if (selectedSaleForVoid(); as selectedSale) {
-          <p>Folio: <strong>{{ selectedSale.folio }}</strong></p>
+          <p>
+            Folio: <strong>{{ selectedSale.folio }}</strong>
+          </p>
         }
         <div [formGroup]="voidForm" class="void-form">
           <label for="void-reason-code">Motivo</label>
@@ -269,7 +328,9 @@
         </div>
         <div class="modal-actions">
           <button type="button" (click)="showVoidModal.set(false)">Cerrar</button>
-          <button type="button" [disabled]="loading()" (click)="confirmVoidSale()">Confirmar cancelación</button>
+          <button type="button" [disabled]="loading()" (click)="confirmVoidSale()">
+            Confirmar cancelación
+          </button>
         </div>
       </div>
     </section>

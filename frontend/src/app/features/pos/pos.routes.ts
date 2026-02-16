@@ -4,6 +4,7 @@ export const posRoutes: Routes = [
   {
     path: 'caja',
     loadComponent: () => import('./pages/pos-caja.page').then((m) => m.PosCajaPage),
+    data: { title: 'Caja POS' },
   },
   {
     path: 'reportes',

@@ -37,6 +37,11 @@ export const APP_NAV_CONFIG: NavSection[] = [
         path: '/app/pos/caja',
         roles: ['Admin', 'Cashier'],
       },
+      {
+        label: 'Reportes',
+        path: '/app/pos/reportes',
+        roles: ['Admin', 'Cashier'],
+      },
     ],
   },
   {
