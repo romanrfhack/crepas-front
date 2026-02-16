@@ -8,7 +8,7 @@ on:
       - master
 
 jobs:
-  build:
+  frontend-ci:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,5 +32,5 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Test
+      - name: Unit tests (Vitest)
         run: npm run test:ci

@@ -41,7 +41,9 @@ export class PosShiftApiService {
       ...(storeId ? { storeId } : {}),
     };
 
-    return firstValueFrom(this.http.post<ShiftClosePreviewDto>(`${this.baseUrl}/close-preview`, requestPayload));
+    return firstValueFrom(this.http.post<ShiftClosePreviewDto>(`${this.baseUrl}/close-preview`, requestPayload)).then(
+      (preview) => this.normalizeClosePreview(preview),
+    );
   }
 
   openShift(startingCashAmount: number, notes?: string | null) {
@@ -72,5 +74,19 @@ export class PosShiftApiService {
     }
 
     return response.body;
+  }
+
+  private normalizeClosePreview(preview: ShiftClosePreviewDto): ShiftClosePreviewDto {
+    return {
+      ...preview,
+      countedCashAmount: preview.countedCashAmount ?? null,
+      difference: preview.difference ?? null,
+      breakdown: preview.breakdown ?? {
+        cashAmount: preview.salesCashTotal,
+        cardAmount: 0,
+        transferAmount: 0,
+        totalSalesCount: 0,
+      },
+    };
   }
 }

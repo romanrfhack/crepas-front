@@ -1,19 +1,23 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { PosCajaPage } from './pos-caja.page';
+import { CreateSaleRequestDto } from '../models/pos.models';
 import { PosCatalogSnapshotService } from '../services/pos-catalog-snapshot.service';
 import { PosSalesApiService } from '../services/pos-sales-api.service';
-import { CreateSaleRequestDto } from '../models/pos.models';
 import { PosShiftApiService } from '../services/pos-shift-api.service';
-import { PosTimezoneService } from '../services/pos-timezone.service';
 import { StoreContextService } from '../services/store-context.service';
+import { PosTimezoneService } from '../services/pos-timezone.service';
+import { PosCajaPage } from './pos-caja.page';
 
 describe('PosCajaPage', () => {
   let fixture: ComponentFixture<PosCajaPage>;
   let salesCalls: { payload: CreateSaleRequestDto; correlationId: string }[];
+  let voidCalls: { saleId: string; payload: { clientVoidId: string }; correlationId: string }[];
+  let closePreviewCalls: unknown[];
 
   beforeEach(async () => {
     salesCalls = [];
+    voidCalls = [];
+    closePreviewCalls = [];
 
     await TestBed.configureTestingModule({
       imports: [PosCajaPage],
@@ -64,13 +68,16 @@ describe('PosCajaPage', () => {
               openNotes: null,
               closeNotes: null,
             }),
-            closePreviewV2: async () => ({
-              shiftId: 'shift-1',
-              openedAtUtc: '2026-02-12T10:00:00Z',
-              openingCashAmount: 100,
-              salesCashTotal: 250,
-              expectedCashAmount: 350,
-            }),
+            closePreviewV2: async (payload: unknown) => {
+              closePreviewCalls.push(payload);
+              return {
+                shiftId: 'shift-1',
+                openedAtUtc: '2026-02-12T10:00:00Z',
+                openingCashAmount: 100,
+                salesCashTotal: 250,
+                expectedCashAmount: 350,
+              };
+            },
             closeShift: async () => ({
               shiftId: 'shift-2',
               openedAtUtc: '2026-02-12T11:00:00Z',
@@ -100,6 +107,13 @@ describe('PosCajaPage', () => {
                 total: 10,
               };
             },
+            voidSale: async (
+              saleId: string,
+              payload: { clientVoidId: string },
+              correlationId: string,
+            ) => {
+              voidCalls.push({ saleId, payload, correlationId });
+            },
           },
         },
         PosTimezoneService,
@@ -128,7 +142,7 @@ describe('PosCajaPage', () => {
     fixture.detectChanges();
   });
 
-  it('should reuse the same clientSaleId when retrying after network error', async () => {
+  it('reuses the same clientSaleId when retrying after network error', async () => {
     await fixture.componentInstance.confirmPayment({
       payments: [{ method: 'Cash', amount: 10, reference: null }],
     });
@@ -143,7 +157,7 @@ describe('PosCajaPage', () => {
     expect(fixture.componentInstance.cartItems().length).toBe(0);
   });
 
-  it('should update counted total and difference in real time from denomination counts', async () => {
+  it('updates counted total and difference in real time from denomination counts', async () => {
     await fixture.componentInstance.startCloseShift();
 
     const hundredControl = fixture.componentInstance.getCountControl(3);
@@ -159,7 +173,7 @@ describe('PosCajaPage', () => {
     expect(fixture.componentInstance.closeDifference()).toBe(-148.5);
   });
 
-  it('should always send payments array', async () => {
+  it('builds CreateSaleRequest with payments[] and leaves legacy payment undefined', async () => {
     await fixture.componentInstance.confirmPayment({
       payments: [
         { method: 'Cash', amount: 4, reference: null },
@@ -170,5 +184,37 @@ describe('PosCajaPage', () => {
     expect(salesCalls.length).toBe(1);
     expect(salesCalls[0]?.payload.payments.length).toBe(2);
     expect(salesCalls[0]?.payload.payments[1]?.reference).toBe('AUTH-123');
+    expect(salesCalls[0]?.payload.payment).toBeUndefined();
+  });
+
+  it('sends clientVoidId and refreshes close preview after successful void', async () => {
+    fixture.componentInstance.currentShift.set({
+      id: 'shift-1',
+      openedAtUtc: '2026-02-12T10:00:00Z',
+      openedByUserId: 'u1',
+      openedByEmail: 'cashier@local',
+      openingCashAmount: 100,
+      closedAtUtc: null,
+      closedByUserId: null,
+      closedByEmail: null,
+      closingCashAmount: null,
+      openNotes: null,
+      closeNotes: null,
+    });
+    fixture.componentInstance.showCloseShiftModal.set(true);
+    fixture.componentInstance.openVoidModal({
+      saleId: 'sale-void-1',
+      folio: 'POS-VOID-1',
+      total: 10,
+      occurredAtUtc: '2026-02-12T16:04:00Z',
+      status: 'Completed',
+    });
+
+    await fixture.componentInstance.confirmVoidSale();
+
+    expect(voidCalls.length).toBe(1);
+    expect(voidCalls[0]?.saleId).toBe('sale-void-1');
+    expect(voidCalls[0]?.payload.clientVoidId).toBeTruthy();
+    expect(closePreviewCalls.length).toBe(1);
   });
 });

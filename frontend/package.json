@@ -13,7 +13,8 @@
     "lint": "ng lint",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:changed": "ng test --watch=false --include='src/**/*.spec.ts'"
   },
   "prettier": {
     "printWidth": 100,
