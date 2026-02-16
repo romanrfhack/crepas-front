@@ -250,8 +250,8 @@ public sealed class PosSalesService : IPosSalesService
                     };
                 }).ToArray();
 
-                _logger.LogWarning(
-                    "Validation error creating sale due to payment mismatch. SaleId={SaleId}, StoreId={StoreId}, ShiftId={ShiftId}, ClientSaleId={ClientSaleId}, SaleTotal={SaleTotal}, TotalPaid={TotalPaid}, Items={Items}, Payments={Payments}",
+                PosSalesLog.PaymentMismatch(
+                    _logger,
                     sale.Id,
                     storeId,
                     openShiftId,
@@ -591,5 +591,32 @@ internal static class PosSalesLog
     public static void Action(ILogger logger, string action, string entity, string entityId, string correlationId)
     {
         LogActionMessage(logger, action, entity, entityId, correlationId, null);
+    }
+
+    private static readonly Action<ILogger, Guid, Guid, Guid?, Guid?, decimal, decimal, Exception?> LogPaymentMismatchMessage =
+        LoggerMessage.Define<Guid, Guid, Guid?, Guid?, decimal, decimal>(
+            LogLevel.Warning,
+            new EventId(2, nameof(PaymentMismatch)),
+            "payment_mismatch SaleId={SaleId}, StoreId={StoreId}, ShiftId={ShiftId}, ClientSaleId={ClientSaleId}, SaleTotal={SaleTotal}, TotalPaid={TotalPaid}");
+
+    private static readonly Action<ILogger, object, object, Exception?> LogPaymentMismatchDetailsMessage =
+        LoggerMessage.Define<object, object>(
+            LogLevel.Warning,
+            new EventId(3, "PaymentMismatchDetails"),
+            "Payment mismatch details - Items: {Items}, Payments: {Payments}");
+
+    public static void PaymentMismatch(ILogger logger, Guid saleId, Guid storeId, Guid? shiftId, Guid? clientSaleId, decimal saleTotal, decimal totalPaid, object items, object payments)
+    {
+        LogPaymentMismatchMessage(
+            logger,
+            saleId,
+            storeId,
+            shiftId,
+            clientSaleId,
+            saleTotal,
+            totalPaid,
+            null);
+        
+        LogPaymentMismatchDetailsMessage(logger, items, payments, null);
     }
 }
