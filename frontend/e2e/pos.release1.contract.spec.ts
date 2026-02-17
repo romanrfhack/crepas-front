@@ -372,9 +372,8 @@ test('C) Close shift exige closeReason con diferencia grande y envía clientOper
   expect(successfulRequest.closeReason).toBe('Sobrante detectado por redondeo operativo');
 });
 
-test('D) Void sale envía clientVoidId y maneja 403 antes de anular correctamente', async ({
-  page,
-}) => {
+
+test('D) Void sale envía clientVoidId y maneja 403 antes de anular correctamente', async ({ page }) => {
   const captured = await setupFakePosApi(page, {
     role: 'Cashier',
     voidFirstAttemptForbidden: true,
@@ -388,7 +387,10 @@ test('D) Void sale envía clientVoidId y maneja 403 antes de anular correctament
   await page.getByTestId('void-sale-S1').click();
   await page.getByTestId('void-reason').selectOption('CashierError');
   await page.getByTestId('confirm-void').click();
-  await expect(page.getByTestId('void-403')).toBeVisible();
+
+  // Esperar a que el modal siga abierto y el mensaje de error aparezca
+  await expect(page.getByTestId('void-reason')).toBeVisible(); // modal sigue abierto
+  await page.waitForSelector('[data-testid="void-403"]', { state: 'visible', timeout: 5000 });
 
   await page.getByTestId('confirm-void').click();
   await expect(page.getByTestId('sale-row-S1')).toContainText('ANULADA');
