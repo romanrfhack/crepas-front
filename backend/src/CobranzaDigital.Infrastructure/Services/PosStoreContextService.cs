@@ -17,7 +17,7 @@ public sealed class PosStoreContextService
 
     public async Task<(Guid StoreId, PosSettings Settings)> ResolveStoreAsync(Guid? requestedStoreId, CancellationToken ct)
     {
-        var settings = await _db.PosSettings.FirstOrDefaultAsync(ct).ConfigureAwait(false)
+        var settings = await _db.PosSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct).ConfigureAwait(false)
             ?? throw new ConflictException("POS settings are not configured.");
 
         var storeId = settings.MultiStoreEnabled && requestedStoreId.HasValue

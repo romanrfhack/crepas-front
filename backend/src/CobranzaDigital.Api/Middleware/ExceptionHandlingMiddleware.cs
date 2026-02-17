@@ -36,13 +36,9 @@ public sealed class ExceptionHandlingMiddleware
         catch (Exception exception)
         {
             var correlationId = GetCorrelationId(context);
+            var statusCode = GetStatusCode(exception);
 
-            LogUnhandledException(
-            _logger,
-            context.Request.Method,
-            context.Request.Path.ToString(),
-            correlationId,
-            exception);
+            LogException(_logger, context, correlationId, exception, statusCode);
 
             var problemDetails = CreateProblemDetails(context, exception, correlationId);
 
@@ -51,6 +47,21 @@ public sealed class ExceptionHandlingMiddleware
 
             await context.Response.WriteAsJsonAsync((object)problemDetails).ConfigureAwait(false);
         }
+    }
+
+    private static int GetStatusCode(Exception exception)
+    {
+        return exception switch
+        {
+            ValidationException => StatusCodes.Status400BadRequest,
+            UnauthorizedException => StatusCodes.Status401Unauthorized,
+            UnauthorizedAccessException => StatusCodes.Status401Unauthorized,
+            ForbiddenException => StatusCodes.Status403Forbidden,
+            NotFoundException => StatusCodes.Status404NotFound,
+            ConflictException => StatusCodes.Status409Conflict,
+            DomainRuleException => StatusCodes.Status409Conflict,
+            _ => StatusCodes.Status500InternalServerError
+        };
     }
 
     private ProblemDetails CreateProblemDetails(HttpContext context, Exception exception, string correlationId)
@@ -125,19 +136,59 @@ public sealed class ExceptionHandlingMiddleware
             : Activity.Current?.Id ?? context.TraceIdentifier;
     }
 
-    private static readonly Action<ILogger, string, string, string, Exception> _logUnhandledException =
-        LoggerMessage.Define<string, string, string>(
-            LogLevel.Error,
-            new EventId(1, nameof(LogUnhandledException)),
-            "Unhandled exception for {Method} {Path} [CorrelationId: {CorrelationId}]");
-
-    private static void LogUnhandledException(
+    private static void LogException(
         ILogger logger,
-        string method,
-        string path,
+        HttpContext context,
         string correlationId,
-        Exception exception)
+        Exception exception,
+        int statusCode)
     {
-        _logUnhandledException(logger, method, path, correlationId, exception);
+        var method = context.Request.Method;
+        var path = context.Request.Path.ToString();
+        var exceptionType = exception.GetType().Name;
+
+        switch (exception)
+        {
+            case ValidationException validationException:
+                logger.LogInformation(
+                    "Handled {ExceptionType} for {Method} {Path} [CorrelationId: {CorrelationId}] (StatusCode: {StatusCode}, ErrorCount: {ErrorCount})",
+                    exceptionType,
+                    method,
+                    path,
+                    correlationId,
+                    statusCode,
+                    validationException.Errors.Count);
+                return;
+            case ForbiddenException:
+            case ConflictException:
+            case DomainRuleException:
+                logger.LogWarning(
+                    "Handled {ExceptionType} for {Method} {Path} [CorrelationId: {CorrelationId}] (StatusCode: {StatusCode})",
+                    exceptionType,
+                    method,
+                    path,
+                    correlationId,
+                    statusCode);
+                return;
+            case NotFoundException:
+            case UnauthorizedException:
+            case UnauthorizedAccessException:
+                logger.LogInformation(
+                    "Handled {ExceptionType} for {Method} {Path} [CorrelationId: {CorrelationId}] (StatusCode: {StatusCode})",
+                    exceptionType,
+                    method,
+                    path,
+                    correlationId,
+                    statusCode);
+                return;
+            default:
+                logger.LogError(
+                    exception,
+                    "Unhandled exception for {Method} {Path} [CorrelationId: {CorrelationId}]",
+                    method,
+                    path,
+                    correlationId);
+                return;
+        }
     }
 }

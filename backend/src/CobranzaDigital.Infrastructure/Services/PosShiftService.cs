@@ -158,7 +158,7 @@ public sealed class PosShiftService : IPosShiftService
             : expectedTotal;
         var difference = RoundMoney(countedTotal - expectedTotal);
 
-        var threshold = (await _db.PosSettings.AsNoTracking().FirstAsync(ct).ConfigureAwait(false)).CashDifferenceThreshold;
+        var threshold = (await _db.PosSettings.AsNoTracking().OrderBy(x => x.Id).FirstAsync(ct).ConfigureAwait(false)).CashDifferenceThreshold;
         if (Math.Abs(difference) > threshold && string.IsNullOrWhiteSpace(request.CloseReason))
         {
             throw ValidationError("closeReason", "closeReason is required when cash difference exceeds threshold.");

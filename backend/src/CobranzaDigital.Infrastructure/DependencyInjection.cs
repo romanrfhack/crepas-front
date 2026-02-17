@@ -11,6 +11,7 @@ using CobranzaDigital.Infrastructure.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -64,6 +65,11 @@ public static class DependencyInjection
             if (databaseOptions.EnableSensitiveDataLogging)
             {
                 options.EnableSensitiveDataLogging();
+            }
+
+            if (string.Equals(Environment.GetEnvironmentVariable("SUPPRESS_EF_FIRST_WARNING"), "1", StringComparison.Ordinal))
+            {
+                options.ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.FirstWithoutOrderByAndFilterWarning));
             }
         });
 
