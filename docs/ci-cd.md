@@ -36,3 +36,11 @@ Además, en modo `workflow_run`, cada deploy valida cambios en su carpeta:
 - WEB despliega solo si hubo cambios en `frontend/**`
 
 Si no hubo cambios, el workflow finaliza sin desplegar.
+
+## Quality & Testing
+
+Para mantener consistencia en cambios futuros de código, pruebas y documentación:
+
+- [Testing strategy](./testing-strategy.md)
+- [Reglas permanentes para CODEX](./codex-rules.md)
+- [Testing matrix](./testing-matrix.md)
