@@ -207,7 +207,7 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
                 {
                     OnAuthenticationFailed = async context =>
                     {
-                        if (_verboseLogs)
+                        if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
                         {
                             LogJwtAuthFailed(_diagnosticLogger, context.Exception);
                         }
@@ -225,14 +225,14 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
                     {
                         if (context.AuthenticateFailure is not null)
                         {
-                            if (_verboseLogs)
+                            if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
                             {
                                 LogJwtChallengeFailure(_diagnosticLogger, context.AuthenticateFailure);
                             }
                         }
                         else
                         {
-                            if (_verboseLogs)
+                            if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
                             {
                                 LogJwtChallengeWithoutFailure(_diagnosticLogger);
                             }
