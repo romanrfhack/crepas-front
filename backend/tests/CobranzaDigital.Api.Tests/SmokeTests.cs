@@ -54,8 +54,22 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
         _sqlServerConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") 
             ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
         _originalSqlServerConnectionString = _sqlServerConnectionString;
-        Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server connection string from env detected: {!string.IsNullOrWhiteSpace(_sqlServerConnectionString)}");
         _useSqlServerForTests = !string.IsNullOrWhiteSpace(_sqlServerConnectionString);
+
+        Console.WriteLine($"[CobranzaDigitalApiFactory] Original SQL Server connection string: {_sqlServerConnectionString}");
+        Console.WriteLine($"[CobranzaDigitalApiFactory] Using SQL Server: {_useSqlServerForTests}");
+
+        if (_useSqlServerForTests && !string.IsNullOrWhiteSpace(_originalSqlServerConnectionString))
+        {
+            var uniqueCatalog = $"CrepasDB_Test_{Guid.NewGuid():N}";
+            var sqlBuilder = new SqlConnectionStringBuilder(_originalSqlServerConnectionString)
+            {
+                InitialCatalog = uniqueCatalog
+            };
+
+            _sqlServerConnectionString = sqlBuilder.ConnectionString;
+            Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server connection string with unique database: {_sqlServerConnectionString}");
+        }
 
         if (!_useSqlServerForTests)
         {
@@ -149,21 +163,11 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
 
             if (_useSqlServerForTests)
             {
-                if (string.IsNullOrWhiteSpace(_originalSqlServerConnectionString))
+                if (string.IsNullOrWhiteSpace(_sqlServerConnectionString))
                 {
                     throw new InvalidOperationException(
                         "SQL Server integration tests require ConnectionStrings__DefaultConnection or ConnectionStrings__SqlServer.");
                 }
-
-                var uniqueCatalog = $"CrepasDB_Test_{Guid.NewGuid():N}";
-                var sqlBuilder = new SqlConnectionStringBuilder(_originalSqlServerConnectionString)
-                {
-                    InitialCatalog = uniqueCatalog
-                };
-
-                Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server InitialCatalog updated for this factory instance: '{uniqueCatalog}'");
-
-                settings["ConnectionStrings:SqlServer"] = sqlBuilder.ConnectionString;
                 settings["DatabaseOptions:Provider"] = "SqlServer";
                 settings["DatabaseOptions:ConnectionStringName"] = "SqlServer";
             }
@@ -182,9 +186,25 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
         {
             services.RemoveAll<DbConnection>();
             services.RemoveAll<SqliteConnection>();
+            services.RemoveAll<DbContextOptions<CobranzaDigitalDbContext>>();
+            services.RemoveAll<CobranzaDigitalDbContext>();
+
+            Console.WriteLine($"[CobranzaDigitalApiFactory] Using SQL Server: {_useSqlServerForTests}");
+
+            if (_useSqlServerForTests)
+            {
+                Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server connection string: {_sqlServerConnectionString}");
+
+                services.AddDbContext<CobranzaDigitalDbContext>(options =>
+                {
+                    options.UseSqlServer(_sqlServerConnectionString);
+                });
+            }
 
             if (!_useSqlServerForTests)
             {
+                Console.WriteLine($"[CobranzaDigitalApiFactory] Using SQLite with connection string: {_sqliteConnectionString}");
+
                 _sqliteConnection = new SqliteConnection(_sqliteConnectionString);
                 _sqliteConnection.Open();
 
