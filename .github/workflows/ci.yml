@@ -81,7 +81,7 @@ jobs:
 
       - name: Build
         working-directory: backend
-        run: dotnet build -c Release --no-restore
+        run: dotnet build -c Release
 
       - name: Test
         working-directory: backend
