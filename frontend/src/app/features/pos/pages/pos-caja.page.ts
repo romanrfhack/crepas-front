@@ -631,9 +631,16 @@ export class PosCajaPage implements OnDestroy {
     return code === 'FORBIDDEN_VOID';
   }
 
-  private getHttpStatus(error: unknown) {
+  private getHttpStatus(error: unknown): number {
     if (error instanceof HttpErrorResponse) {
       return error.status;
+    }
+
+    if (typeof error === 'object' && error && 'error' in error) {
+      const nestedStatus = this.getHttpStatus((error as { error: unknown }).error);
+      if (nestedStatus !== -1) {
+        return nestedStatus;
+      }
     }
 
     if (typeof error === 'object' && error && 'status' in error) {
