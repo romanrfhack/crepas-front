@@ -1,7 +1,7 @@
 import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { Observable, catchError, finalize, shareReplay, switchMap, throwError } from 'rxjs';
+import { EMPTY, Observable, catchError, finalize, shareReplay, switchMap, throwError } from 'rxjs';
 import { AuthService } from '../../features/auth/services/auth.service';
 import { AuthTokensResponse } from '../../features/auth/models/auth.models';
 
@@ -27,8 +27,8 @@ export const refreshTokenInterceptor: HttpInterceptorFn = (req, next) => {
       const refreshToken = authService.getRefreshToken();
       if (!refreshToken) {
         authService.logout();
-        router.navigate(['/login']);
-        return throwError(() => error);
+        void router.navigate(['/login']);
+        return EMPTY;
       }
 
       if (!refreshRequest$) {
@@ -45,8 +45,8 @@ export const refreshTokenInterceptor: HttpInterceptorFn = (req, next) => {
           const accessToken = authService.getAccessToken();
           if (!accessToken) {
             authService.logout();
-            router.navigate(['/login']);
-            return throwError(() => error);
+            void router.navigate(['/login']);
+            return EMPTY;
           }
 
           const authReq = req.clone({
@@ -56,8 +56,8 @@ export const refreshTokenInterceptor: HttpInterceptorFn = (req, next) => {
         }),
         catchError((refreshError: unknown) => {
           authService.logout();
-          router.navigate(['/login']);
-          return throwError(() => refreshError);
+          void router.navigate(['/login']);
+          return EMPTY;
         }),
       );
     }),
