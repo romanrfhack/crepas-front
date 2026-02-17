@@ -20,9 +20,9 @@
                 [value]="line.method"
                 (change)="updateMethod(line.id, $any($event.target).value)"
               >
-                <option value="Cash">Efectivo</option>
-                <option value="Card">Tarjeta</option>
-                <option value="Transfer">Transferencia</option>
+                @for (method of getAvailableMethods(line.id); track method) {
+                  <option [value]="method">{{ method }}</option>
+                }
               </select>
             </div>
 
@@ -59,7 +59,13 @@
       }
     </div>
 
-    <button type="button" class="btn-add" data-testid="add-payment" (click)="addPaymentLine()">
+    <button
+      type="button"
+      class="btn-add"
+      data-testid="add-payment"
+      (click)="addPaymentLine()"
+      [disabled]="getAvailableMethods(null).length === 0"
+    >
       + Agregar pago
     </button>
 
@@ -68,12 +74,25 @@
         <span>Total pagado</span>
         <strong>${{ paidTotal().toFixed(2) }}</strong>
       </div>
-      <div class="change-row">
-        <span>Diferencia</span>
-        <strong>${{ difference().toFixed(2) }}</strong>
-      </div>
-      @if (hasDifference()) {
-        <p class="error" role="alert">La suma de pagos debe coincidir exactamente con el total.</p>
+      @if (changeAmount() > 0) {
+        <div class="change-row change-positive">
+          <span>Cambio</span>
+          <strong>${{ changeAmount().toFixed(2) }}</strong>
+        </div>
+      } @else if (isShort()) {
+        <div class="change-row change-negative">
+          <span>Falta</span>
+          <strong>${{ (total() - paidTotal()).toFixed(2) }}</strong>
+        </div>
+      }
+      @if (isShort()) {
+        <p class="error" role="alert">
+          {{
+            hasCash()
+              ? 'Falta dinero para completar el pago.'
+              : 'La suma de pagos debe coincidir exactamente con el total.'
+          }}
+        </p>
       }
       @if (hasInvalidReference()) {
         <p class="error" role="alert">Tarjeta y transferencia requieren referencia.</p>
