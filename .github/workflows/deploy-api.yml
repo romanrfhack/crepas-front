@@ -27,7 +27,7 @@ jobs:
 
     env:
       TESTS_USE_SQLSERVER: "true"
-      ConnectionStrings__DefaultConnection: Server=localhost;Database=CrepasDB;User Id=sa;Password=${{ secrets.CD_TEST_SQL_PASSWORD }};TrustServerCertificate=true;MultipleActiveResultSets=true
+      ConnectionStrings__DefaultConnection: Server=localhost;Database=CrepasDBTest;User Id=sa;Password=${{ secrets.CD_TEST_SQL_PASSWORD }};TrustServerCertificate=true;MultipleActiveResultSets=true
 
     steps:
       - uses: actions/checkout@v4
