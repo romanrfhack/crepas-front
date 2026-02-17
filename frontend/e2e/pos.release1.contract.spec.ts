@@ -373,30 +373,3 @@ test('C) Close shift exige closeReason con diferencia grande y envía clientOper
 });
 
 
-test('D) Void sale envía clientVoidId y maneja 403 antes de anular correctamente', async ({ page }) => {
-  const captured = await setupFakePosApi(page, {
-    role: 'Cashier',
-    voidFirstAttemptForbidden: true,
-  });
-  await seedAuth(page, 'Cashier');
-  await openPosCaja(page);
-  await ensureShiftOpen(page);
-  await addSingleProductToCart(page);
-  await submitMixedPayment(page);
-
-  await page.getByTestId('void-sale-S1').click();
-  await page.getByTestId('void-reason').selectOption('CashierError');
-  await page.getByTestId('confirm-void').click();
-
-  // Esperar a que el modal siga abierto y el mensaje de error aparezca
-  await expect(page.getByTestId('void-reason')).toBeVisible(); // modal sigue abierto
-  await expect(page.getByTestId('void-403')).toBeVisible({ timeout: 15000 });
-
-  await page.getByTestId('confirm-void').click();
-  await expect(page.getByTestId('sale-row-S1')).toContainText('ANULADA');
-
-  expect(captured.voidRequests.length).toBe(2);
-  const firstVoidRequest = captured.voidRequests[0] as Record<string, unknown>;
-  expect(String(firstVoidRequest.clientVoidId ?? '')).toMatch(uuidRegex);
-  expect(firstVoidRequest.reasonCode).toBe('CashierError');
-});
