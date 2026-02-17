@@ -213,7 +213,8 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
                         }
                         if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
                         {
-                            LogJwtAuthFailedValidation(_diagnosticLogger, DescribeTokenValidationParameters(context.Options.TokenValidationParameters));
+                            var tokenValidation = DescribeTokenValidationParameters(context.Options.TokenValidationParameters);
+                            LogJwtAuthFailedValidation(_diagnosticLogger, tokenValidation);
                         }
 
                         if (previousOnAuthenticationFailed is not null)
@@ -240,7 +241,8 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
 
                         if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
                         {
-                            LogJwtChallengeValidation(_diagnosticLogger, DescribeTokenValidationParameters(context.Options.TokenValidationParameters));
+                            var tokenValidation = DescribeTokenValidationParameters(context.Options.TokenValidationParameters);
+                            LogJwtChallengeValidation(_diagnosticLogger, tokenValidation);
                         }
 
                         if (previousOnChallenge is not null)
@@ -255,7 +257,8 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
 
                 if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
                 {
-                    LogJwtPostConfigure(_diagnosticLogger, DescribeTokenValidationParameters(options.TokenValidationParameters));
+                    var tokenValidation = DescribeTokenValidationParameters(options.TokenValidationParameters);
+                    LogJwtPostConfigure(_diagnosticLogger, tokenValidation);
                 }
             });
         });
