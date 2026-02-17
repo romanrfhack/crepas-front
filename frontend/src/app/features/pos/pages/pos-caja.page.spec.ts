@@ -217,4 +217,67 @@ describe('PosCajaPage', () => {
     expect(voidCalls[0]?.payload.clientVoidId).toBeTruthy();
     expect(closePreviewCalls.length).toBe(1);
   });
+
+  it('keeps void modal open and exposes 403 state before succeeding on retry', async () => {
+    const forbiddenResponse = new HttpErrorResponse({
+      status: 403,
+      error: { code: 'FORBIDDEN_VOID' },
+    });
+    const successfulVoidCalls: Array<{ saleId: string; payload: { clientVoidId: string } }> = [];
+
+    const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
+      voidSale: (
+        saleId: string,
+        payload: { reasonCode: string; reasonText?: string; note?: string; clientVoidId: string },
+        correlationId: string,
+      ) => Promise<unknown>;
+    };
+
+    let attempts = 0;
+    salesApi.voidSale = async (saleId, payload) => {
+      attempts += 1;
+      successfulVoidCalls.push({ saleId, payload });
+      if (attempts === 1) {
+        throw forbiddenResponse;
+      }
+    };
+
+    fixture.componentInstance.currentShift.set({
+      id: 'shift-1',
+      openedAtUtc: '2026-02-12T10:00:00Z',
+      openedByUserId: 'u1',
+      openedByEmail: 'cashier@local',
+      openingCashAmount: 100,
+      closedAtUtc: null,
+      closedByUserId: null,
+      closedByEmail: null,
+      closingCashAmount: null,
+      openNotes: null,
+      closeNotes: null,
+    });
+    fixture.componentInstance.openVoidModal({
+      saleId: 'sale-void-2',
+      folio: 'POS-VOID-2',
+      total: 12,
+      occurredAtUtc: '2026-02-12T16:04:00Z',
+      status: 'Completed',
+    });
+
+    await fixture.componentInstance.confirmVoidSale();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.showVoidModal()).toBeTruthy();
+    expect(fixture.componentInstance.voidForbiddenError()).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="void-403"]')).toBeTruthy();
+
+    await fixture.componentInstance.confirmVoidSale();
+
+    expect(successfulVoidCalls.length).toBe(2);
+    expect(successfulVoidCalls[0]?.payload.clientVoidId).toBeTruthy();
+    expect(successfulVoidCalls[0]?.payload.clientVoidId).toBe(
+      successfulVoidCalls[1]?.payload.clientVoidId,
+    );
+    expect(fixture.componentInstance.showVoidModal()).toBeFalsy();
+    expect(fixture.componentInstance.voidForbiddenError()).toBeFalsy();
+  });
 });

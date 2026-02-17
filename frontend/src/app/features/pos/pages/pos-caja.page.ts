@@ -528,13 +528,12 @@ export class PosCajaPage implements OnDestroy {
       this.inProgressVoidOperationId.set(null);
       await this.refreshClosePreviewWithCashCount();
     } catch (error) {
-      const httpError = error as HttpErrorResponse;
-      if (httpError.status === 403) {
+      if (this.isVoidForbiddenError(error)) {
         this.voidForbiddenError.set(true);
         this.errorMessage.set(
           'No autorizado para cancelar esta venta. Solo Manager/Admin o el Cashier dueño del turno vigente pueden anularla.',
         );
-      } else if (httpError.status === 0) {
+      } else if (this.getHttpStatus(error) === 0) {
         this.errorMessage.set(
           'Error de red. Puedes reintentar y se reutilizará el mismo clientVoidId para evitar duplicados.',
         );
@@ -613,6 +612,36 @@ export class PosCajaPage implements OnDestroy {
 
   private centsToMoney(cents: number) {
     return cents / 100;
+  }
+
+  private isVoidForbiddenError(error: unknown) {
+    const status = this.getHttpStatus(error);
+    if (status === 403) {
+      return true;
+    }
+
+    if (!(error instanceof HttpErrorResponse)) {
+      return false;
+    }
+
+    const code =
+      typeof error.error === 'object' && error.error
+        ? String((error.error as Record<string, unknown>)['code'] ?? '')
+        : '';
+    return code === 'FORBIDDEN_VOID';
+  }
+
+  private getHttpStatus(error: unknown) {
+    if (error instanceof HttpErrorResponse) {
+      return error.status;
+    }
+
+    if (typeof error === 'object' && error && 'status' in error) {
+      const status = Number((error as { status: unknown }).status);
+      return Number.isFinite(status) ? status : -1;
+    }
+
+    return -1;
   }
 
   private addToCart(product: ProductDto, customization: ProductCustomizationResult) {
