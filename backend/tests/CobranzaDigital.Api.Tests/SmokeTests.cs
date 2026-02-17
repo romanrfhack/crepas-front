@@ -31,37 +31,67 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace CobranzaDigital.Api.Tests;
 
-public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, IAsyncLifetime, IDisposable
+public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, IAsyncLifetime, IDisposable
 {
     private const string TestJwtIssuer = "CobranzaDigital.Tests";
     private const string TestJwtAudience = "CobranzaDigital.Tests.Api";
     private const string TestJwtSigningKey = "THIS_IS_A_SECURE_TEST_SIGNING_KEY_123456";
-    private readonly bool _useSqlServerForTests;
+    private static readonly string ApiContentRoot = ResolveApiContentRoot();
     private readonly bool _verboseLogs;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _diagnosticLogger;
     private readonly string? _sqlServerConnectionString;
+    private readonly bool _useSqlServerForTests;
     private readonly string _sqliteConnectionString = $"Data Source=file:{Guid.NewGuid():N}?mode=memory&cache=shared";
     private readonly SemaphoreSlim _initializationLock = new(1, 1);
     private SqliteConnection? _sqliteConnection;
     private bool _isInitialized;
-    private static readonly string ApiContentRoot = ResolveApiContentRoot();
 
     public CobranzaDigitalApiFactory()
     {
-        _sqlServerConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-            ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
-
-        _useSqlServerForTests =
-            string.Equals(Environment.GetEnvironmentVariable("TESTS_USE_SQLSERVER"), "true", StringComparison.OrdinalIgnoreCase)
-            || !string.IsNullOrWhiteSpace(_sqlServerConnectionString);
         _verboseLogs = string.Equals(Environment.GetEnvironmentVariable("TESTS_VERBOSE_LOGS"), "1", StringComparison.Ordinal);
-        _diagnosticLogger = LoggerFactory.Create(logging =>
-            {
-                logging.AddConsole();
-                logging.SetMinimumLevel(_verboseLogs ? LogLevel.Debug : LogLevel.Warning);
-            })
-            .CreateLogger<CobranzaDigitalApiFactory>();
+        _sqlServerConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") 
+            ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
+        _useSqlServerForTests = !string.IsNullOrWhiteSpace(_sqlServerConnectionString);
+        
+        _loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.AddConsole();
+            builder.SetMinimumLevel(_verboseLogs ? LogLevel.Debug : LogLevel.Warning);
+        });
+        _diagnosticLogger = _loggerFactory.CreateLogger<CobranzaDigitalApiFactory>();
     }
+
+    // LoggerMessage delegates for CobranzaDigitalApiFactory
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[jwt-auth-failed] Exception while validating bearer token")]
+    private static partial void LogJwtAuthFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[jwt-auth-failed] {TokenValidation}")]
+    private static partial void LogJwtAuthFailedValidation(ILogger logger, string tokenValidation);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[jwt-challenge] AuthenticateFailure detected")]
+    private static partial void LogJwtChallengeFailure(ILogger logger, Exception authenticateFailure);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[jwt-challenge] Challenge emitted without AuthenticateFailure (likely missing/invalid token).")]
+    private static partial void LogJwtChallengeWithoutFailure(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[jwt-challenge] {TokenValidation}")]
+    private static partial void LogJwtChallengeValidation(ILogger logger, string tokenValidation);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[jwt-post-configure] {TokenValidation}")]
+    private static partial void LogJwtPostConfigure(ILogger logger, string tokenValidation);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[test-host] Jwt effective config: Issuer='{Issuer}', Audience='{Audience}', SigningKeyLength={SigningKeyLength}, AccessTokenMinutes={AccessTokenMinutes}, RefreshTokenDays={RefreshTokenDays}")]
+    private static partial void LogJwtEffectiveConfig(ILogger logger, string? issuer, string? audience, int signingKeyLength, int accessTokenMinutes, int refreshTokenDays);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[test-host] Raw config keys: Jwt:Issuer='{JwtIssuer}', JwtSettings:Issuer='{JwtSettingsIssuer}', Authentication:Jwt:Issuer='{AuthJwtIssuer}', Jwt:Audience='{JwtAudience}', JwtSettings:Audience='{JwtSettingsAudience}', Authentication:Jwt:Audience='{AuthJwtAudience}', Jwt:SigningKey.Length={JwtSigningKeyLength}, JwtSettings:SigningKey.Length={JwtSettingsSigningKeyLength}, Authentication:Jwt:SigningKey.Length={AuthJwtSigningKeyLength}")]
+    private static partial void LogRawConfigKeys(ILogger logger, string? jwtIssuer, string? jwtSettingsIssuer, string? authJwtIssuer, string? jwtAudience, string? jwtSettingsAudience, string? authJwtAudience, int jwtSigningKeyLength, int jwtSettingsSigningKeyLength, int authJwtSigningKeyLength);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[test-host] Auth schemes: DefaultAuthenticate='{DefaultAuthenticate}', DefaultChallenge='{DefaultChallenge}'")]
+    private static partial void LogAuthSchemes(ILogger logger, string defaultAuthenticate, string defaultChallenge);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[test-host] Endpoint '{Route}' has [AllowAnonymous]: {HasAllowAnonymous}")]
+    private static partial void LogEndpointAllowAnonymous(ILogger logger, string route, bool hasAllowAnonymous);
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -142,7 +172,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
                 {
                     options.UseSqlServer(_sqlServerConnectionString);
                 });
-            }
+             }
             else
             {
                 _sqliteConnection = new SqliteConnection(_sqliteConnectionString);
@@ -167,22 +197,23 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
                 options.TokenValidationParameters.ValidAudience = TestJwtAudience;
                 options.TokenValidationParameters.ValidateIssuerSigningKey = true;
                 options.TokenValidationParameters.IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSigningKey));
+                options.TokenValidationParameters.IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(TestJwtSigningKey));
 
                 var previousEvents = options.Events ?? new JwtBearerEvents();
                 var previousOnAuthenticationFailed = previousEvents.OnAuthenticationFailed;
                 var previousOnChallenge = previousEvents.OnChallenge;
 
-                options.Events = new JwtBearerEvents
+                options.Events = new JwtBearerEvents                 
                 {
                     OnAuthenticationFailed = async context =>
                     {
                         if (_verboseLogs)
                         {
-                            _diagnosticLogger.LogDebug("[jwt-auth-failed] Exception while validating bearer token: {Exception}", context.Exception);
+                            LogJwtAuthFailed(_diagnosticLogger, context.Exception);
                         }
-                        if (_verboseLogs)
+                        if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
                         {
-                            _diagnosticLogger.LogDebug("[jwt-auth-failed] {TokenValidation}", DescribeTokenValidationParameters(context.Options.TokenValidationParameters));
+                            LogJwtAuthFailedValidation(_diagnosticLogger, DescribeTokenValidationParameters(context.Options.TokenValidationParameters));
                         }
 
                         if (previousOnAuthenticationFailed is not null)
@@ -196,20 +227,20 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
                         {
                             if (_verboseLogs)
                             {
-                                _diagnosticLogger.LogDebug("[jwt-challenge] AuthenticateFailure detected: {AuthenticateFailure}", context.AuthenticateFailure);
+                                LogJwtChallengeFailure(_diagnosticLogger, context.AuthenticateFailure);
                             }
                         }
                         else
                         {
                             if (_verboseLogs)
                             {
-                                _diagnosticLogger.LogDebug("[jwt-challenge] Challenge emitted without AuthenticateFailure (likely missing/invalid token).");
+                                LogJwtChallengeWithoutFailure(_diagnosticLogger);
                             }
                         }
 
-                        if (_verboseLogs)
+                        if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
                         {
-                            _diagnosticLogger.LogDebug("[jwt-challenge] {TokenValidation}", DescribeTokenValidationParameters(context.Options.TokenValidationParameters));
+                            LogJwtChallengeValidation(_diagnosticLogger, DescribeTokenValidationParameters(context.Options.TokenValidationParameters));
                         }
 
                         if (previousOnChallenge is not null)
@@ -222,9 +253,9 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
                     OnTokenValidated = previousEvents.OnTokenValidated
                 };
 
-                if (_verboseLogs)
+                if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
                 {
-                    _diagnosticLogger.LogDebug("[jwt-post-configure] {TokenValidation}", DescribeTokenValidationParameters(options.TokenValidationParameters));
+                    LogJwtPostConfigure(_diagnosticLogger, DescribeTokenValidationParameters(options.TokenValidationParameters));
                 }
             });
         });
@@ -255,6 +286,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             $"ValidateIssuerSigningKey={parameters.ValidateIssuerSigningKey}, IssuerSigningKey={signingKeyDescription}, " +
             $"RoleClaimType='{parameters.RoleClaimType}', NameClaimType='{parameters.NameClaimType}'";
     }
+
 
     private static string ResolveApiContentRoot()
     {
@@ -323,17 +355,21 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
             var defaultAuthenticate = await schemeProvider.GetDefaultAuthenticateSchemeAsync();
             var defaultChallenge = await schemeProvider.GetDefaultChallengeSchemeAsync();
 
-            if (_verboseLogs)
+            if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
             {
-                _diagnosticLogger.LogDebug("[test-host] Jwt effective config: Issuer='{Issuer}', Audience='{Audience}', SigningKeyLength={SigningKeyLength}, AccessTokenMinutes={AccessTokenMinutes}, RefreshTokenDays={RefreshTokenDays}", jwtOptions.Issuer, jwtOptions.Audience, jwtOptions.SigningKey.Length, jwtOptions.AccessTokenMinutes, jwtOptions.RefreshTokenDays);
+                var signingKeyLength = jwtOptions.SigningKey.Length;
+                LogJwtEffectiveConfig(_diagnosticLogger, jwtOptions.Issuer, jwtOptions.Audience, signingKeyLength, jwtOptions.AccessTokenMinutes, jwtOptions.RefreshTokenDays);
             }
-            if (_verboseLogs)
+            if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
             {
-                _diagnosticLogger.LogDebug("[test-host] Raw config keys: Jwt:Issuer='{JwtIssuer}', JwtSettings:Issuer='{JwtSettingsIssuer}', Authentication:Jwt:Issuer='{AuthJwtIssuer}', Jwt:Audience='{JwtAudience}', JwtSettings:Audience='{JwtSettingsAudience}', Authentication:Jwt:Audience='{AuthJwtAudience}', Jwt:SigningKey.Length={JwtSigningKeyLength}, JwtSettings:SigningKey.Length={JwtSettingsSigningKeyLength}, Authentication:Jwt:SigningKey.Length={AuthJwtSigningKeyLength}", config["Jwt:Issuer"], config["JwtSettings:Issuer"], config["Authentication:Jwt:Issuer"], config["Jwt:Audience"], config["JwtSettings:Audience"], config["Authentication:Jwt:Audience"], config["Jwt:SigningKey"]?.Length ?? 0, config["JwtSettings:SigningKey"]?.Length ?? 0, config["Authentication:Jwt:SigningKey"]?.Length ?? 0);
+                var jwtSigningKeyLength = config["Jwt:SigningKey"]?.Length ?? 0;
+                var jwtSettingsSigningKeyLength = config["JwtSettings:SigningKey"]?.Length ?? 0;
+                var authJwtSigningKeyLength = config["Authentication:Jwt:SigningKey"]?.Length ?? 0;
+                LogRawConfigKeys(_diagnosticLogger, config["Jwt:Issuer"], config["JwtSettings:Issuer"], config["Authentication:Jwt:Issuer"], config["Jwt:Audience"], config["JwtSettings:Audience"], config["Authentication:Jwt:Audience"], jwtSigningKeyLength, jwtSettingsSigningKeyLength, authJwtSigningKeyLength);
             }
-            if (_verboseLogs)
+            if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
             {
-                _diagnosticLogger.LogDebug("[test-host] Auth schemes: DefaultAuthenticate='{DefaultAuthenticate}', DefaultChallenge='{DefaultChallenge}'", defaultAuthenticate?.Name ?? "<null>", defaultChallenge?.Name ?? "<null>");
+                LogAuthSchemes(_diagnosticLogger, defaultAuthenticate?.Name ?? "<null>", defaultChallenge?.Name ?? "<null>");
             }
 
             var endpointDataSource = scope.ServiceProvider.GetRequiredService<EndpointDataSource>();
@@ -363,9 +399,9 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
                 }
 
                 var hasAllowAnonymous = endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null;
-                if (_verboseLogs)
+                if (_verboseLogs && _diagnosticLogger.IsEnabled(LogLevel.Debug))
                 {
-                    _diagnosticLogger.LogDebug("[test-host] Endpoint '{Route}' has [AllowAnonymous]: {HasAllowAnonymous}", route, hasAllowAnonymous);
+                    LogEndpointAllowAnonymous(_diagnosticLogger, route, hasAllowAnonymous);
                 }
             }
 
@@ -380,6 +416,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
     public override async ValueTask DisposeAsync()
     {
         _sqliteConnection?.Dispose();
+        _loggerFactory?.Dispose();
         _initializationLock.Dispose();
 
         await base.DisposeAsync();
@@ -397,7 +434,7 @@ public sealed class CobranzaDigitalApiFactory : WebApplicationFactory<Program>, 
     }
 }
 
-public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
+public sealed partial class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly CobranzaDigitalApiFactory _factory;
@@ -412,6 +449,13 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
         _verboseLogs = string.Equals(Environment.GetEnvironmentVariable("TESTS_VERBOSE_LOGS"), "1", StringComparison.Ordinal);
         _logger = factory.Services.GetRequiredService<ILogger<SmokeTests>>();
     }
+
+    // LoggerMessage delegates for SmokeTests
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[jwt-decoded] Endpoint='{Endpoint}', alg='{Alg}', iss='{Issuer}', aud='{Audience}', exp='{Expiration}', nbf='{NotBefore}', claimTypes='{ClaimTypes}'")]
+    private partial void LogJwtDecoded(string endpoint, string alg, string issuer, string audience, string expiration, string notBefore, string claimTypes);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "[401-diagnostic] Url='{Url}', Status={StatusCode} ({StatusText}), WWW-Authenticate='{WwwAuthenticate}', {AuthSummary}, Body='{Body}'")]
+    private partial void LogUnauthorizedDiagnostic(string url, int statusCode, HttpStatusCode statusText, string wwwAuthenticate, string authSummary, string body);
 
     [Fact]
     public async Task LiveHealthReturnsOk()
@@ -627,6 +671,11 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
 
     private void LogJwtPayloadWithoutValidation(string accessToken, string endpoint)
     {
+        if (!_verboseLogs || !_logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
         var token = new JwtSecurityTokenHandler().ReadJwtToken(accessToken);
         var exp = token.Payload.Expiration is long expValue
             ? DateTimeOffset.FromUnixTimeSeconds(expValue).ToString("O")
@@ -637,10 +686,7 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
         var audience = token.Audiences.Any() ? string.Join(",", token.Audiences) : "<missing>";
         var claimTypes = string.Join(",", token.Claims.Select(claim => claim.Type).Distinct().OrderBy(type => type));
 
-        if (_verboseLogs)
-        {
-            _logger.LogDebug("[jwt-decoded] Endpoint='{Endpoint}', alg='{Alg}', iss='{Issuer}', aud='{Audience}', exp='{Expiration}', nbf='{NotBefore}', claimTypes='{ClaimTypes}'", endpoint, token.Header.Alg ?? "<missing>", token.Issuer ?? "<missing>", audience, exp, nbf, claimTypes);
-        }
+        LogJwtDecoded(endpoint, token.Header.Alg ?? "<missing>", token.Issuer ?? "<missing>", audience, exp, nbf, claimTypes);
     }
 
     private void SetBearerAuthorization(string accessToken)
@@ -657,6 +703,11 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
             return;
         }
 
+        if (!_verboseLogs || !_logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
         var body = await response.Content.ReadAsStringAsync();
         var wwwAuthenticate = string.Join(" | ", response.Headers.WwwAuthenticate.Select(value => value.ToString()));
 
@@ -664,10 +715,7 @@ public sealed class SmokeTests : IClassFixture<CobranzaDigitalApiFactory>
             ? "Authorization=<none>"
             : $"AuthorizationPrefix='{authorizationHeader.Split(' ', 2)[0]}', AuthorizationLength={authorizationHeader.Length}";
 
-        if (_verboseLogs)
-        {
-            _logger.LogDebug("[401-diagnostic] Url='{Url}', Status={StatusCode} ({StatusText}), WWW-Authenticate='{WwwAuthenticate}', {AuthSummary}, Body='{Body}'", url, (int)response.StatusCode, response.StatusCode, wwwAuthenticate, authSummary, body);
-        }
+        LogUnauthorizedDiagnostic(url, (int)response.StatusCode, response.StatusCode, wwwAuthenticate, authSummary, body);
     }
 
     private static void AssertTokenHasRole(string accessToken, string role)

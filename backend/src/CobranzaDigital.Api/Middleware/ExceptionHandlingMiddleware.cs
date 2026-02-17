@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace CobranzaDigital.Api.Middleware;
 
-public sealed class ExceptionHandlingMiddleware
+public sealed partial class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
@@ -136,6 +136,50 @@ public sealed class ExceptionHandlingMiddleware
             : Activity.Current?.Id ?? context.TraceIdentifier;
     }
 
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Handled {ExceptionType} for {Method} {Path} [CorrelationId: {CorrelationId}] (StatusCode: {StatusCode}, ErrorCount: {ErrorCount})")]
+    private static partial void LogValidationException(
+        ILogger logger,
+        string exceptionType,
+        string method,
+        string path,
+        string correlationId,
+        int statusCode,
+        int errorCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Handled {ExceptionType} for {Method} {Path} [CorrelationId: {CorrelationId}] (StatusCode: {StatusCode})")]
+    private static partial void LogWarningException(
+        ILogger logger,
+        string exceptionType,
+        string method,
+        string path,
+        string correlationId,
+        int statusCode);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Handled {ExceptionType} for {Method} {Path} [CorrelationId: {CorrelationId}] (StatusCode: {StatusCode})")]
+    private static partial void LogInformationException(
+        ILogger logger,
+        string exceptionType,
+        string method,
+        string path,
+        string correlationId,
+        int statusCode);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Unhandled exception for {Method} {Path} [CorrelationId: {CorrelationId}]")]
+    private static partial void LogUnhandledException(
+        ILogger logger,
+        Exception exception,
+        string method,
+        string path,
+        string correlationId);
+
     private static void LogException(
         ILogger logger,
         HttpContext context,
@@ -150,8 +194,8 @@ public sealed class ExceptionHandlingMiddleware
         switch (exception)
         {
             case ValidationException validationException:
-                logger.LogInformation(
-                    "Handled {ExceptionType} for {Method} {Path} [CorrelationId: {CorrelationId}] (StatusCode: {StatusCode}, ErrorCount: {ErrorCount})",
+                LogValidationException(
+                    logger,
                     exceptionType,
                     method,
                     path,
@@ -162,8 +206,8 @@ public sealed class ExceptionHandlingMiddleware
             case ForbiddenException:
             case ConflictException:
             case DomainRuleException:
-                logger.LogWarning(
-                    "Handled {ExceptionType} for {Method} {Path} [CorrelationId: {CorrelationId}] (StatusCode: {StatusCode})",
+                LogWarningException(
+                    logger,
                     exceptionType,
                     method,
                     path,
@@ -173,8 +217,8 @@ public sealed class ExceptionHandlingMiddleware
             case NotFoundException:
             case UnauthorizedException:
             case UnauthorizedAccessException:
-                logger.LogInformation(
-                    "Handled {ExceptionType} for {Method} {Path} [CorrelationId: {CorrelationId}] (StatusCode: {StatusCode})",
+                LogInformationException(
+                    logger,
                     exceptionType,
                     method,
                     path,
@@ -182,9 +226,9 @@ public sealed class ExceptionHandlingMiddleware
                     statusCode);
                 return;
             default:
-                logger.LogError(
+                LogUnhandledException(
+                    logger,
                     exception,
-                    "Unhandled exception for {Method} {Path} [CorrelationId: {CorrelationId}]",
                     method,
                     path,
                     correlationId);
