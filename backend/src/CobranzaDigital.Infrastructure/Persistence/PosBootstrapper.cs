@@ -12,7 +12,7 @@ public static class PosBootstrapper
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
 
-        var defaultStore = await db.Stores.FirstOrDefaultAsync().ConfigureAwait(false);
+        var defaultStore = await db.Stores.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id).FirstOrDefaultAsync().ConfigureAwait(false);
         if (defaultStore is null)
         {
             defaultStore = new Store
@@ -29,7 +29,7 @@ public static class PosBootstrapper
             await db.SaveChangesAsync().ConfigureAwait(false);
         }
 
-        var settings = await db.PosSettings.FirstOrDefaultAsync().ConfigureAwait(false);
+        var settings = await db.PosSettings.OrderBy(x => x.Id).FirstOrDefaultAsync().ConfigureAwait(false);
         if (settings is null)
         {
             db.PosSettings.Add(new PosSettings

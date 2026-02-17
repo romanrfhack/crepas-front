@@ -308,7 +308,7 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-        var settings = await db.PosSettings.FirstAsync();
+        var settings = await db.PosSettings.OrderBy(x => x.Id).FirstAsync();
         settings.CashDifferenceThreshold = threshold;
         await db.SaveChangesAsync();
     }
@@ -338,7 +338,7 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-        return await db.PosSettings.AsNoTracking().Select(x => x.DefaultStoreId).FirstAsync();
+        return await db.PosSettings.AsNoTracking().OrderBy(x => x.Id).Select(x => x.DefaultStoreId).FirstAsync();
     }
 
     private async Task<Guid> EnsureOpenShiftAsync(string token, decimal openingCashAmount, Guid clientOperationId, Guid? storeId = null)
