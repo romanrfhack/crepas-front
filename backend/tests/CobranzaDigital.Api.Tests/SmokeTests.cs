@@ -53,15 +53,29 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
         _verboseLogs = string.Equals(Environment.GetEnvironmentVariable("TESTS_VERBOSE_LOGS"), "1", StringComparison.Ordinal);
         _sqlServerConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") 
             ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
+        Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server connection string from env detected: {!string.IsNullOrWhiteSpace(_sqlServerConnectionString)}");
         _useSqlServerForTests = !string.IsNullOrWhiteSpace(_sqlServerConnectionString);
 
         if (_useSqlServerForTests && !string.IsNullOrWhiteSpace(_sqlServerConnectionString))
         {
-            var builder = new SqlConnectionStringBuilder(_sqlServerConnectionString)
-            {
-                InitialCatalog = $"CrepasDB_Test_{Guid.NewGuid():N}"
-            };
-            _sqlServerConnectionString = builder.ConnectionString;
+            var sqlBuilder = new SqlConnectionStringBuilder(_sqlServerConnectionString);
+            var originalCatalog = sqlBuilder.InitialCatalog;
+            var uniqueCatalog = $"CrepasDB_Test_{Guid.NewGuid():N}";
+            sqlBuilder.InitialCatalog = uniqueCatalog;
+            _sqlServerConnectionString = sqlBuilder.ConnectionString;
+
+            Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server InitialCatalog original: '{originalCatalog}'");
+            Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server InitialCatalog updated: '{uniqueCatalog}'");
+            Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server connection string updated: {_sqlServerConnectionString}");
+        }
+        else
+        {
+            Console.WriteLine("[CobranzaDigitalApiFactory] SQL Server not enabled for tests. Using SQLite in-memory database.");
+        }
+
+        if (_useSqlServerForTests && string.IsNullOrWhiteSpace(_sqlServerConnectionString))
+        {
+            throw new InvalidOperationException("SQL Server tests are enabled but no SQL Server connection string is available.");
         }
         
         _loggerFactory = LoggerFactory.Create(builder =>
@@ -178,6 +192,7 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
 
             if (_useSqlServerForTests)
             {
+                Console.WriteLine($"[CobranzaDigitalApiFactory] ConfigureServices registering DbContext with SQL Server connection string: {_sqlServerConnectionString}");
                 services.AddDbContext<CobranzaDigitalDbContext>(options =>
                 {
                     options.UseSqlServer(_sqlServerConnectionString);
@@ -349,6 +364,9 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
 
             using var scope = Services.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+            Console.WriteLine($"[CobranzaDigitalApiFactory] InitializeAsync provider: {dbContext.Database.ProviderName}");
+            Console.WriteLine($"[CobranzaDigitalApiFactory] InitializeAsync connection string: {dbContext.Database.GetConnectionString()}");
+            Console.WriteLine($"[CobranzaDigitalApiFactory] InitializeAsync database name: {dbContext.Database.GetDbConnection().Database}");
 
             if (dbContext.Database.IsSqlite())
             {
