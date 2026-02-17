@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Data.SqlClient;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -53,6 +54,15 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
         _sqlServerConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") 
             ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
         _useSqlServerForTests = !string.IsNullOrWhiteSpace(_sqlServerConnectionString);
+
+        if (_useSqlServerForTests && !string.IsNullOrWhiteSpace(_sqlServerConnectionString))
+        {
+            var builder = new SqlConnectionStringBuilder(_sqlServerConnectionString)
+            {
+                InitialCatalog = $"CrepasDB_Test_{Guid.NewGuid():N}"
+            };
+            _sqlServerConnectionString = builder.ConnectionString;
+        }
         
         _loggerFactory = LoggerFactory.Create(builder =>
         {
