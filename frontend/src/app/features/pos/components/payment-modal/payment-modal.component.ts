@@ -147,7 +147,7 @@ export class PaymentModalComponent {
         const reference = line.reference.trim();
         return {
           method: line.method,
-          amount: this.round2(this.sanitizeAmount(line.amount)),
+          amount: this.round2(this.sanitizeAmount(line.amount)) - (line.method === 'Cash' ? this.changeAmount() : 0),
           reference: line.method === 'Cash' ? null : reference || null,
         };
       }),
