@@ -120,18 +120,23 @@
   line-height: 1;
 }
 
-select, input[type='text'], input[type='number'] {
+select,
+input[type='text'],
+input[type='number'] {
   width: 100%;
   padding: 0.7rem 0.9rem;
   border-radius: 12px;
   border: 1px solid rgba(107, 63, 42, 0.16);
   background: white;
   font-size: 1rem;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
   font-family: inherit;
 }
 
-input[type='text'], input[type='number'] {
+input[type='text'],
+input[type='number'] {
   width: 94%;
 }
 
@@ -220,6 +225,18 @@ input[type='number']:focus-visible {
   color: var(--brand-cocoa);
 }
 
+.change-positive,
+.change-positive strong {
+  color: #166534;
+  font-weight: 600;
+}
+
+.change-negative,
+.change-negative strong {
+  color: #b42318;
+  font-weight: 600;
+}
+
 .error {
   color: #b42318;
   background: rgba(243, 182, 194, 0.22);
@@ -258,7 +275,9 @@ input[type='number']:focus-visible {
   font-size: 0.95rem;
   letter-spacing: 0.02em;
   box-shadow: 0 8px 20px rgba(201, 141, 106, 0.25);
-  transition: transform var(--transition), filter var(--transition),
+  transition:
+    transform var(--transition),
+    filter var(--transition),
     box-shadow var(--transition);
   cursor: pointer;
   display: inline-flex;

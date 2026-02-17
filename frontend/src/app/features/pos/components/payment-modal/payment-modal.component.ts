@@ -29,10 +29,19 @@ export class PaymentModalComponent {
   ]);
 
   readonly paidTotal = computed(() =>
-    this.round2(this.paymentLines().reduce((sum, line) => sum + this.sanitizeAmount(line.amount), 0)),
+    this.round2(
+      this.paymentLines().reduce((sum, line) => sum + this.sanitizeAmount(line.amount), 0),
+    ),
+  );
+  readonly hasCash = computed(() => this.paymentLines().some((line) => line.method === 'Cash'));
+  readonly isShort = computed(() => this.paidTotal() < this.total());
+  readonly changeAmount = computed(() =>
+    this.hasCash() && this.paidTotal() > this.total()
+      ? this.round2(this.paidTotal() - this.total())
+      : 0,
   );
   readonly difference = computed(() => this.round2(this.total() - this.paidTotal()));
-  readonly hasDifference = computed(() => Math.abs(this.difference()) > 0.009);
+  readonly hasDifference = computed(() => this.paidTotal() < this.total());
   readonly hasInvalidReference = computed(() =>
     this.paymentLines().some(
       (line) => (line.method === 'Card' || line.method === 'Transfer') && !line.reference.trim(),
@@ -41,14 +50,44 @@ export class PaymentModalComponent {
   readonly hasInvalidAmount = computed(() =>
     this.paymentLines().some((line) => this.sanitizeAmount(line.amount) <= 0),
   );
-  readonly canSubmit = computed(
-    () => !this.loading() && !this.hasDifference() && !this.hasInvalidReference() && !this.hasInvalidAmount(),
-  );
+  readonly canSubmit = computed(() => {
+    if (this.loading()) {
+      return false;
+    }
+
+    if (this.hasInvalidReference()) {
+      return false;
+    }
+
+    if (this.hasInvalidAmount()) {
+      return false;
+    }
+
+    if (this.hasCash()) {
+      return this.paidTotal() >= this.total();
+    }
+
+    return Math.abs(this.paidTotal() - this.total()) < 0.009;
+  });
+
+  getAvailableMethods(currentLineId: string | null): PaymentMethod[] {
+    const usedMethods = this.paymentLines()
+      .filter((line) => line.id !== currentLineId)
+      .map((line) => line.method);
+    const allMethods: PaymentMethod[] = ['Cash', 'Card', 'Transfer'];
+
+    return allMethods.filter((method) => !usedMethods.includes(method));
+  }
 
   addPaymentLine() {
+    const availableMethods = this.getAvailableMethods(null);
+    if (availableMethods.length === 0) {
+      return;
+    }
+
     this.paymentLines.update((lines) => [
       ...lines,
-      { id: crypto.randomUUID(), method: 'Cash', amount: 0, reference: '' },
+      { id: crypto.randomUUID(), method: availableMethods[0], amount: 0, reference: '' },
     ]);
   }
 
@@ -63,6 +102,13 @@ export class PaymentModalComponent {
   }
 
   updateMethod(lineId: string, method: PaymentMethod) {
+    const isMethodUsed = this.paymentLines().some(
+      (line) => line.id !== lineId && line.method === method,
+    );
+    if (isMethodUsed) {
+      return;
+    }
+
     this.paymentLines.update((lines) =>
       lines.map((line) => {
         if (line.id !== lineId) {
