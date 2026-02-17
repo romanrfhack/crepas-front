@@ -85,7 +85,7 @@ jobs:
 
       - name: Test
         working-directory: backend
-        run: dotnet test -c Release --no-build
+        run: dotnet test -c Release
 
   frontend_tests:
     needs: changes
