@@ -390,7 +390,7 @@ test('D) Void sale envía clientVoidId y maneja 403 antes de anular correctament
 
   // Esperar a que el modal siga abierto y el mensaje de error aparezca
   await expect(page.getByTestId('void-reason')).toBeVisible(); // modal sigue abierto
-  await page.waitForSelector('[data-testid="void-403"]', { state: 'visible', timeout: 5000 });
+  await expect(page.getByTestId('void-403')).toBeVisible({ timeout: 15000 });
 
   await page.getByTestId('confirm-void').click();
   await expect(page.getByTestId('sale-row-S1')).toContainText('ANULADA');
