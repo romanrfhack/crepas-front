@@ -1,6 +1,6 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import {
   CreateSaleRequestDto,
@@ -28,11 +28,22 @@ export class PosSalesApiService {
 
   voidSale(saleId: string, payload: SaleVoidRequestDto, correlationId: string) {
     return firstValueFrom(
-      this.http.post<SaleVoidResponseDto>(`${this.baseUrl}/v1/pos/sales/${saleId}/void`, payload, {
-        headers: new HttpHeaders({
-          'X-Correlation-Id': correlationId,
-        }),
-      }),
+      this.http
+        .post<SaleVoidResponseDto>(`${this.baseUrl}/v1/pos/sales/${saleId}/void`, payload, {
+          headers: new HttpHeaders({
+            'X-Correlation-Id': correlationId,
+          }),
+          observe: 'response',
+        })
+        .pipe(
+          map((response) => {
+            if (!response.body) {
+              throw new Error('Void sale response body is empty');
+            }
+
+            return response.body;
+          }),
+        ),
     );
   }
 
