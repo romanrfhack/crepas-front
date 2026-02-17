@@ -1,88 +1,81 @@
 name: Deploy API (CobranzaDigital)
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - "backend/**"
-      - ".github/workflows/deploy-api.yml"
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
   workflow_dispatch:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    services:
-      mssql:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: Y
-          MSSQL_SA_PASSWORD: ${{ secrets.CD_TEST_SQL_PASSWORD }}
-        ports:
-          - 1433:1433
-        options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P $MSSQL_SA_PASSWORD -C -Q 'SELECT 1'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 20
-
-    env:
-      TESTS_USE_SQLSERVER: "true"
-      ConnectionStrings__DefaultConnection: Server=localhost;Database=CrepasDBTest;User Id=sa;Password=${{ secrets.CD_TEST_SQL_PASSWORD }};TrustServerCertificate=true;MultipleActiveResultSets=true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: Restore
-        run: dotnet restore backend/CobranzaDigital.slnx
-
-      - name: Build
-        run: dotnet build backend/CobranzaDigital.slnx -c Release --no-restore
-
-      - name: Test
-        run: dotnet test backend/CobranzaDigital.slnx -c Release --no-build
-
   build-and-deploy:
-    needs: test
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
 
     env:
       SSH_HOST: ${{ secrets.CD_SSH_HOST }}
       SSH_PORT: ${{ secrets.CD_SSH_PORT }}
-      SSH_KEY:  ${{ secrets.CD_SSH_KEY_B64 }}
+      SSH_KEY: ${{ secrets.CD_SSH_KEY_B64 }}
       SSH_USER: deploy
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+
+      - name: Detect backend changes for workflow_run
+        if: github.event_name == 'workflow_run'
+        id: changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            CHANGED=$(git diff --name-only HEAD^ HEAD)
+          else
+            CHANGED=$(git show --pretty='' --name-only HEAD)
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -q '^backend/'; then
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip deploy when backend did not change
+        if: github.event_name == 'workflow_run' && steps.changed.outputs.backend_changed != 'true'
+        run: |
+          echo "No backend/** changes detected. Skipping API deploy."
+          exit 0
 
       - name: Setup .NET
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.backend_changed == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
 
       - name: Publish API
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.backend_changed == 'true'
         run: |
           dotnet restore backend
           dotnet publish backend/src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release -o out/api
 
       - name: Setup SSH
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.backend_changed == 'true'
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          # IMPORTANTE: quitar \r (CRLF) y NO agregar saltos raros
           printf '%s' "${{ secrets.CD_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
 
-
           ssh-keyscan -4 -T 10 -p "${{ secrets.CD_SSH_PORT }}" -H "${{ secrets.CD_SSH_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Upload API to server
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.backend_changed == 'true'
         run: |
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p "${{ secrets.CD_SSH_PORT || '22' }}" \
             deploy@${{ secrets.CD_SSH_HOST }} \
@@ -92,6 +85,7 @@ jobs:
             out/api/* deploy@${{ secrets.CD_SSH_HOST }}:/var/www/cobranzadigital/api/publish/
 
       - name: Restart service
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.backend_changed == 'true'
         run: |
           ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p "${{ secrets.CD_SSH_PORT || '22' }}" \
             deploy@${{ secrets.CD_SSH_HOST }} \

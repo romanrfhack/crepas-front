@@ -1,11 +1,10 @@
 name: Deploy WEB (CobranzaDigital)
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/deploy-web.yml"
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,6 +15,7 @@ concurrency:
 
 jobs:
   build-and-deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
 
     env:
@@ -27,8 +27,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+
+      - name: Detect frontend changes for workflow_run
+        if: github.event_name == 'workflow_run'
+        id: changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            CHANGED=$(git diff --name-only HEAD^ HEAD)
+          else
+            CHANGED=$(git show --pretty='' --name-only HEAD)
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -q '^frontend/'; then
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip deploy when frontend did not change
+        if: github.event_name == 'workflow_run' && steps.changed.outputs.frontend_changed != 'true'
+        run: |
+          echo "No frontend/** changes detected. Skipping WEB deploy."
+          exit 0
 
       - name: Setup Node
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -36,23 +67,24 @@ jobs:
           cache-dependency-path: "frontend/package-lock.json"
 
       - name: Install deps
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
         working-directory: frontend
         run: npm ci
 
       - name: Build (production)
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
         working-directory: frontend
         run: npm run build -- --configuration production
 
       - name: Detect build output (folder that contains index.html)
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
         shell: bash
         run: |
           set -euo pipefail
 
-          # Caso SSR (dist/<app>/browser)
           if [ -f "frontend/dist/cobranza-digital/browser/index.html" ]; then
             echo "Detected SSR output. Using: frontend/dist/cobranza-digital/browser"
             echo "DIST_DIR=frontend/dist/cobranza-digital/browser" >> $GITHUB_ENV
-          # Caso SPA (dist/<app>)
           elif [ -f "frontend/dist/cobranza-digital/index.html" ]; then
             echo "Detected SPA output. Using: frontend/dist/cobranza-digital"
             echo "DIST_DIR=frontend/dist/cobranza-digital" >> $GITHUB_ENV
@@ -63,6 +95,7 @@ jobs:
           fi
 
       - name: Show dist output
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -70,6 +103,7 @@ jobs:
           ls -la "$DIST_DIR"
 
       - name: Setup SSH
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -82,6 +116,7 @@ jobs:
           ssh-keyscan -p "$CD_SSH_PORT" -H "$CD_SSH_HOST" >> ~/.ssh/known_hosts
 
       - name: Prepare remote folder (clean)
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -89,12 +124,11 @@ jobs:
             "mkdir -p '$CD_WEB_PATH' && find '$CD_WEB_PATH' -mindepth 1 -maxdepth 1 -exec rm -rf {} +"
 
       - name: Deploy via rsync
+        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
         shell: bash
         run: |
           set -euo pipefail
 
-          # -O = no tocar timestamps de directorios (arregla Operation not permitted)
-          # --no-perms/--no-owner/--no-group para evitar attrs problemáticos
           rsync -az --delete -O --no-perms --no-owner --no-group \
             "$DIST_DIR"/ \
             -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p $CD_SSH_PORT" \
