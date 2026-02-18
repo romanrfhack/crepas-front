@@ -71,3 +71,23 @@ Para crear el usuario admin automáticamente:
 2. Arranca la API en `Development` y el usuario se crea/asigna al rol `Admin`.
 
 > Si faltan `AdminEmail` o `AdminPassword`, el seed del admin se omite y solo se crean los roles por defecto.
+
+
+## Cadena de conexión SQL Server (SQL Auth vs Windows Integrated)
+
+Para evitar conflictos, usa **solo un modo de autenticación por cadena**:
+
+- **SQL Server Authentication** (usuario/contraseña):
+  ```text
+  Server=PC\SQLEXPRESS;Database=CrepasDB;User Id=sa;Password=Admin123!;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;
+  ```
+- **Windows Integrated Security**:
+  ```text
+  Server=PC\SQLEXPRESS;Database=CrepasDB;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;
+  ```
+
+> No mezcles `User Id`/`Password` con `Integrated Security` o `Trusted_Connection` en la misma cadena.
+
+La infraestructura normaliza la cadena al iniciar:
+- Si detecta `User Id` o `Password`, fuerza `Integrated Security=False`.
+- Si detecta `Integrated Security=True`, limpia `User Id` y `Password`.

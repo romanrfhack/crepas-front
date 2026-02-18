@@ -177,6 +177,17 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         db.Products.AddRange(products);
         await db.SaveChangesAsync();
 
+        var persistedProducts = await db.Products
+            .AsNoTracking()
+            .Where(x => x.Id == productA || x.Id == productB)
+            .Select(x => new { x.Id, x.ExternalCode, x.Name })
+            .ToDictionaryAsync(x => x.Id);
+
+        if (!persistedProducts.ContainsKey(productA) || !persistedProducts.ContainsKey(productB))
+        {
+            throw new InvalidOperationException("SeedReportDatasetAsync failed to persist expected products before creating SaleItems.");
+        }
+
         db.PosShifts.AddRange(
             new PosShift
             {
@@ -223,15 +234,18 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
             new Payment { Id = Guid.NewGuid(), SaleId = saleVoid.Id, Method = PaymentMethod.Cash, Amount = 50m, CreatedAtUtc = saleVoid.OccurredAtUtc });
         await db.SaveChangesAsync();
 
+        var productASeed = persistedProducts[productA];
+        var productBSeed = persistedProducts[productB];
+
         var saleItems = new[]
         {
-            CreateSaleItem(sale1.Id, products[0], 1, 100m),
-            CreateSaleItem(sale2.Id, products[1], 1, 60m),
-            CreateSaleItem(sale3.Id, products[0], 1, 80m),
-            CreateSaleItem(saleVoid.Id, products[1], 1, 50m)
+            CreateSaleItem(sale1.Id, productASeed.Id, productASeed.ExternalCode, productASeed.Name, 1, 100m),
+            CreateSaleItem(sale2.Id, productBSeed.Id, productBSeed.ExternalCode, productBSeed.Name, 1, 60m),
+            CreateSaleItem(sale3.Id, productASeed.Id, productASeed.ExternalCode, productASeed.Name, 1, 80m),
+            CreateSaleItem(saleVoid.Id, productBSeed.Id, productBSeed.ExternalCode, productBSeed.Name, 1, 50m)
         };
 
-        ValidateSaleItemProductReferences(saleItems, products);
+        ValidateSaleItemProductReferences(saleItems, [productASeed.Id, productBSeed.Id]);
 
         db.SaleItems.AddRange(saleItems);
 
@@ -270,24 +284,24 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         };
     }
 
-    private static SaleItem CreateSaleItem(Guid saleId, Product product, int quantity, decimal unitPrice)
+    private static SaleItem CreateSaleItem(Guid saleId, Guid productId, string? productExternalCode, string productName, int quantity, decimal unitPrice)
     {
         return new SaleItem
         {
             Id = Guid.NewGuid(),
             SaleId = saleId,
-            ProductId = product.Id,
-            ProductExternalCode = product.ExternalCode,
-            ProductNameSnapshot = product.Name,
+            ProductId = productId,
+            ProductExternalCode = productExternalCode,
+            ProductNameSnapshot = productName,
             UnitPriceSnapshot = unitPrice,
             Quantity = quantity,
             LineTotal = quantity * unitPrice
         };
     }
 
-    private static void ValidateSaleItemProductReferences(IEnumerable<SaleItem> saleItems, IEnumerable<Product> products)
+    private static void ValidateSaleItemProductReferences(IEnumerable<SaleItem> saleItems, IEnumerable<Guid> productIdsSource)
     {
-        var productIds = products.Select(x => x.Id).ToHashSet();
+        var productIds = productIdsSource.ToHashSet();
         var missingProductIds = saleItems
             .Select(x => x.ProductId)
             .Distinct()

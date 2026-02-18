@@ -55,7 +55,7 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
                 "SQL Server integration tests require ConnectionStrings__DefaultConnection.");
         }
 
-        var sqlBuilder = new SqlConnectionStringBuilder(baseConnectionString);
+        var sqlBuilder = BuildNormalizedSqlConnectionString(baseConnectionString);
         _initialCatalog = string.IsNullOrWhiteSpace(sqlBuilder.InitialCatalog)
             ? "master"
             : sqlBuilder.InitialCatalog;
@@ -66,7 +66,7 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
         Console.WriteLine($"[CobranzaDigitalApiFactory] SQL provider forced to SQL Server");
         Console.WriteLine($"[CobranzaDigitalApiFactory] Initial catalog from base connection: {_initialCatalog}");
         Console.WriteLine($"[CobranzaDigitalApiFactory] Test catalog: {_testCatalog}");
-        Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server test connection: {_sqlServerConnectionString}");
+        Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server test connection: {MaskSqlPassword(_sqlServerConnectionString)}");
         
         _loggerFactory = LoggerFactory.Create(builder =>
         {
@@ -263,6 +263,43 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
     }
 
 
+
+    private static SqlConnectionStringBuilder BuildNormalizedSqlConnectionString(string connectionString)
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString);
+        var hasSqlAuth = !string.IsNullOrWhiteSpace(builder.UserID)
+            || !string.IsNullOrWhiteSpace(builder.Password);
+
+        if (hasSqlAuth)
+        {
+            builder.IntegratedSecurity = false;
+            return builder;
+        }
+
+        if (builder.IntegratedSecurity)
+        {
+            builder.UserID = string.Empty;
+            builder.Password = string.Empty;
+        }
+
+        return builder;
+    }
+
+    private static string MaskSqlPassword(string? connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return "<empty>";
+        }
+
+        var builder = new SqlConnectionStringBuilder(connectionString);
+        if (!string.IsNullOrWhiteSpace(builder.Password))
+        {
+            builder.Password = "***";
+        }
+
+        return builder.ConnectionString;
+    }
     private static string ResolveApiContentRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
@@ -312,7 +349,7 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
             using var scope = Services.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
             Console.WriteLine($"[CobranzaDigitalApiFactory] InitializeAsync provider: {dbContext.Database.ProviderName}");
-            Console.WriteLine($"[CobranzaDigitalApiFactory] InitializeAsync connection string: {dbContext.Database.GetConnectionString()}");
+            Console.WriteLine($"[CobranzaDigitalApiFactory] InitializeAsync connection string: {MaskSqlPassword(dbContext.Database.GetConnectionString())}");
             Console.WriteLine($"[CobranzaDigitalApiFactory] InitializeAsync database name: {dbContext.Database.GetDbConnection().Database}");
 
             await dbContext.Database.MigrateAsync();
