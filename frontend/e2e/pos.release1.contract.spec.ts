@@ -164,10 +164,15 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
           status: 409,
           contentType: 'application/json',
           body: JSON.stringify({
-            title: 'Conflict',
+            title: 'ItemUnavailable',
+            status: 409,
             itemType: 'Product',
             itemId: 'P1',
-            itemName: 'Café americano',
+            extensions: {
+              itemType: 'Product',
+              itemId: 'P1',
+              itemName: 'Café americano',
+            },
           }),
         });
       }
@@ -464,10 +469,15 @@ test('E) Cache stale: create sale 409 unavailable y actualización de catálogo 
   await ensureShiftOpen(page);
 
   await addSingleProductToCart(page);
+  const createSaleConflict = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/pos/sales') && response.status() === 409,
+  );
   await submitMixedPayment(page);
+  await createSaleConflict;
 
-  await expect(page.getByText(/No disponible: Café americano/i)).toBeVisible();
+  await expect(page.getByTestId('unavailable-alert')).toBeVisible();
   await expect(page.getByTestId('refresh-catalog-unavailable')).toBeVisible();
+  await expect(page.getByTestId('unavailable-item-name')).toHaveText(/Cafe|Café/i);
 
   const callsBeforeRefresh = captured.snapshotCalls();
   await page.getByTestId('refresh-catalog-unavailable').click();

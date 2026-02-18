@@ -78,6 +78,7 @@ export class PosCajaPage implements OnDestroy {
   readonly loading = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly canRefreshCatalogAfterUnavailable = signal(false);
+  readonly unavailableItemName = signal<string | null>(null);
   readonly saleSuccess = signal<SaleResponseDto | null>(null);
   readonly currentShift = signal<PosShiftDto | null>(null);
   readonly showOpenShiftModal = signal(false);
@@ -225,10 +226,9 @@ export class PosCajaPage implements OnDestroy {
   async loadSnapshot(forceRefresh = false) {
     this.errorMessage.set(null);
     this.canRefreshCatalogAfterUnavailable.set(false);
+    this.unavailableItemName.set(null);
     try {
-      const data = await firstValueFrom(
-        this.snapshotService.getSnapshot({ forceRefresh }),
-      );
+      const data = await firstValueFrom(this.snapshotService.getSnapshot({ forceRefresh }));
       this.snapshot.set(data);
     } catch {
       this.errorMessage.set('No se pudo cargar el catálogo. Intenta nuevamente.');
@@ -439,6 +439,8 @@ export class PosCajaPage implements OnDestroy {
     }
 
     this.errorMessage.set(null);
+    this.canRefreshCatalogAfterUnavailable.set(false);
+    this.unavailableItemName.set(null);
     this.saleSuccess.set(null);
     this.loading.set(true);
 
@@ -706,8 +708,9 @@ export class PosCajaPage implements OnDestroy {
     }
 
     if (httpError.status === 409 && this.isItemUnavailableError(httpError.error)) {
-      const itemName = this.getUnavailableItemName(httpError.error);
-      this.errorMessage.set(`No disponible: ${itemName}. Actualiza catálogo e intenta de nuevo.`);
+      const unavailable = this.getUnavailableItemData(httpError.error);
+      this.unavailableItemName.set(unavailable.itemName);
+      this.errorMessage.set('No disponible. Actualiza catálogo e intenta de nuevo.');
       this.canRefreshCatalogAfterUnavailable.set(true);
       this.inProgressClientSaleId.set(null);
       return;
@@ -753,27 +756,66 @@ export class PosCajaPage implements OnDestroy {
   }
 
   private isItemUnavailableError(payload: unknown) {
+    return this.getUnavailableItemData(payload).isItemUnavailable;
+  }
+
+  private getUnavailableItemData(payload: unknown) {
     if (!payload || typeof payload !== 'object') {
-      return false;
+      return {
+        isItemUnavailable: false,
+        itemName: null,
+      };
     }
 
     const data = payload as Record<string, unknown>;
-    const itemType = data['itemType'];
-    const itemId = data['itemId'];
-    return typeof itemType === 'string' && typeof itemId === 'string';
+    const extensions =
+      typeof data['extensions'] === 'object' && data['extensions']
+        ? (data['extensions'] as Record<string, unknown>)
+        : null;
+
+    const itemType = this.getStringValue(data, extensions, 'itemType');
+    const itemId = this.getStringValue(data, extensions, 'itemId');
+    const itemName = this.resolveUnavailableItemName(data, extensions, itemId);
+
+    return {
+      isItemUnavailable: Boolean(itemType && itemId),
+      itemName,
+    };
   }
 
-  private getUnavailableItemName(payload: unknown) {
-    if (!payload || typeof payload !== 'object') {
-      return 'ítem';
+  private resolveUnavailableItemName(
+    data: Record<string, unknown>,
+    extensions: Record<string, unknown> | null,
+    itemId: string | null,
+  ) {
+    const payloadItemName = this.getStringValue(data, extensions, 'itemName');
+    if (payloadItemName) {
+      return payloadItemName;
     }
 
-    const itemName = (payload as Record<string, unknown>)['itemName'];
-    if (typeof itemName === 'string' && itemName.trim()) {
-      return itemName.trim();
+    if (!itemId) {
+      return null;
     }
 
-    return 'ítem seleccionado';
+    const fallbackFromCart = this.cartItems().find(
+      (item) => item.productId === itemId,
+    )?.productName;
+    return fallbackFromCart?.trim() ? fallbackFromCart.trim() : null;
+  }
+
+  private getStringValue(
+    data: Record<string, unknown>,
+    extensions: Record<string, unknown> | null,
+    key: string,
+  ) {
+    const candidates = [data[key], extensions?.[key]];
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+
+    return null;
   }
 
   private round2(value: number) {
