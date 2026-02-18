@@ -20,7 +20,7 @@ docker start cobranzadigital-sql-test
 
 ## Variables de entorno para Integration Tests API
 ```bash
-export ConnectionStrings__DefaultConnection='Server=localhost,1433;Database=CrepasDB_Test_Base;User Id=sa;Password=YourStrong!Passw0rd;Encrypt=False;TrustServerCertificate=True;MultipleActiveResultSets=True'
+export ConnectionStrings__DefaultConnection='Server=localhost,1433;Database=CrepasDB_Test_Base;User Id=sa;Password=YourStrong!Passw0rd;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True'
 ```
 
 > La fábrica de integration tests crea un catálogo único por corrida (`CrepasDB_Test_{Guid}`), aplica migraciones y lo elimina al finalizar.

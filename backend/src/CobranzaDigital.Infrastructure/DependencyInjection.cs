@@ -10,6 +10,7 @@ using CobranzaDigital.Infrastructure.Services;
 
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -42,6 +43,8 @@ public static class DependencyInjection
                 throw new InvalidOperationException(
                     $"Connection string '{databaseOptions.ConnectionStringName}' was not found.");
             }
+
+            connectionString = NormalizeSqlServerAuthentication(connectionString);
 
             options.UseSqlServer(connectionString, sqlOptions =>
             {
@@ -91,6 +94,28 @@ public static class DependencyInjection
         services.AddScoped<IPosShiftService, PosShiftService>();
 
         return services;
+    }
+
+    private static string NormalizeSqlServerAuthentication(string connectionString)
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString);
+        var hasSqlAuth = !string.IsNullOrWhiteSpace(builder.UserID)
+            || !string.IsNullOrWhiteSpace(builder.Password);
+
+        if (hasSqlAuth)
+        {
+            // SQL authentication and integrated security are mutually exclusive.
+            builder.IntegratedSecurity = false;
+            return builder.ConnectionString;
+        }
+
+        if (builder.IntegratedSecurity)
+        {
+            builder.UserID = string.Empty;
+            builder.Password = string.Empty;
+        }
+
+        return builder.ConnectionString;
     }
 
 }
