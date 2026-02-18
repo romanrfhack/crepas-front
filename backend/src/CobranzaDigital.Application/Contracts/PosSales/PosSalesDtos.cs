@@ -29,3 +29,50 @@ public sealed record VoidSaleResponseDto(Guid SaleId, SaleStatus Status, DateTim
 public sealed record DailySummaryDto(DateOnly Date, int TotalTickets, decimal TotalAmount, int TotalItems, decimal AvgTicket);
 
 public sealed record TopProductDto(Guid ProductId, string ProductNameSnapshot, int Qty, decimal Amount);
+
+public sealed record PosPaymentsBreakdownDto(decimal Cash, decimal Card, decimal Transfer);
+
+public sealed record PosDailySalesReportRowDto(
+    DateOnly BusinessDate,
+    int Tickets,
+    decimal Subtotal,
+    decimal Discounts,
+    decimal Tax,
+    decimal TotalSales,
+    decimal AvgTicket,
+    int VoidsCount,
+    decimal VoidsTotal,
+    PosPaymentsBreakdownDto Payments);
+
+public sealed record PosPaymentMethodTotalDto(PaymentMethod Method, int Count, decimal Amount);
+
+public sealed record PosPaymentsMethodsReportDto(
+    DateOnly DateFrom,
+    DateOnly DateTo,
+    IReadOnlyList<PosPaymentMethodTotalDto> Totals);
+
+public sealed record PosHourlySalesReportRowDto(int Hour, int Tickets, decimal TotalSales);
+
+public sealed record PosCashierSalesReportRowDto(
+    Guid CashierUserId,
+    int Tickets,
+    decimal TotalSales,
+    decimal AvgTicket,
+    int VoidsCount,
+    decimal VoidsTotal,
+    PosPaymentsBreakdownDto Payments);
+
+public sealed record PosShiftSummaryReportRowDto(
+    Guid ShiftId,
+    Guid CashierUserId,
+    DateTimeOffset OpenedAtUtc,
+    DateTimeOffset? ClosedAtUtc,
+    string? CloseReason,
+    int Tickets,
+    decimal TotalSales,
+    PosPaymentsBreakdownDto Payments,
+    decimal ClosingExpectedCashAmount,
+    decimal ClosingCountedCashAmount,
+    decimal CashDifference);
+
+public sealed record PosVoidReasonReportRowDto(string? ReasonCode, string? ReasonText, int Count, decimal Amount);

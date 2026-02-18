@@ -16,6 +16,8 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
+using TimeZoneConverter;
+
 using ValidationException = CobranzaDigital.Application.Common.Exceptions.ValidationException;
 
 namespace CobranzaDigital.Infrastructure.Services;
@@ -339,64 +341,202 @@ public sealed class PosSalesService : IPosSalesService
         var totalTickets = sales.Count;
         var avgTicket = totalTickets == 0 ? 0m : decimal.Round(totalAmount / totalTickets, 2, MidpointRounding.AwayFromZero);
 
-        var correlationId = GetCorrelationId();
-        LogAction("DailySummary", "SaleReport", null, correlationId);
+        LogAction("DailySummary", "SaleReport", null, GetCorrelationId());
 
         return new DailySummaryDto(forDate, totalTickets, totalAmount, totalItems, avgTicket);
     }
 
-    public async Task<IReadOnlyList<TopProductDto>> GetTopProductsAsync(DateOnly dateFrom, DateOnly dateTo, int top, CancellationToken ct)
+    public async Task<IReadOnlyList<TopProductDto>> GetTopProductsAsync(DateOnly dateFrom, DateOnly dateTo, int top, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct)
     {
         if (top <= 0)
         {
             throw ValidationError("top", "Top must be greater than zero.");
         }
 
-        if (dateTo < dateFrom)
-        {
-            throw ValidationError("dateTo", "dateTo must be greater than or equal to dateFrom.");
-        }
+        ValidateDateRange(dateFrom, dateTo);
 
-        var sales = await _db.Sales.AsNoTracking()
-            .Where(x => x.Status == SaleStatus.Completed)
-            .Select(x => new { x.Id, x.OccurredAtUtc })
-            .ToListAsync(ct)
+        var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
+        var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
+
+        var filteredSaleIds = await _db.Sales.AsNoTracking()
+            .Where(x => x.Status == SaleStatus.Completed &&
+                        x.StoreId == resolvedStoreId &&
+                        x.OccurredAtUtc >= utcStart &&
+                        x.OccurredAtUtc < utcEndExclusive &&
+                        (!cashierUserId.HasValue || x.CreatedByUserId == cashierUserId.Value) &&
+                        (!shiftId.HasValue || x.ShiftId == shiftId.Value))
+            .Select(x => x.Id)
+            .ToArrayAsync(ct)
             .ConfigureAwait(false);
 
-        var saleIds = sales
-            .Where(x =>
-            {
-                var businessDate = _businessTime.ToBusinessDate(x.OccurredAtUtc);
-                return businessDate >= dateFrom && businessDate <= dateTo;
-            })
-            .Select(x => x.Id)
-            .ToHashSet();
+        if (filteredSaleIds.Length == 0)
+        {
+            return [];
+        }
 
-        var rows = saleIds.Count == 0
-            ? []
-            : (await _db.SaleItems.AsNoTracking()
-                .Where(x => saleIds.Contains(x.SaleId))
+        var rows = (await _db.SaleItems.AsNoTracking()
+                .Where(x => filteredSaleIds.Contains(x.SaleId))
                 .Select(x => new { x.ProductId, x.ProductNameSnapshot, x.Quantity, x.LineTotal })
                 .ToListAsync(ct)
                 .ConfigureAwait(false))
-                .GroupBy(x => new { x.ProductId, x.ProductNameSnapshot })
-                .Select(grouped => new TopProductDto(
-                    grouped.Key.ProductId,
-                    grouped.Key.ProductNameSnapshot,
-                    grouped.Sum(x => x.Quantity),
-                    grouped.Sum(x => x.LineTotal)))
-                .ToList();
-
-        rows = rows
+            .GroupBy(x => new { x.ProductId, x.ProductNameSnapshot })
+            .Select(grouped => new TopProductDto(
+                grouped.Key.ProductId,
+                grouped.Key.ProductNameSnapshot,
+                grouped.Sum(x => x.Quantity),
+                grouped.Sum(x => x.LineTotal)))
             .OrderByDescending(x => x.Qty)
             .ThenByDescending(x => x.Amount)
             .Take(top)
             .ToList();
 
-        var correlationId = GetCorrelationId();
-        LogAction("TopProducts", "SaleReport", null, correlationId);
+        LogAction("TopProducts", "SaleReport", null, GetCorrelationId());
 
         return rows;
+    }
+
+    public async Task<IReadOnlyList<PosDailySalesReportRowDto>> GetDailySalesReportAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, CancellationToken ct)
+    {
+        var (sales, payments, timeZoneInfo) = await LoadSalesAndPaymentsAsync(dateFrom, dateTo, storeId, ct).ConfigureAwait(false);
+
+        var paymentsBySaleId = payments.GroupBy(x => x.SaleId).ToDictionary(x => x.Key, x => x.ToList());
+
+        var rows = sales
+            .GroupBy(x => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(x.OccurredAtUtc, timeZoneInfo).DateTime))
+            .Select(group =>
+            {
+                var completed = group.Where(x => x.Status == SaleStatus.Completed).ToList();
+                var voided = group.Where(x => x.Status == SaleStatus.Void).ToList();
+                var totalSales = completed.Sum(x => x.Total);
+                var tickets = completed.Count;
+                return new PosDailySalesReportRowDto(
+                    group.Key,
+                    tickets,
+                    completed.Sum(x => x.Subtotal),
+                    0m,
+                    0m,
+                    totalSales,
+                    tickets == 0 ? 0m : decimal.Round(totalSales / tickets, 2, MidpointRounding.AwayFromZero),
+                    voided.Count,
+                    voided.Sum(x => x.Total),
+                    BuildPaymentsBreakdown(completed.SelectMany(x => paymentsBySaleId.GetValueOrDefault(x.Id) ?? [])));
+            })
+            .OrderBy(x => x.BusinessDate)
+            .ToList();
+
+        return rows;
+    }
+
+    public async Task<PosPaymentsMethodsReportDto> GetPaymentsMethodsReportAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, CancellationToken ct)
+    {
+        var (sales, payments, _) = await LoadSalesAndPaymentsAsync(dateFrom, dateTo, storeId, ct).ConfigureAwait(false);
+        var completedIds = sales.Where(x => x.Status == SaleStatus.Completed).Select(x => x.Id).ToHashSet();
+
+        var totals = payments
+            .Where(x => completedIds.Contains(x.SaleId))
+            .GroupBy(x => x.Method)
+            .Select(x => new PosPaymentMethodTotalDto(x.Key, x.Count(), x.Sum(v => v.Amount)))
+            .OrderBy(x => x.Method)
+            .ToList();
+
+        return new PosPaymentsMethodsReportDto(dateFrom, dateTo, totals);
+    }
+
+    public async Task<IReadOnlyList<PosHourlySalesReportRowDto>> GetHourlySalesReportAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, CancellationToken ct)
+    {
+        var (sales, _, timeZoneInfo) = await LoadSalesAndPaymentsAsync(dateFrom, dateTo, storeId, ct).ConfigureAwait(false);
+
+        return sales
+            .Where(x => x.Status == SaleStatus.Completed)
+            .GroupBy(x => TimeZoneInfo.ConvertTime(x.OccurredAtUtc, timeZoneInfo).Hour)
+            .Select(x => new PosHourlySalesReportRowDto(x.Key, x.Count(), x.Sum(v => v.Total)))
+            .OrderBy(x => x.Hour)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<PosCashierSalesReportRowDto>> GetCashiersSalesReportAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, CancellationToken ct)
+    {
+        var (sales, payments, _) = await LoadSalesAndPaymentsAsync(dateFrom, dateTo, storeId, ct).ConfigureAwait(false);
+        var paymentsBySaleId = payments.GroupBy(x => x.SaleId).ToDictionary(x => x.Key, x => x.ToList());
+
+        return sales
+            .GroupBy(x => x.CreatedByUserId)
+            .Select(group =>
+            {
+                var completed = group.Where(x => x.Status == SaleStatus.Completed).ToList();
+                var voided = group.Where(x => x.Status == SaleStatus.Void).ToList();
+                var totalSales = completed.Sum(x => x.Total);
+                var tickets = completed.Count;
+                return new PosCashierSalesReportRowDto(
+                    group.Key,
+                    tickets,
+                    totalSales,
+                    tickets == 0 ? 0m : decimal.Round(totalSales / tickets, 2, MidpointRounding.AwayFromZero),
+                    voided.Count,
+                    voided.Sum(x => x.Total),
+                    BuildPaymentsBreakdown(completed.SelectMany(x => paymentsBySaleId.GetValueOrDefault(x.Id) ?? [])));
+            })
+            .OrderBy(x => x.CashierUserId)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<PosShiftSummaryReportRowDto>> GetShiftsSummaryReportAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, CancellationToken ct)
+    {
+        var (sales, payments, _) = await LoadSalesAndPaymentsAsync(dateFrom, dateTo, storeId, ct).ConfigureAwait(false);
+        var saleGroupsByShift = sales.Where(x => x.ShiftId.HasValue).GroupBy(x => x.ShiftId!.Value).ToDictionary(x => x.Key, x => x.ToList());
+        var saleIds = sales.Select(x => x.Id).ToHashSet();
+        var paymentsBySaleId = payments.Where(x => saleIds.Contains(x.SaleId)).GroupBy(x => x.SaleId).ToDictionary(x => x.Key, x => x.ToList());
+
+        var (resolvedStoreId, _) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
+        var shiftIds = saleGroupsByShift.Keys.ToArray();
+        var shifts = await _db.PosShifts.AsNoTracking()
+            .Where(x => x.StoreId == resolvedStoreId &&
+                        (!cashierUserId.HasValue || x.OpenedByUserId == cashierUserId.Value) &&
+                        shiftIds.Contains(x.Id))
+            .Select(x => new
+            {
+                x.Id,
+                CashierUserId = x.OpenedByUserId,
+                x.OpenedAtUtc,
+                x.ClosedAtUtc,
+                x.CloseReason,
+                x.ExpectedCashAmount,
+                x.ClosingCashAmount,
+                x.CashDifference
+            })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return shifts.Select(shift =>
+            {
+                var shiftSales = saleGroupsByShift.GetValueOrDefault(shift.Id) ?? [];
+                var completed = shiftSales.Where(x => x.Status == SaleStatus.Completed).ToList();
+                return new PosShiftSummaryReportRowDto(
+                    shift.Id,
+                    shift.CashierUserId,
+                    shift.OpenedAtUtc,
+                    shift.ClosedAtUtc,
+                    shift.CloseReason,
+                    completed.Count,
+                    completed.Sum(x => x.Total),
+                    BuildPaymentsBreakdown(completed.SelectMany(x => paymentsBySaleId.GetValueOrDefault(x.Id) ?? [])),
+                    shift.ExpectedCashAmount ?? 0m,
+                    shift.ClosingCashAmount ?? 0m,
+                    shift.CashDifference ?? 0m);
+            })
+            .OrderBy(x => x.OpenedAtUtc)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<PosVoidReasonReportRowDto>> GetVoidReasonsReportAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, CancellationToken ct)
+    {
+        var (sales, _, _) = await LoadSalesAndPaymentsAsync(dateFrom, dateTo, storeId, ct).ConfigureAwait(false);
+        return sales
+            .Where(x => x.Status == SaleStatus.Void || x.VoidedAtUtc.HasValue)
+            .GroupBy(x => new { x.VoidReasonCode, x.VoidReasonText })
+            .Select(x => new PosVoidReasonReportRowDto(x.Key.VoidReasonCode, x.Key.VoidReasonText, x.Count(), x.Sum(v => v.Total)))
+            .OrderByDescending(x => x.Amount)
+            .ToList();
     }
 
     public async Task<VoidSaleResponseDto> VoidSaleAsync(Guid saleId, VoidSaleRequestDto request, CancellationToken ct)
@@ -479,6 +619,105 @@ public sealed class PosSalesService : IPosSalesService
 
         return new VoidSaleResponseDto(sale.Id, sale.Status, voidedAtUtc);
     }
+
+
+    private async Task<(List<SaleReportRow> Sales, List<PaymentReportRow> Payments, TimeZoneInfo TimeZoneInfo)> LoadSalesAndPaymentsAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, CancellationToken ct)
+    {
+        ValidateDateRange(dateFrom, dateTo);
+
+        var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
+        var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
+
+        var sales = await _db.Sales.AsNoTracking()
+            .Where(x => x.StoreId == resolvedStoreId && x.OccurredAtUtc >= utcStart && x.OccurredAtUtc < utcEndExclusive)
+            .Select(x => new SaleReportRow(
+                x.Id,
+                x.StoreId,
+                x.ShiftId,
+                x.CreatedByUserId,
+                x.OccurredAtUtc,
+                x.Subtotal,
+                x.Total,
+                x.Status,
+                x.VoidedAtUtc,
+                x.VoidReasonCode,
+                x.VoidReasonText))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var saleIds = sales.Select(x => x.Id).ToArray();
+        var payments = saleIds.Length == 0
+            ? []
+            : await _db.Payments.AsNoTracking()
+                .Where(x => saleIds.Contains(x.SaleId))
+                .Select(x => new PaymentReportRow(x.SaleId, x.Method, x.Amount))
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+        return (sales, payments, timeZoneInfo);
+    }
+
+    private async Task<(Guid StoreId, TimeZoneInfo TimeZoneInfo)> ResolveStoreTimeZoneAsync(Guid? storeId, CancellationToken ct)
+    {
+        var (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
+
+        var timeZoneId = await _db.Stores.AsNoTracking()
+            .Where(x => x.Id == resolvedStoreId)
+            .Select(x => x.TimeZoneId)
+            .FirstAsync(ct)
+            .ConfigureAwait(false);
+
+        try
+        {
+            return (resolvedStoreId, TZConvert.GetTimeZoneInfo(timeZoneId));
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return (resolvedStoreId, TimeZoneInfo.Utc);
+        }
+    }
+
+    private static (DateTimeOffset UtcStart, DateTimeOffset UtcEndExclusive) ToUtcRange(DateOnly dateFrom, DateOnly dateTo, TimeZoneInfo timeZoneInfo)
+    {
+        var localStart = dateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var localEndExclusive = dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+
+        return (
+            new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localStart, timeZoneInfo)),
+            new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localEndExclusive, timeZoneInfo)));
+    }
+
+    private static PosPaymentsBreakdownDto BuildPaymentsBreakdown(IEnumerable<PaymentReportRow> payments)
+    {
+        var rows = payments.ToList();
+        return new PosPaymentsBreakdownDto(
+            rows.Where(x => x.Method == PaymentMethod.Cash).Sum(x => x.Amount),
+            rows.Where(x => x.Method == PaymentMethod.Card).Sum(x => x.Amount),
+            rows.Where(x => x.Method == PaymentMethod.Transfer).Sum(x => x.Amount));
+    }
+
+    private static void ValidateDateRange(DateOnly dateFrom, DateOnly dateTo)
+    {
+        if (dateTo < dateFrom)
+        {
+            throw ValidationError("dateTo", "dateTo must be greater than or equal to dateFrom.");
+        }
+    }
+
+    private sealed record SaleReportRow(
+        Guid Id,
+        Guid StoreId,
+        Guid? ShiftId,
+        Guid CreatedByUserId,
+        DateTimeOffset OccurredAtUtc,
+        decimal Subtotal,
+        decimal Total,
+        SaleStatus Status,
+        DateTimeOffset? VoidedAtUtc,
+        string? VoidReasonCode,
+        string? VoidReasonText);
+
+    private sealed record PaymentReportRow(Guid SaleId, PaymentMethod Method, decimal Amount);
 
     private static string GenerateFolio(DateTimeOffset timestamp)
     {
