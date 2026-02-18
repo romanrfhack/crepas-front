@@ -226,7 +226,7 @@
 
 .modal-card {
   width: min(520px, 90vw);
-  max-height: min(70vh, 680px);
+  max-height: min(90vh, 720px); /* Más altura */
   overflow: hidden;
   background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(10px);
@@ -237,17 +237,17 @@
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 0.5rem; /* Reducido */
 }
 
 .modal-card--wide {
-  width: min(820px, 94vw);
+  width: min(860px, 94vw);
 }
 
 .modal-body {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 0.5rem; /* Reducido */
   overflow-y: auto;
   min-height: 0;
   padding-right: 0.25rem;
@@ -257,11 +257,11 @@
 .modal-card select,
 .modal-card textarea {
   width: 100%;
-  padding: 0.7rem 0.8rem;
+  padding: 0.5rem 0.7rem; /* Reducido */
   border-radius: 12px;
   border: 1px solid rgba(107, 63, 42, 0.16);
   background: rgba(255, 255, 255, 0.9);
-  font-size: 1rem;
+  font-size: 0.95rem; /* Reducido */
   transition:
     border-color var(--transition),
     box-shadow var(--transition);
@@ -290,46 +290,61 @@
 
 .modal-actions--sticky {
   margin-top: auto;
-  padding-top: 0.75rem;
+  padding-top: 0.5rem;
   border-top: 1px solid rgba(107, 63, 42, 0.14);
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.97), rgba(255, 255, 255, 0.85));
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  flex-shrink: 0; /* Evita que se comprima */
 }
 
+/* ===== DENOMINACIÓN EXTRA COMPACTA ===== */
 .denomination-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); /* Más estrecho */
+  gap: 0.3rem; /* Reducido */
+  width: 100%;
+  overflow: hidden;
 }
 
 .denomination-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.4rem;
-  padding: 0.35rem 0.5rem;
+  gap: 0.15rem; /* Reducido */
+  padding: 0.15rem 0.25rem; /* Reducido */
   border: 1px solid rgba(107, 63, 42, 0.12);
-  border-radius: 10px;
-  min-height: 2.4rem;
+  border-radius: 6px; /* Reducido */
+  min-height: 1.8rem; /* Reducido */
+  width: 100%;
 }
 
 .denomination-item label {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.75rem; /* Reducido */
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .denomination-item input[type='number'] {
-  width: 4.2rem;
-  min-width: 4.2rem;
-  padding: 0.28rem 0.35rem;
-  font-size: 0.9rem;
+  width: 3rem; /* Reducido */
+  min-width: 3rem;
+  max-width: 100%;
+  padding: 0.15rem 0.2rem;
+  font-size: 0.75rem;
   text-align: right;
 }
 
+/* Resumen ultracompacto */
 .close-summary {
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem; /* Reducido */
   flex-wrap: wrap;
+  font-size: 0.8rem; /* Reducido */
+}
+
+.close-summary p {
+  margin: 0.1rem 0; /* Reducido */
 }
 
 .customization-wrapper {
@@ -531,7 +546,7 @@
 
 @media (max-width: 720px) {
   .modal-card {
-    max-height: 82vh;
+    max-height: 90vh;
   }
 
   .denomination-grid {
