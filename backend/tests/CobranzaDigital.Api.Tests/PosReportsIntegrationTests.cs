@@ -183,7 +183,8 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
             .Select(x => new { x.Id, x.ExternalCode, x.Name })
             .ToDictionaryAsync(x => x.Id);
 
-        if (!persistedProducts.ContainsKey(productA) || !persistedProducts.ContainsKey(productB))
+        if (!persistedProducts.TryGetValue(productA, out var productASeed)
+            || !persistedProducts.TryGetValue(productB, out var productBSeed))
         {
             throw new InvalidOperationException("SeedReportDatasetAsync failed to persist expected products before creating SaleItems.");
         }
@@ -233,9 +234,6 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
             new Payment { Id = Guid.NewGuid(), SaleId = sale3.Id, Method = PaymentMethod.Transfer, Amount = 80m, CreatedAtUtc = sale3.OccurredAtUtc, Reference = "TRX-80" },
             new Payment { Id = Guid.NewGuid(), SaleId = saleVoid.Id, Method = PaymentMethod.Cash, Amount = 50m, CreatedAtUtc = saleVoid.OccurredAtUtc });
         await db.SaveChangesAsync();
-
-        var productASeed = persistedProducts[productA];
-        var productBSeed = persistedProducts[productB];
 
         var saleItems = new[]
         {
