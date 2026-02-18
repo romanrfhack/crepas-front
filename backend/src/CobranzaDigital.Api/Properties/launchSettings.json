@@ -8,7 +8,7 @@
       "applicationUrl": "http://localhost:5077",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "ConnectionStrings__DefaultConnection": "Server=PC\\\\SQLEXPRESS;Database=CrepasDB;User Id=sa;Password=Admin123!;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;"
+        "ConnectionStrings__DefaultConnection": "Server=PC\\SQLEXPRESS;Database=CrepasDB;User Id=sa;Password=Admin123!;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;"
       }
     },
     "https": {
@@ -18,7 +18,7 @@
       "applicationUrl": "https://localhost:7146;http://localhost:5077",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "ConnectionStrings__DefaultConnection": "Server=PC\\\\SQLEXPRESS;Database=CrepasDB;User Id=sa;Password=Admin123!;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;"
+        "ConnectionStrings__DefaultConnection": "Server=PC\\SQLEXPRESS;Database=CrepasDB;User Id=sa;Password=Admin123!;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;"
       }
     }
   }
