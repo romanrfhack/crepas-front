@@ -17,6 +17,7 @@ export interface ProductDto {
   subcategoryName: string | null;
   basePrice: number;
   isActive: boolean;
+  isAvailable: boolean;
   customizationSchemaId: string | null;
 }
 
@@ -31,6 +32,7 @@ export interface OptionItemDto {
   optionSetId: string;
   name: string;
   isActive: boolean;
+  isAvailable: boolean;
   sortOrder: number;
 }
 
@@ -58,6 +60,7 @@ export interface ExtraDto {
   name: string;
   price: number;
   isActive: boolean;
+  isAvailable: boolean;
 }
 
 export interface IncludedItemDto {
@@ -76,6 +79,11 @@ export interface ProductOverrideDto {
 }
 
 export interface CatalogSnapshotDto {
+  storeId: string;
+  timeZoneId: string;
+  generatedAtUtc: string;
+  catalogVersion: string;
+  etagSeed: string;
   categories: CategoryDto[];
   products: ProductDto[];
   optionSets: OptionSetDto[];

@@ -19,6 +19,7 @@ export interface ProductDto {
   subcategoryName: string | null;
   basePrice: number;
   isActive: boolean;
+  isAvailable: boolean;
   customizationSchemaId: string | null;
 }
 
@@ -29,6 +30,7 @@ export interface UpsertProductRequest {
   subcategoryName: string | null;
   basePrice: number;
   isActive: boolean;
+  isAvailable: boolean;
   customizationSchemaId: string | null;
 }
 
@@ -48,12 +50,14 @@ export interface OptionItemDto {
   optionSetId: string;
   name: string;
   isActive: boolean;
+  isAvailable: boolean;
   sortOrder: number;
 }
 
 export interface UpsertOptionItemRequest {
   name: string;
   isActive: boolean;
+  isAvailable: boolean;
   sortOrder: number;
 }
 
@@ -97,12 +101,14 @@ export interface ExtraDto {
   name: string;
   price: number;
   isActive: boolean;
+  isAvailable: boolean;
 }
 
 export interface UpsertExtraRequest {
   name: string;
   price: number;
   isActive: boolean;
+  isAvailable: boolean;
 }
 
 export interface IncludedItemDto {

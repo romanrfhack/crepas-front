@@ -18,14 +18,26 @@
         <button
           type="button"
           class="product-card"
-          (click)="addProduct.emit(product)"
+          (click)="onProductClick(product)"
           [attr.aria-label]="'Agregar ' + product.name + ' al carrito'"
+          [disabled]="!product.isAvailable"
+          [attr.data-testid]="'product-' + product.id"
         >
           <div class="product-info">
             <span class="product-name">{{ product.name }}</span>
             <div class="product-price-row">
               <span class="product-price">${{ product.basePrice.toFixed(2) }}</span>
-              <span class="add-icon" aria-hidden="true">+</span>
+              @if (product.isAvailable) {
+                <span class="add-icon" aria-hidden="true">+</span>
+              } @else {
+                <span
+                  class="add-icon"
+                  aria-hidden="true"
+                  [attr.data-testid]="'product-unavailable-' + product.id"
+                >
+                  Agotado
+                </span>
+              }
             </div>
           </div>
         </button>

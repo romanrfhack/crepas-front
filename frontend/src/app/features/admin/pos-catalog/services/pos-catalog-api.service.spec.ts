@@ -51,6 +51,7 @@ describe('PosCatalogApiService', () => {
       subcategoryName: null,
       basePrice: 10,
       isActive: true,
+      isAvailable: true,
       customizationSchemaId: null,
     });
     await service.getOptionItems('set-id', true);
@@ -62,5 +63,59 @@ describe('PosCatalogApiService', () => {
     expect(calls.some((call) => call.method === 'get' && call.path === '/v1/pos/admin/option-sets/set-id/items?includeInactive=true')).toBe(true);
     expect(calls.some((call) => call.method === 'put' && call.path === '/v1/pos/admin/products/product-id/included-items')).toBe(true);
     expect(calls.some((call) => call.method === 'put' && call.path === '/v1/pos/admin/products/product-id/overrides/group%20key')).toBe(true);
+  });
+
+  it('includes isAvailable in create/update payloads for product, extra and option item', async () => {
+    const calls: ApiCall[] = [];
+    const apiClientMock = {
+      get: () => of([]),
+      post: (path: string, body: unknown): Observable<unknown> => {
+        calls.push({ method: 'post', path, body });
+        return of({});
+      },
+      put: (path: string, body: unknown): Observable<unknown> => {
+        calls.push({ method: 'put', path, body });
+        return of({});
+      },
+      delete: () => of(void 0),
+    };
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        PosCatalogApiService,
+        {
+          provide: ApiClient,
+          useValue: apiClientMock,
+        },
+      ],
+    });
+
+    const service = TestBed.inject(PosCatalogApiService);
+    await service.createExtra({ name: 'Extra', price: 5, isActive: true, isAvailable: false });
+    await service.updateProduct('p1', {
+      externalCode: null,
+      name: 'P',
+      categoryId: 'c1',
+      subcategoryName: null,
+      basePrice: 10,
+      isActive: true,
+      isAvailable: false,
+      customizationSchemaId: null,
+    });
+    await service.updateOptionItem('set1', 'item1', {
+      name: 'Item',
+      sortOrder: 1,
+      isActive: true,
+      isAvailable: false,
+    });
+
+    expect(calls.every((call) => {
+      if (call.path.includes('/products') || call.path.includes('/extras') || call.path.includes('/items')) {
+        const body = call.body as Record<string, unknown>;
+        return typeof body['isAvailable'] === 'boolean';
+      }
+      return true;
+    })).toBe(true);
   });
 });

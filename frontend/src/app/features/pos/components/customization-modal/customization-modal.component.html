@@ -41,7 +41,8 @@
           @let isDisabled =
             group.selectionMode !== 0 && 
             !isSel && 
-            isMaxReached; 
+            isMaxReached;
+          @let unavailable = !item.isAvailable;
 
           <label
             class="option-item"
@@ -52,10 +53,14 @@
               [type]="group.selectionMode === 0 ? 'radio' : 'checkbox'"
               [name]="group.key"
               [checked]="isSel"
-              [disabled]="isDisabled"
+              [disabled]="isDisabled || unavailable"
+              [attr.data-testid]="'option-item-' + item.id"
               (change)="toggleSelection(group, item)"
             />
             <span class="option-label">{{ item.name }}</span>
+            @if (unavailable) {
+              <span [attr.data-testid]="'option-item-unavailable-' + item.id">Agotado</span>
+            }
           </label>
         }
       </div>
@@ -92,10 +97,15 @@
                   type="button"
                   class="btn-quantity"
                   (click)="changeExtraQuantity(extra.id, 1)"
+                  [disabled]="!extra.isAvailable"
+                  [attr.data-testid]="'extra-' + extra.id"
                   aria-label="Aumentar cantidad"
                 >
                   +
                 </button>
+                @if (!extra.isAvailable) {
+                  <span [attr.data-testid]="'extra-unavailable-' + extra.id">Agotado</span>
+                }
               </div>
             </div>
           </div>

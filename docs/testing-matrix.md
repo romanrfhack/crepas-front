@@ -39,3 +39,9 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 | `GET /api/v1/pos/catalog/snapshot` | `backend/tests/CobranzaDigital.Api.Tests/PosCatalogIntegrationTests.cs` valida autorización, payload con `isAvailable` y contrato de ETag/304. | Actualizar al modificar shape del snapshot, reglas de store/timezone o estrategia de cache. |
 
 | Disponibilidad al crear venta (`POST /api/v1/pos/sales`) | `backend/tests/CobranzaDigital.Api.Tests/PosSalesIntegrationTests.cs` valida `409` para `Product/Extra/OptionItem` no disponibles y `400` para IDs inválidos. | Ajustar cuando cambien reglas de disponibilidad o formato de errores `ProblemDetails`. |
+
+| POS snapshot caching (ETag/If-None-Match/304) en frontend | `frontend/src/app/features/pos/services/pos-catalog-snapshot.service.spec.ts` valida guardado de ETag, envío de `If-None-Match`, fallback de `304` y prioridad de `storeId`. | Actualizar al cambiar estrategia de cache cliente, scoping por tienda o firma de `getSnapshot/invalidate`. |
+
+| POS UI disponibilidad (`isAvailable`) | Unit: `frontend/src/app/features/pos/pages/pos-caja.page.spec.ts`. E2E UI-contract: `frontend/e2e/pos.release1.contract.spec.ts` (producto disabled + stale cache con `409`). | Actualizar si cambia copy/UX de “Agotado”, testids, o flujo de refresh de catálogo tras `409`. |
+
+| Admin catálogo toggles de disponibilidad (Product/Extra/OptionItem) | Unit: `frontend/src/app/features/admin/pos-catalog/services/pos-catalog-api.service.spec.ts` valida `isAvailable` en payloads; specs de rutas admin validan rol para `pos/catalog`. | Actualizar al cambiar payloads CRUD, estrategia optimista/rollback o políticas de rol (Admin/Manager). |

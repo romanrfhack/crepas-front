@@ -95,6 +95,17 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
             </label>
           </div>
 
+          <div class="form-field checkbox-field">
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                [formControl]="isAvailableControl"
+                class="checkbox-input"
+              />
+              <span class="checkbox-text">Disponible</span>
+            </label>
+          </div>
+
           <!-- Acciones del formulario -->
           <div class="form-actions">
             @if (editingId()) {
@@ -164,6 +175,15 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
                     >
                       {{ item.isActive ? '✅ Activo' : '⛔ Inactivo' }}
                     </span>
+                    <button
+                      type="button"
+                      class="status-badge"
+                      [class.status-badge--active]="item.isAvailable"
+                      [class.status-badge--inactive]="!item.isAvailable"
+                      (click)="onToggleAvailability(item)"
+                    >
+                      {{ item.isAvailable ? '🟢 Disponible' : '⚪ Agotado' }}
+                    </button>
                   </div>
                   <div class="product-category">
                     <span class="meta-label">Categoría:</span>
@@ -696,6 +716,7 @@ export class ProductsPage {
 
   readonly schemaIdControl = new FormControl('', { nonNullable: true });
   readonly isActiveControl = new FormControl(true, { nonNullable: true });
+  readonly isAvailableControl = new FormControl(true, { nonNullable: true });
 
   constructor() {
     void this.bootstrap();
@@ -723,6 +744,7 @@ export class ProductsPage {
       subcategoryName: null,
       basePrice: this.basePriceControl.value,
       isActive: this.isActiveControl.value,
+      isAvailable: this.isAvailableControl.value,
       customizationSchemaId: this.schemaIdControl.value || null,
     };
 
@@ -747,6 +769,36 @@ export class ProductsPage {
     this.categoryIdControl.setValue(item.categoryId);
     this.schemaIdControl.setValue(item.customizationSchemaId ?? '');
     this.isActiveControl.setValue(item.isActive);
+    this.isAvailableControl.setValue(item.isAvailable);
+  }
+
+  async onToggleAvailability(item: ProductDto) {
+    const previous = item.isAvailable;
+    this.products.update((items) =>
+      items.map((current) =>
+        current.id === item.id ? { ...current, isAvailable: !current.isAvailable } : current,
+      ),
+    );
+
+    try {
+      await this.api.updateProduct(item.id, {
+        externalCode: item.externalCode,
+        name: item.name,
+        categoryId: item.categoryId,
+        subcategoryName: item.subcategoryName,
+        basePrice: item.basePrice,
+        isActive: item.isActive,
+        isAvailable: !previous,
+        customizationSchemaId: item.customizationSchemaId,
+      });
+    } catch {
+      this.products.update((items) =>
+        items.map((current) =>
+          current.id === item.id ? { ...current, isAvailable: previous } : current,
+        ),
+      );
+      this.errorMessage.set('No fue posible actualizar disponibilidad del producto.');
+    }
   }
 
   async onDeactivate(item: ProductDto) {
@@ -775,6 +827,7 @@ export class ProductsPage {
     this.basePriceControl.setValue(0);
     this.schemaIdControl.setValue('');
     this.isActiveControl.setValue(true);
+    this.isAvailableControl.setValue(true);
     this.nameControl.markAsUntouched();
     this.categoryIdControl.markAsUntouched();
     this.basePriceControl.markAsUntouched();

@@ -70,6 +70,17 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
               </label>
             </div>
 
+            <div class="form-field checkbox-field">
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  [formControl]="isAvailableControl"
+                  class="checkbox-input"
+                />
+                <span class="checkbox-text">Disponible</span>
+              </label>
+            </div>
+
             <div class="form-actions full-width">
               @if (editingId()) {
                 <button
@@ -141,6 +152,15 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
                     >
                       {{ item.isActive ? '&#9989; Activo' : '&#9940; Inactivo' }}
                     </span>
+                    <button
+                      type="button"
+                      class="status-badge"
+                      [class.status-badge--active]="item.isAvailable"
+                      [class.status-badge--inactive]="!item.isAvailable"
+                      (click)="onToggleAvailability(item)"
+                    >
+                      {{ item.isAvailable ? '&#128994; Disponible' : '&#9898; Agotado' }}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -687,6 +707,7 @@ export class ExtrasPage {
   });
 
   readonly isActiveControl = new FormControl(true, { nonNullable: true });
+  readonly isAvailableControl = new FormControl(true, { nonNullable: true });
 
   constructor() {
     void this.load();
@@ -706,6 +727,7 @@ export class ExtrasPage {
         name: this.nameControl.value.trim(),
         price: this.priceControl.value,
         isActive: this.isActiveControl.value,
+        isAvailable: this.isAvailableControl.value,
       };
       const id = this.editingId();
       if (id) {
@@ -725,6 +747,32 @@ export class ExtrasPage {
     this.nameControl.setValue(item.name);
     this.priceControl.setValue(item.price);
     this.isActiveControl.setValue(item.isActive);
+    this.isAvailableControl.setValue(item.isAvailable);
+  }
+
+  async onToggleAvailability(item: ExtraDto) {
+    const previous = item.isAvailable;
+    this.extras.update((items) =>
+      items.map((current) =>
+        current.id === item.id ? { ...current, isAvailable: !current.isAvailable } : current,
+      ),
+    );
+
+    try {
+      await this.api.updateExtra(item.id, {
+        name: item.name,
+        price: item.price,
+        isActive: item.isActive,
+        isAvailable: !previous,
+      });
+    } catch {
+      this.extras.update((items) =>
+        items.map((current) =>
+          current.id === item.id ? { ...current, isAvailable: previous } : current,
+        ),
+      );
+      this.errorMessage.set('No fue posible actualizar disponibilidad del extra.');
+    }
   }
 
   async onDeactivate(item: ExtraDto) {
@@ -743,6 +791,7 @@ export class ExtrasPage {
     this.nameControl.setValue('');
     this.priceControl.setValue(0);
     this.isActiveControl.setValue(true);
+    this.isAvailableControl.setValue(true);
     this.nameControl.markAsUntouched();
     this.priceControl.markAsUntouched();
   }

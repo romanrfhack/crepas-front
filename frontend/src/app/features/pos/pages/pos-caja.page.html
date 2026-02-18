@@ -57,6 +57,7 @@
           (click)="loadSnapshot(true)"
           title="Refrescar catálogo"
           aria-label="Refrescar catálogo"
+          data-testid="refresh-catalog"
         >
           🔄
         </button>
@@ -81,6 +82,16 @@
 
   @if (errorMessage()) {
     <p class="error" role="alert">{{ errorMessage() }}</p>
+    @if (canRefreshCatalogAfterUnavailable()) {
+      <button
+        type="button"
+        class="btn-icon-small"
+        (click)="refreshCatalogAfterUnavailable()"
+        data-testid="refresh-catalog-unavailable"
+      >
+        Actualizar catálogo
+      </button>
+    }
   }
 
   @if (saleSuccess(); as sale) {
