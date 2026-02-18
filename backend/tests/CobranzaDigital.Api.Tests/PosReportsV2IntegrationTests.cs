@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
 using CobranzaDigital.Domain.Entities;
+using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
@@ -96,8 +97,8 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         Assert.Contains(controlPayload.Daily, x => x.Date == new DateOnly(2026, 4, 1) && x.CashierUserId == seed.CashierA && x.Shifts == 1 && x.ExpectedCash == 100m && x.CountedCash == 95m && x.Difference == -5m && x.ReasonCount == 1);
         Assert.Contains(controlPayload.Daily, x => x.Date == new DateOnly(2026, 4, 2) && x.CashierUserId == seed.CashierB && x.Shifts == 1 && x.ExpectedCash == 150m && x.CountedCash == 160m && x.Difference == 10m && x.ReasonCount == 0);
         Assert.Equal(2, controlPayload.Shifts.Count);
-        Assert.Contains(controlPayload.Shifts, x => x.ShiftId == seed.Shift1 && x.CashierUserId == seed.CashierA && x.Difference == -5m);
-        Assert.Contains(controlPayload.Shifts, x => x.ShiftId == seed.Shift2 && x.CashierUserId == seed.CashierB && x.Difference == 10m);
+        Assert.Contains(controlPayload.Shifts, x => x.ShiftId == seed.Shift1 && x.CashierUserId == seed.CashierA && x.CashierUserName == seed.CashierAUserName && x.Difference == -5m);
+        Assert.Contains(controlPayload.Shifts, x => x.ShiftId == seed.Shift2 && x.CashierUserId == seed.CashierB && x.CashierUserName == seed.CashierBUserName && x.Difference == 10m);
     }
 
     [Fact]
@@ -135,6 +136,27 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         var extraA = Guid.NewGuid();
         var optionSetA = Guid.NewGuid();
         var optionItemA = Guid.NewGuid();
+
+        var cashierAUserName = $"{Prefix}-cashier-a";
+        var cashierBUserName = $"{Prefix}-cashier-b";
+
+        db.Users.AddRange(
+            new ApplicationUser
+            {
+                Id = cashierA,
+                UserName = cashierAUserName,
+                NormalizedUserName = cashierAUserName.ToUpperInvariant(),
+                Email = $"{cashierAUserName}@test.local",
+                NormalizedEmail = $"{cashierAUserName}@test.local".ToUpperInvariant()
+            },
+            new ApplicationUser
+            {
+                Id = cashierB,
+                UserName = cashierBUserName,
+                NormalizedUserName = cashierBUserName.ToUpperInvariant(),
+                Email = $"{cashierBUserName}@test.local",
+                NormalizedEmail = $"{cashierBUserName}@test.local".ToUpperInvariant()
+            });
 
         db.Categories.AddRange(
             new Category { Id = categoryA, Name = $"{Prefix}-cat-a", SortOrder = 1, IsActive = true },
@@ -223,7 +245,7 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
             new Payment { Id = Guid.NewGuid(), SaleId = voidSale.Id, Method = PaymentMethod.Cash, Amount = 50m, CreatedAtUtc = voidSale.OccurredAtUtc });
 
         await db.SaveChangesAsync();
-        return new SeedResult(storeId, cashierA, cashierB, shift1, shift2, categoryA, categoryB, productA, productB, extraA, optionItemA);
+        return new SeedResult(storeId, cashierA, cashierB, cashierAUserName, cashierBUserName, shift1, shift2, categoryA, categoryB, productA, productB, extraA, optionItemA);
     }
 
     private static Sale CreateSale(Guid storeId, Guid shiftId, Guid cashierId, DateTimeOffset occurredAtUtc, decimal total, SaleStatus status)
@@ -315,6 +337,8 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         Guid StoreId,
         Guid CashierA,
         Guid CashierB,
+        string CashierAUserName,
+        string CashierBUserName,
         Guid Shift1,
         Guid Shift2,
         Guid CategoryA,
@@ -338,5 +362,5 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
     private sealed record KpisSummaryResponse(int Tickets, int TotalItems, decimal GrossSales, decimal AvgTicket, decimal AvgItemsPerTicket, int VoidCount, decimal VoidRate);
     private sealed record CashControlResponse(List<CashDailyRowResponse> Daily, List<CashShiftRowResponse> Shifts);
     private sealed record CashDailyRowResponse(DateOnly Date, Guid CashierUserId, int Shifts, decimal ExpectedCash, decimal CountedCash, decimal Difference, int ReasonCount);
-    private sealed record CashShiftRowResponse(Guid ShiftId, DateTimeOffset OpenedAt, DateTimeOffset? ClosedAt, Guid CashierUserId, decimal ExpectedCash, decimal CountedCash, decimal Difference, string? CloseReason);
+    private sealed record CashShiftRowResponse(Guid ShiftId, DateTimeOffset OpenedAt, DateTimeOffset? ClosedAt, Guid CashierUserId, string? CashierUserName, decimal ExpectedCash, decimal CountedCash, decimal Difference, string? CloseReason);
 }

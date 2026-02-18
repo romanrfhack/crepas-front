@@ -233,6 +233,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
               openedAt: '2026-03-07T08:00:00Z',
               closedAt: '2026-03-07T16:00:00Z',
               cashierUserId: 'cashier-e2e',
+              cashierUserName: 'Cashier E2E',
               expectedCash: 100,
               countedCash: 95,
               difference: -5,
@@ -262,6 +263,9 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
   await expect(page.getByTestId('mix-category-row-0')).toBeVisible();
   await expect(page.getByTestId('mix-product-row-0')).toBeVisible();
   await expect(page.getByTestId('cash-diff-row-0')).toBeVisible();
+
+  await expect(page.getByTestId('cash-diff-table').locator('thead')).not.toContainText('Turno');
+  await expect(page.getByTestId('cash-diff-row-0')).toContainText('Cashier E2E');
 
   await page.getByTestId('reports-cashier').selectOption('cashier-e2e');
   await page.getByTestId('reports-shift').selectOption('shift-e2e');

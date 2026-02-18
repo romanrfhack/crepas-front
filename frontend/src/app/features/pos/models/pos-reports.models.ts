@@ -159,6 +159,7 @@ export interface CashDifferencesShiftItemDto {
   openedAt: string;
   closedAt: string | null;
   cashierUserId: string;
+  cashierUserName?: string;
   expectedCash: number;
   countedCash: number;
   difference: number;
