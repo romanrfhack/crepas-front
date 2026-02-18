@@ -83,14 +83,22 @@
   @if (errorMessage()) {
     <p class="error" role="alert">{{ errorMessage() }}</p>
     @if (canRefreshCatalogAfterUnavailable()) {
-      <button
-        type="button"
-        class="btn-icon-small"
-        (click)="refreshCatalogAfterUnavailable()"
-        data-testid="refresh-catalog-unavailable"
-      >
-        Actualizar catálogo
-      </button>
+      <section class="error" role="alert" data-testid="unavailable-alert">
+        <p data-testid="unavailable-message">No disponible</p>
+        @if (unavailableItemName(); as itemName) {
+          <p>
+            Producto: <strong data-testid="unavailable-item-name">{{ itemName }}</strong>
+          </p>
+        }
+        <button
+          type="button"
+          class="btn-icon-small"
+          (click)="refreshCatalogAfterUnavailable()"
+          data-testid="refresh-catalog-unavailable"
+        >
+          Actualizar catálogo
+        </button>
+      </section>
     }
   }
 
