@@ -1,4 +1,3 @@
-using System.Data.Common;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
@@ -20,11 +19,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Data.SqlClient;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -45,7 +42,6 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
     private readonly bool _useSqlServerForTests;
     private readonly string _sqliteConnectionString = $"Data Source=file:{Guid.NewGuid():N}?mode=memory&cache=shared";
     private readonly SemaphoreSlim _initializationLock = new(1, 1);
-    private SqliteConnection? _sqliteConnection;
     private bool _isInitialized;
 
     public CobranzaDigitalApiFactory()
@@ -168,6 +164,7 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
                     throw new InvalidOperationException(
                         "SQL Server integration tests require ConnectionStrings__DefaultConnection or ConnectionStrings__SqlServer.");
                 }
+                settings["ConnectionStrings:SqlServer"] = _sqlServerConnectionString;
                 settings["DatabaseOptions:Provider"] = "SqlServer";
                 settings["DatabaseOptions:ConnectionStringName"] = "SqlServer";
             }
@@ -184,38 +181,7 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
 
         builder.ConfigureServices(services =>
         {
-            services.RemoveAll<DbConnection>();
-            services.RemoveAll<SqliteConnection>();
-            services.RemoveAll<DbContextOptions<CobranzaDigitalDbContext>>();
-            services.RemoveAll<CobranzaDigitalDbContext>();
-
             Console.WriteLine($"[CobranzaDigitalApiFactory] Using SQL Server: {_useSqlServerForTests}");
-
-            if (_useSqlServerForTests)
-            {
-                Console.WriteLine($"[CobranzaDigitalApiFactory] SQL Server connection string: {_sqlServerConnectionString}");
-
-                services.AddDbContext<CobranzaDigitalDbContext>(options =>
-                {
-                    options.UseSqlServer(_sqlServerConnectionString);
-                });
-            }
-
-            if (!_useSqlServerForTests)
-            {
-                Console.WriteLine($"[CobranzaDigitalApiFactory] Using SQLite with connection string: {_sqliteConnectionString}");
-
-                _sqliteConnection = new SqliteConnection(_sqliteConnectionString);
-                _sqliteConnection.Open();
-
-                services.AddSingleton(_sqliteConnection);
-                services.AddSingleton<DbConnection>(_sqliteConnection);
-
-                services.AddDbContext<CobranzaDigitalDbContext>(options =>
-                {
-                    options.UseSqlite(_sqliteConnection);
-                });
-            }
 
             services.PostConfigureAll<JwtBearerOptions>(options =>
             {
@@ -451,7 +417,6 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
 
     public override async ValueTask DisposeAsync()
     {
-        _sqliteConnection?.Dispose();
         _loggerFactory?.Dispose();
         _initializationLock.Dispose();
 
