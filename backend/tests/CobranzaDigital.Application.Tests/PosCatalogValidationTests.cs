@@ -6,7 +6,6 @@ using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
 using CobranzaDigital.Infrastructure.Services;
 
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -37,11 +36,7 @@ public sealed class PosCatalogValidationTests
     [Fact]
     public async Task Product_Requires_Active_Schema()
     {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
-        var options = new DbContextOptionsBuilder<CobranzaDigitalDbContext>().UseSqlite(connection).Options;
-        await using var db = new CobranzaDigitalDbContext(options);
-        await db.Database.EnsureCreatedAsync();
+        await using var db = CreateInMemoryContext();
 
         var service = BuildService(db);
         var category = new Category { Id = Guid.NewGuid(), Name = "Cat", SortOrder = 1, IsActive = true };
@@ -57,11 +52,7 @@ public sealed class PosCatalogValidationTests
     [Fact]
     public async Task Override_Rejects_OptionItem_From_Another_OptionSet()
     {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
-        var options = new DbContextOptionsBuilder<CobranzaDigitalDbContext>().UseSqlite(connection).Options;
-        await using var db = new CobranzaDigitalDbContext(options);
-        await db.Database.EnsureCreatedAsync();
+        await using var db = CreateInMemoryContext();
 
         var service = BuildService(db);
         var category = new Category { Id = Guid.NewGuid(), Name = "Cat", SortOrder = 1, IsActive = true };
@@ -75,6 +66,15 @@ public sealed class PosCatalogValidationTests
         await db.SaveChangesAsync();
 
         await Assert.ThrowsAsync<ValidationException>(() => service.UpsertOverrideAsync(product.Id, "g", new OverrideUpsertRequest([itemB.Id]), default));
+    }
+
+    private static CobranzaDigitalDbContext CreateInMemoryContext()
+    {
+        var options = new DbContextOptionsBuilder<CobranzaDigitalDbContext>()
+            .UseInMemoryDatabase($"PosCatalogValidation_{Guid.NewGuid():N}")
+            .Options;
+
+        return new CobranzaDigitalDbContext(options);
     }
 
     private static PosCatalogService BuildService(CobranzaDigitalDbContext db)

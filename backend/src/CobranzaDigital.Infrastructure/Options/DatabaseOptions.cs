@@ -6,10 +6,8 @@ public sealed class DatabaseOptions
 {
     public const string SectionName = "DatabaseOptions";
 
-    public string Provider { get; init; } = "SqlServer";
-
     [Required]
-    public string ConnectionStringName { get; init; } = "SqlServer";
+    public string ConnectionStringName { get; init; } = "DefaultConnection";
 
     public bool EnableSensitiveDataLogging { get; init; }
 }

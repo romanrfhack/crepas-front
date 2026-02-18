@@ -14,7 +14,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace CobranzaDigital.Infrastructure;
@@ -23,8 +22,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration,
-        IHostEnvironment? environment = null)
+        IConfiguration configuration)
     {
         services.AddOptions<DatabaseOptions>()
             .BindConfiguration(DatabaseOptions.SectionName)
@@ -37,7 +35,6 @@ public static class DependencyInjection
         services.AddDbContext<CobranzaDigitalDbContext>((serviceProvider, options) =>
         {
             var databaseOptions = serviceProvider.GetRequiredService<IOptions<DatabaseOptions>>().Value;
-            var provider = ResolveProvider(databaseOptions, environment);
             var connectionString = configuration.GetConnectionString(databaseOptions.ConnectionStringName);
 
             if (string.IsNullOrWhiteSpace(connectionString))
@@ -46,21 +43,11 @@ public static class DependencyInjection
                     $"Connection string '{databaseOptions.ConnectionStringName}' was not found.");
             }
 
-            if (provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
+            options.UseSqlServer(connectionString, sqlOptions =>
             {
-                options.UseSqlite(connectionString, sqliteOptions =>
-                {
-                    sqliteOptions.MigrationsAssembly(typeof(CobranzaDigitalDbContext).Assembly.FullName);
-                });
-            }
-            else
-            {
-                options.UseSqlServer(connectionString, sqlOptions =>
-                {
-                    sqlOptions.EnableRetryOnFailure();
-                    sqlOptions.MigrationsAssembly(typeof(CobranzaDigitalDbContext).Assembly.FullName);
-                });
-            }
+                sqlOptions.EnableRetryOnFailure();
+                sqlOptions.MigrationsAssembly(typeof(CobranzaDigitalDbContext).Assembly.FullName);
+            });
 
             if (databaseOptions.EnableSensitiveDataLogging)
             {
@@ -104,27 +91,6 @@ public static class DependencyInjection
         services.AddScoped<IPosShiftService, PosShiftService>();
 
         return services;
-    }
-
-    private static string ResolveProvider(DatabaseOptions databaseOptions, IHostEnvironment? environment)
-    {
-        // Si el usuario configuró Provider explícitamente, respétalo SIEMPRE (aunque sea Testing)
-        if (!string.IsNullOrWhiteSpace(databaseOptions.Provider))
-        {
-            return databaseOptions.Provider;
-        }
-
-        // En Testing, por defecto SQLite… salvo que el test pida SQL Server
-        if (environment is not null && environment.IsEnvironment("Testing"))
-        {
-            var useSqlServer =
-                string.Equals(Environment.GetEnvironmentVariable("TESTS_USE_SQLSERVER"), "1", StringComparison.Ordinal) ||
-                string.Equals(Environment.GetEnvironmentVariable("TESTS_USE_SQLSERVER"), "true", StringComparison.OrdinalIgnoreCase);
-
-            return useSqlServer ? "SqlServer" : "Sqlite";
-        }
-
-        return "SqlServer";
     }
 
 }

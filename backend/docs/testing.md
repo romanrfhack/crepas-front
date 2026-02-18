@@ -20,9 +20,10 @@ docker start cobranzadigital-sql-test
 
 ## Variables de entorno para Integration Tests API
 ```bash
-export TESTS_USE_SQLSERVER=true
-export ConnectionStrings__SqlServer='Server=localhost,1433;Database=CobranzaDigitalTests;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=true;MultipleActiveResultSets=true'
+export ConnectionStrings__DefaultConnection='Server=localhost,1433;Database=CrepasDB_Test_Base;User Id=sa;Password=YourStrong!Passw0rd;Encrypt=False;TrustServerCertificate=True;MultipleActiveResultSets=True'
 ```
+
+> La fábrica de integration tests crea un catálogo único por corrida (`CrepasDB_Test_{Guid}`), aplica migraciones y lo elimina al finalizar.
 
 ## Ejecutar tests
 Desde la raíz del repo:
@@ -33,8 +34,8 @@ dotnet test backend/CobranzaDigital.sln -c Release --no-build
 ```
 
 ## CI (GitHub Actions)
-El workflow `.github/workflows/deploy-api.yml` ejecuta un job `test` con SQL Server service container antes del deploy.
+El workflow `.github/workflows/ci.yml` ejecuta los tests backend con SQL Server service container.
 
-Variables requeridas en GitHub Secrets:
-- `CD_TEST_SQL_PASSWORD`: password de `sa` para el service container de SQL Server.
-- Las credenciales de deploy ya existentes (`CD_SSH_HOST`, `CD_SSH_PORT`, `CD_SSH_KEY_B64`).
+Variables requeridas en GitHub Secrets / env del job:
+- `ConnectionStrings__DefaultConnection`.
+- Credenciales de deploy ya existentes para jobs de despliegue.
