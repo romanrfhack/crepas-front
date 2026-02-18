@@ -69,7 +69,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.NotNull(snapshot);
         Assert.NotEmpty(snapshot!.Products);
         Assert.Contains(snapshot.Overrides, x => x.ProductId == product.Id && x.AllowedOptionItemIds.Contains(itemA.Id));
-        Assert.True(snapshot.Products.Any(x => x.IsAvailable));
+        Assert.Contains(snapshot.Products, x => x.IsAvailable);
     }
 
     [Fact]

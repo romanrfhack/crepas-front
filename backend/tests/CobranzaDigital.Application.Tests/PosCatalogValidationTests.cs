@@ -45,7 +45,7 @@ public sealed class PosCatalogValidationTests
         db.CustomizationSchemas.Add(schema);
         await db.SaveChangesAsync();
 
-        await Assert.ThrowsAsync<ValidationException>(() => service.CreateProductAsync(new UpsertProductRequest(null, "P", category.Id, null, 10, true, schema.Id), default));
+        await Assert.ThrowsAsync<ValidationException>(() => service.CreateProductAsync(new UpsertProductRequest(null, "P", category.Id, null, 10, true, true, schema.Id), default));
 
     }
 
@@ -87,7 +87,8 @@ public sealed class PosCatalogValidationTests
             new UpsertProductRequestValidator(),
             new UpsertExtraRequestValidator(),
             new ReplaceIncludedItemsRequestValidator(),
-            new OverrideUpsertRequestValidator());
+            new OverrideUpsertRequestValidator(),
+            null!);
     }
 
     private sealed class TestAuditLogger : IAuditLogger
