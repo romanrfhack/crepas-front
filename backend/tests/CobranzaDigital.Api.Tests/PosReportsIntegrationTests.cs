@@ -149,8 +149,8 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
 
-        var storeId = await db.PosSettings.AsNoTracking().Select(x => x.DefaultStoreId).FirstAsync();
-        var tzId = await db.Stores.AsNoTracking().Where(x => x.Id == storeId).Select(x => x.TimeZoneId).FirstAsync();
+        var storeId = await db.PosSettings.AsNoTracking().Select(x => x.DefaultStoreId).SingleAsync();
+        var tzId = await db.Stores.AsNoTracking().Where(x => x.Id == storeId).Select(x => x.TimeZoneId).SingleAsync();
         var timeZone = TZConvert.GetTimeZoneInfo(tzId);
 
         var cashierA = Guid.NewGuid();
@@ -159,6 +159,24 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         var shift2 = Guid.NewGuid();
         var productA = Guid.NewGuid();
         var productB = Guid.NewGuid();
+
+        var category = new Category
+        {
+            Id = Guid.NewGuid(),
+            Name = $"{Prefix}-reporting-category-{storeId:N}",
+            SortOrder = 1,
+            IsActive = true
+        };
+
+        var products = new[]
+        {
+            CreateProduct(category.Id, productA, "Producto A", "P-A", 100m),
+            CreateProduct(category.Id, productB, "Producto B", "P-B", 60m)
+        };
+
+        db.Categories.Add(category);
+        db.Products.AddRange(products);
+        await db.SaveChangesAsync();
 
         db.PosShifts.AddRange(
             new PosShift
@@ -186,35 +204,59 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
                 CloseReason = "ManualClose"
             });
 
-        var sale1 = NewSale(Guid.NewGuid(), storeId, shift1, cashierA, ToUtc(timeZone, new DateTime(2026, 3, 1, 9, 15, 0)), 100m, SaleStatus.Completed);
-        var sale2 = NewSale(Guid.NewGuid(), storeId, shift1, cashierB, ToUtc(timeZone, new DateTime(2026, 3, 1, 10, 10, 0)), 60m, SaleStatus.Completed);
-        var sale3 = NewSale(Guid.NewGuid(), storeId, shift2, cashierA, ToUtc(timeZone, new DateTime(2026, 3, 2, 15, 35, 0)), 80m, SaleStatus.Completed);
-        var saleVoid = NewSale(Guid.NewGuid(), storeId, shift2, cashierB, ToUtc(timeZone, new DateTime(2026, 3, 2, 16, 5, 0)), 50m, SaleStatus.Void);
+        await db.SaveChangesAsync();
+
+        var sale1 = CreateSale(storeId, shift1, cashierA, ToUtc(timeZone, new DateTime(2026, 3, 1, 9, 15, 0)), 100m, SaleStatus.Completed);
+        var sale2 = CreateSale(storeId, shift1, cashierB, ToUtc(timeZone, new DateTime(2026, 3, 1, 10, 10, 0)), 60m, SaleStatus.Completed);
+        var sale3 = CreateSale(storeId, shift2, cashierA, ToUtc(timeZone, new DateTime(2026, 3, 2, 15, 35, 0)), 80m, SaleStatus.Completed);
+        var saleVoid = CreateSale(storeId, shift2, cashierB, ToUtc(timeZone, new DateTime(2026, 3, 2, 16, 5, 0)), 50m, SaleStatus.Void);
         saleVoid.VoidedAtUtc = ToUtc(timeZone, new DateTime(2026, 3, 2, 16, 20, 0));
         saleVoid.VoidReasonCode = "CashierError";
         saleVoid.VoidReasonText = "captura";
 
         db.Sales.AddRange(sale1, sale2, sale3, saleVoid);
+        await db.SaveChangesAsync();
 
         db.Payments.AddRange(
             new Payment { Id = Guid.NewGuid(), SaleId = sale1.Id, Method = PaymentMethod.Cash, Amount = 100m, CreatedAtUtc = sale1.OccurredAtUtc },
             new Payment { Id = Guid.NewGuid(), SaleId = sale2.Id, Method = PaymentMethod.Card, Amount = 60m, CreatedAtUtc = sale2.OccurredAtUtc, Reference = "AUTH-60" },
             new Payment { Id = Guid.NewGuid(), SaleId = sale3.Id, Method = PaymentMethod.Transfer, Amount = 80m, CreatedAtUtc = sale3.OccurredAtUtc, Reference = "TRX-80" },
             new Payment { Id = Guid.NewGuid(), SaleId = saleVoid.Id, Method = PaymentMethod.Cash, Amount = 50m, CreatedAtUtc = saleVoid.OccurredAtUtc });
+        await db.SaveChangesAsync();
 
-        db.SaleItems.AddRange(
-            new SaleItem { Id = Guid.NewGuid(), SaleId = sale1.Id, ProductId = productA, ProductNameSnapshot = "Producto A", UnitPriceSnapshot = 100m, Quantity = 1, LineTotal = 100m },
-            new SaleItem { Id = Guid.NewGuid(), SaleId = sale2.Id, ProductId = productB, ProductNameSnapshot = "Producto B", UnitPriceSnapshot = 60m, Quantity = 1, LineTotal = 60m },
-            new SaleItem { Id = Guid.NewGuid(), SaleId = sale3.Id, ProductId = productA, ProductNameSnapshot = "Producto A", UnitPriceSnapshot = 80m, Quantity = 1, LineTotal = 80m },
-            new SaleItem { Id = Guid.NewGuid(), SaleId = saleVoid.Id, ProductId = productB, ProductNameSnapshot = "Producto B", UnitPriceSnapshot = 50m, Quantity = 1, LineTotal = 50m });
+        var saleItems = new[]
+        {
+            CreateSaleItem(sale1.Id, products[0], 1, 100m),
+            CreateSaleItem(sale2.Id, products[1], 1, 60m),
+            CreateSaleItem(sale3.Id, products[0], 1, 80m),
+            CreateSaleItem(saleVoid.Id, products[1], 1, 50m)
+        };
+
+        ValidateSaleItemProductReferences(saleItems, products);
+
+        db.SaleItems.AddRange(saleItems);
 
         await db.SaveChangesAsync();
 
         return new SeedResult(storeId, cashierA, cashierB, shift1, shift2, productA);
     }
 
-    private static Sale NewSale(Guid id, Guid storeId, Guid shiftId, Guid cashierId, DateTimeOffset occurredAtUtc, decimal total, SaleStatus status)
+    private static Product CreateProduct(Guid categoryId, Guid id, string name, string externalCode, decimal basePrice)
     {
+        return new Product
+        {
+            Id = id,
+            CategoryId = categoryId,
+            Name = name,
+            ExternalCode = $"{Prefix}-{externalCode}",
+            BasePrice = basePrice,
+            IsActive = true
+        };
+    }
+
+    private static Sale CreateSale(Guid storeId, Guid shiftId, Guid cashierId, DateTimeOffset occurredAtUtc, decimal total, SaleStatus status)
+    {
+        var id = Guid.NewGuid();
         return new Sale
         {
             Id = id,
@@ -227,6 +269,38 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
             Total = total,
             Status = status
         };
+    }
+
+    private static SaleItem CreateSaleItem(Guid saleId, Product product, int quantity, decimal unitPrice)
+    {
+        return new SaleItem
+        {
+            Id = Guid.NewGuid(),
+            SaleId = saleId,
+            ProductId = product.Id,
+            ProductExternalCode = product.ExternalCode,
+            ProductNameSnapshot = product.Name,
+            UnitPriceSnapshot = unitPrice,
+            Quantity = quantity,
+            LineTotal = quantity * unitPrice
+        };
+    }
+
+    private static void ValidateSaleItemProductReferences(IEnumerable<SaleItem> saleItems, IEnumerable<Product> products)
+    {
+        var productIds = products.Select(x => x.Id).ToHashSet();
+        var missingProductIds = saleItems
+            .Select(x => x.ProductId)
+            .Distinct()
+            .Where(productId => !productIds.Contains(productId))
+            .ToArray();
+
+        if (missingProductIds.Length == 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException($"SeedReportDatasetAsync has SaleItems with missing Products. Missing ProductIds: {string.Join(", ", missingProductIds)}");
     }
 
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
