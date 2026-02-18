@@ -113,6 +113,7 @@ describe('PosReportesPage', () => {
             openedAt: '2026-03-07T09:00:00Z',
             closedAt: '2026-03-07T16:00:00Z',
             cashierUserId: 'cashier-1',
+            cashierUserName: 'Cajero Demo',
             expectedCash: 100,
             countedCash: 80,
             difference: -20,
@@ -197,4 +198,22 @@ describe('PosReportesPage', () => {
     expect(error).not.toBeNull();
     expect(apiMock.getKpisSummary).toHaveBeenCalled();
   });
+
+  it('hides shift column and prefers cashier user name in cash differences table', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const cashDiffHeaderCells = Array.from(
+      compiled.querySelectorAll('[data-testid="cash-diff-table"] thead th'),
+    ).map((cell) => cell.textContent?.trim());
+
+    expect(cashDiffHeaderCells).not.toContain('Turno');
+    expect(cashDiffHeaderCells[0]).toBe('Cajero');
+
+    const firstRowCells = compiled.querySelectorAll('[data-testid="cash-diff-row-0"] td');
+    expect(firstRowCells.item(0).textContent).toContain('Cajero Demo');
+  });
+
 });

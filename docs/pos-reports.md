@@ -252,6 +252,7 @@ Notas:
       "openedAt": "2026-04-01T14:00:00Z",
       "closedAt": "2026-04-01T22:00:00Z",
       "cashierUserId": "<guid>",
+      "cashierUserName": "usuario.caja",
       "expectedCash": 1000.0,
       "countedCash": 980.0,
       "difference": -20.0,
@@ -260,6 +261,9 @@ Notas:
   ]
 }
 ```
+
+- `cashierUserName` es opcional y se incluye para renderizar el nombre de usuario del cajero.
+- Compatibilidad: `cashierUserId` se mantiene en el contrato; UI debe usar fallback a `cashierUserId` cuando `cashierUserName` venga vacío o ausente.
 
 ## Frontend usage (Dashboard Reportes Operativos v1)
 

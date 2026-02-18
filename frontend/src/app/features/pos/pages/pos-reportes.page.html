@@ -276,7 +276,6 @@
       <table>
         <thead>
           <tr>
-            <th>Turno</th>
             <th>Cajero</th>
             <th>Apertura</th>
             <th class="numeric">Esperado</th>
@@ -291,8 +290,7 @@
               [attr.data-testid]="'cash-diff-row-' + i"
               [class.is-alert]="shouldHighlightCashDifference(item)"
             >
-              <td>{{ item.shiftId }}</td>
-              <td>{{ item.cashierUserId }}</td>
+              <td>{{ item.cashierUserName || item.cashierUserId }}</td>
               <td>{{ timezoneService.formatDateTime(item.openedAt) }}</td>
               <td class="numeric">
                 {{ item.expectedCash | currency: 'MXN' : 'symbol' : '1.2-2' }}
@@ -303,7 +301,7 @@
             </tr>
           } @empty {
             <tr>
-              <td colspan="7">Sin diferencias de caja para mostrar.</td>
+              <td colspan="6">Sin diferencias de caja para mostrar.</td>
             </tr>
           }
         </tbody>

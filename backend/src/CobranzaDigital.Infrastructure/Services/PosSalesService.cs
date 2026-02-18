@@ -715,12 +715,26 @@ public sealed class PosSalesService : IPosSalesService
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
+        var cashierIds = shiftsData
+            .Select(x => x.OpenedByUserId)
+            .Distinct()
+            .ToArray();
+
+        var cashierUserNames = cashierIds.Length == 0
+            ? new Dictionary<Guid, string?>()
+            : await _db.Users.AsNoTracking()
+                .Where(x => cashierIds.Contains(x.Id))
+                .Select(x => new { x.Id, x.UserName })
+                .ToDictionaryAsync(x => x.Id, x => x.UserName, ct)
+                .ConfigureAwait(false);
+
         var shifts = shiftsData
             .Select(x => new PosCashDifferencesShiftRowDto(
                 x.Id,
                 x.OpenedAtUtc,
                 x.ClosedAtUtc,
                 x.OpenedByUserId,
+                cashierUserNames.GetValueOrDefault(x.OpenedByUserId),
                 x.ExpectedCash,
                 x.ClosingCash,
                 x.CashDifference ?? (x.ClosingCash - x.ExpectedCash),

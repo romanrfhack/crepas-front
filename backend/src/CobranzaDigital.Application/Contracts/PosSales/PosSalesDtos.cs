@@ -137,6 +137,7 @@ public sealed record PosCashDifferencesShiftRowDto(
     DateTimeOffset OpenedAt,
     DateTimeOffset? ClosedAt,
     Guid CashierUserId,
+    string? CashierUserName,
     decimal ExpectedCash,
     decimal CountedCash,
     decimal Difference,
