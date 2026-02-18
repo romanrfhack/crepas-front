@@ -1,0 +1,211 @@
+<div class="reportes-page">
+  <header class="page-header">
+    <h2>Reportes Operativos v1</h2>
+    <p>Resumen operativo POS por rango, cajero y turno.</p>
+  </header>
+
+  <section class="card filters-card" aria-label="Filtros de reportes">
+    <div class="filters-grid">
+      <label>
+        Desde
+        <input
+          data-testid="reports-from"
+          type="date"
+          [ngModel]="from()"
+          (ngModelChange)="from.set($event)"
+        />
+      </label>
+
+      <label>
+        Hasta
+        <input
+          data-testid="reports-to"
+          type="date"
+          [ngModel]="to()"
+          (ngModelChange)="to.set($event)"
+        />
+      </label>
+
+      <label>
+        Cajero
+        <select
+          data-testid="reports-cashier"
+          [ngModel]="selectedCashierUserId()"
+          (ngModelChange)="selectedCashierUserId.set($event)"
+        >
+          <option value="">Todos</option>
+          @for (cashierUserId of cashiers(); track cashierUserId) {
+            <option [value]="cashierUserId">{{ cashierUserId }}</option>
+          }
+        </select>
+      </label>
+
+      <label>
+        Turno
+        <select
+          data-testid="reports-shift"
+          [ngModel]="selectedShiftId()"
+          (ngModelChange)="selectedShiftId.set($event)"
+        >
+          <option value="">Todos</option>
+          @for (shift of shifts(); track shift.shiftId) {
+            <option [value]="shift.shiftId">{{ shift.shiftId }}</option>
+          }
+        </select>
+      </label>
+
+      <button
+        data-testid="reports-refresh"
+        type="button"
+        (click)="loadReports()"
+        [disabled]="loading()"
+      >
+        {{ loading() ? 'Actualizando...' : 'Actualizar' }}
+      </button>
+    </div>
+  </section>
+
+  @if (errorMessage()) {
+    <p class="error" role="alert">{{ errorMessage() }}</p>
+  }
+
+  <section class="card summary" data-testid="reports-summary">
+    <h3>Resumen</h3>
+    <div class="summary-grid">
+      <article>
+        <span>Total ventas</span>
+        <strong>{{ summary().totalSales | currency: 'MXN' : 'symbol' : '1.2-2' }}</strong>
+      </article>
+      <article>
+        <span>Tickets</span>
+        <strong>{{ summary().tickets }}</strong>
+      </article>
+      <article>
+        <span>Ticket promedio</span>
+        <strong>{{ summary().avgTicket | currency: 'MXN' : 'symbol' : '1.2-2' }}</strong>
+      </article>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Ventas por método de pago</h3>
+    <div class="table-wrap" data-testid="reports-payments-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Método</th>
+            <th class="numeric">Transacciones</th>
+            <th class="numeric">Monto</th>
+            <th class="numeric">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of paymentRows(); track item.method) {
+            <tr>
+              <td>{{ item.method }}</td>
+              <td class="numeric">{{ item.count }}</td>
+              <td class="numeric">{{ item.amount | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
+              <td class="numeric">{{ item.percentage | number: '1.0-1' }}%</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4">Sin datos para el rango seleccionado.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Ventas por hora</h3>
+    <div class="table-wrap" data-testid="reports-hourly-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th class="numeric">Tickets</th>
+            <th class="numeric">Total</th>
+            <th>Barras</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of hourlySales(); track item.hour) {
+            <tr>
+              <td>{{ item.hour }}</td>
+              <td class="numeric">{{ item.tickets }}</td>
+              <td class="numeric">{{ item.totalSales | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
+              <td>
+                <div class="mini-bar-track">
+                  <div class="mini-bar" [style.width]="getHourlyBarWidth(item.totalSales)"></div>
+                </div>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4">Sin datos por hora.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Top productos</h3>
+    <div class="table-wrap" data-testid="reports-top-products-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th class="numeric">Cantidad</th>
+            <th class="numeric">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of topProducts(); track item.productId) {
+            <tr>
+              <td>{{ item.productNameSnapshot }}</td>
+              <td class="numeric">{{ item.qty }}</td>
+              <td class="numeric">{{ item.amount | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="3">Sin productos para mostrar.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Cancelaciones por motivo</h3>
+    <div class="table-wrap" data-testid="reports-void-reasons-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Motivo</th>
+            <th class="numeric">Conteo</th>
+            <th class="numeric">Total cancelado</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of voidReasons(); track item.reasonCode + item.reasonText) {
+            <tr>
+              <td>{{ item.reasonCode }}</td>
+              <td>{{ item.reasonText }}</td>
+              <td class="numeric">{{ item.count }}</td>
+              <td class="numeric">{{ item.amount | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4">Sin cancelaciones registradas.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>

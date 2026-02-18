@@ -29,7 +29,7 @@ export const APP_NAV_CONFIG: NavSection[] = [
 
   {
     label: 'POS',
-    roles: ['Admin', 'Cashier'],
+    roles: ['Admin', 'Cashier', 'Manager'],
     defaultExpanded: true,
     children: [
       {
@@ -40,7 +40,7 @@ export const APP_NAV_CONFIG: NavSection[] = [
       {
         label: 'Reportes',
         path: '/app/pos/reportes',
-        roles: ['Admin', 'Cashier'],
+        roles: ['Admin', 'Manager'],
       },
     ],
   },

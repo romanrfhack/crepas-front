@@ -13,6 +13,7 @@ Base path: `GET /api/v1/pos/reports/*`
 ## Endpoints
 
 ### 1) Ventas diarias
+
 `GET /api/v1/pos/reports/sales/daily?dateFrom=2026-03-01&dateTo=2026-03-02&storeId=<guid>`
 
 ```json
@@ -33,6 +34,7 @@ Base path: `GET /api/v1/pos/reports/*`
 ```
 
 ### 2) Pagos por método
+
 `GET /api/v1/pos/reports/payments/methods?dateFrom=2026-03-01&dateTo=2026-03-02&storeId=<guid>`
 
 ```json
@@ -48,6 +50,7 @@ Base path: `GET /api/v1/pos/reports/*`
 ```
 
 ### 3) Ventas por hora
+
 `GET /api/v1/pos/reports/sales/hourly?dateFrom=2026-03-01&dateTo=2026-03-02&storeId=<guid>`
 
 ```json
@@ -58,6 +61,7 @@ Base path: `GET /api/v1/pos/reports/*`
 ```
 
 ### 4) Ventas por cajero
+
 `GET /api/v1/pos/reports/sales/cashiers?dateFrom=2026-03-01&dateTo=2026-03-02&storeId=<guid>`
 
 ```json
@@ -75,6 +79,7 @@ Base path: `GET /api/v1/pos/reports/*`
 ```
 
 ### 5) Resumen de turnos
+
 `GET /api/v1/pos/reports/shifts/summary?dateFrom=2026-03-01&dateTo=2026-03-02&storeId=<guid>&cashierUserId=<guid>`
 
 ```json
@@ -96,16 +101,31 @@ Base path: `GET /api/v1/pos/reports/*`
 ```
 
 ### 6) Razones de void
+
 `GET /api/v1/pos/reports/voids/reasons?dateFrom=2026-03-01&dateTo=2026-03-02&storeId=<guid>`
 
 ```json
 [
-  { "reasonCode": "CashierError", "reasonText": "captura", "count": 1, "amount": 50 }
+  {
+    "reasonCode": "CashierError",
+    "reasonText": "captura",
+    "count": 1,
+    "amount": 50
+  }
 ]
 ```
 
 ### 7) Top products (extensión compatible)
+
 `GET /api/v1/pos/reports/top-products?dateFrom=2026-03-01&dateTo=2026-03-02&top=10&storeId=<guid>&cashierUserId=<guid>&shiftId=<guid>`
 
 - Filtros nuevos opcionales: `storeId`, `cashierUserId`, `shiftId`.
 - Si no se envían, se preserva el comportamiento previo (rango + top).
+
+## Frontend usage (Dashboard Reportes Operativos v1)
+
+- Pantalla: `/app/pos/reportes`.
+- Filtros UI: `dateFrom`, `dateTo`, `cashierUserId`, `shiftId`.
+- Si no se selecciona tienda en UI, se usa `StoreContextService.getActiveStoreId()` y se envía como `storeId`.
+- Rango por defecto recomendado en UI: últimos 7 días en zona horaria de negocio (`America/Mexico_City`) usando `PosTimezoneService`.
+- La UI usa selectores `data-testid` estables para contrato E2E (filtros y tablas de salida).

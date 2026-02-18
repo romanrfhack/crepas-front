@@ -5,13 +5,13 @@ import { AuthService } from '../auth/services/auth.service';
 import { appShellRoutes } from './app-shell.routes';
 
 describe('appShellRoutes', () => {
-  it('should include pos lazy route protected for Admin/Cashier', () => {
+  it('should include pos lazy route protected for Admin/Cashier/Manager', () => {
     const shell = appShellRoutes[0];
     const posRoute = shell?.children?.find((route) => route.path === 'pos');
 
     expect(posRoute).toBeDefined();
     expect(posRoute?.loadChildren).toBeDefined();
-    expect(posRoute?.data?.['roles']).toEqual(['Admin', 'Cashier']);
+    expect(posRoute?.data?.['roles']).toEqual(['Admin', 'Cashier', 'Manager']);
   });
 
   it('should block pos route for users without Admin/Cashier roles', () => {
