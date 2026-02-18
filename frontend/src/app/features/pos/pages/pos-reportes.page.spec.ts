@@ -13,6 +13,12 @@ describe('PosReportesPage', () => {
     getHourlySales: ReturnType<typeof vi.fn>;
     getTopProducts: ReturnType<typeof vi.fn>;
     getVoidReasons: ReturnType<typeof vi.fn>;
+    getKpisSummary: ReturnType<typeof vi.fn>;
+    getSalesMixByCategories: ReturnType<typeof vi.fn>;
+    getSalesMixByProducts: ReturnType<typeof vi.fn>;
+    getAddonsExtrasUsage: ReturnType<typeof vi.fn>;
+    getAddonsOptionsUsage: ReturnType<typeof vi.fn>;
+    getCashDifferencesControl: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -51,6 +57,69 @@ describe('PosReportesPage', () => {
         .mockResolvedValue([
           { reasonCode: 'CashierError', reasonText: 'captura', count: 1, amount: 50 },
         ]),
+      getKpisSummary: vi.fn().mockResolvedValue({
+        tickets: 12,
+        totalItems: 30,
+        grossSales: 1000,
+        avgTicket: 83.3,
+        avgItemsPerTicket: 2.5,
+        voidCount: 1,
+        voidRate: 0.08,
+      }),
+      getSalesMixByCategories: vi.fn().mockResolvedValue({
+        items: [
+          {
+            categoryId: 'cat-1',
+            categoryName: 'Bebidas',
+            tickets: 5,
+            quantity: 8,
+            grossSales: 500,
+          },
+        ],
+      }),
+      getSalesMixByProducts: vi.fn().mockResolvedValue({
+        items: [
+          {
+            productId: 'prod-1',
+            sku: 'LATTE',
+            productName: 'Latte',
+            tickets: 4,
+            quantity: 6,
+            grossSales: 300,
+          },
+        ],
+      }),
+      getAddonsExtrasUsage: vi.fn().mockResolvedValue({
+        items: [
+          { extraId: 'extra-1', extraSku: 'EXT', extraName: 'Queso', quantity: 4, grossSales: 80 },
+        ],
+      }),
+      getAddonsOptionsUsage: vi.fn().mockResolvedValue({
+        items: [
+          {
+            optionItemId: 'opt-1',
+            optionItemSku: 'OP1',
+            optionItemName: 'Salsa',
+            usageCount: 3,
+            grossImpact: 20,
+          },
+        ],
+      }),
+      getCashDifferencesControl: vi.fn().mockResolvedValue({
+        daily: [],
+        shifts: [
+          {
+            shiftId: 'shift-1',
+            openedAt: '2026-03-07T09:00:00Z',
+            closedAt: '2026-03-07T16:00:00Z',
+            cashierUserId: 'cashier-1',
+            expectedCash: 100,
+            countedCash: 80,
+            difference: -20,
+            closeReason: 'Short',
+          },
+        ],
+      }),
     };
 
     await TestBed.configureTestingModule({
@@ -62,6 +131,7 @@ describe('PosReportesPage', () => {
           useValue: {
             todayIsoDate: () => '2026-03-07',
             getIsoDateInBusinessTimezone: () => '2026-03-01',
+            formatDateTime: (value: string) => value,
           },
         },
       ],
@@ -84,7 +154,7 @@ describe('PosReportesPage', () => {
     });
   });
 
-  it('reloads reports using selected cashier and shift', async () => {
+  it('reloads reports using selected cashier and shift and calls v2 endpoints', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -93,18 +163,38 @@ describe('PosReportesPage', () => {
 
     await fixture.componentInstance.loadReports();
 
-    expect(apiMock.getDailySales).toHaveBeenLastCalledWith({
+    expect(apiMock.getKpisSummary).toHaveBeenLastCalledWith({
       dateFrom: '2026-03-01',
       dateTo: '2026-03-07',
       cashierUserId: 'cashier-1',
       shiftId: 'shift-1',
     });
-    expect(apiMock.getTopProducts).toHaveBeenLastCalledWith({
+    expect(apiMock.getSalesMixByProducts).toHaveBeenLastCalledWith({
       dateFrom: '2026-03-01',
       dateTo: '2026-03-07',
       cashierUserId: 'cashier-1',
       shiftId: 'shift-1',
-      top: 10,
+      top: 20,
     });
+    expect(apiMock.getCashDifferencesControl).toHaveBeenLastCalledWith({
+      dateFrom: '2026-03-01',
+      dateTo: '2026-03-07',
+      cashierUserId: 'cashier-1',
+    });
+  });
+
+  it('shows block error when one section fails while keeping others rendered', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    apiMock.getSalesMixByCategories.mockRejectedValueOnce(new Error('boom'));
+    await fixture.componentInstance.loadReports();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const error = compiled.querySelector('[data-testid="report-error-mixCategories"]');
+
+    expect(error).not.toBeNull();
+    expect(apiMock.getKpisSummary).toHaveBeenCalled();
   });
 });

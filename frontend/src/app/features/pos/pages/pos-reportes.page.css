@@ -142,7 +142,10 @@ button[type='button'] {
   font-size: 0.9rem;
   letter-spacing: 0.02em;
   box-shadow: 0 8px 20px rgba(201, 141, 106, 0.25);
-  transition: transform var(--transition), filter var(--transition), box-shadow var(--transition);
+  transition:
+    transform var(--transition),
+    filter var(--transition),
+    box-shadow var(--transition);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -198,6 +201,37 @@ button[type='button'][disabled] {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 1rem;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.kpi-grid article {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem;
+  background: rgba(243, 182, 194, 0.08);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+}
+
+.kpi-grid span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--brand-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.kpi-grid strong {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--brand-cocoa);
+  line-height: 1.2;
 }
 
 .summary-grid article {
@@ -263,6 +297,10 @@ tbody tr {
 
 tbody tr:hover {
   background: rgba(243, 182, 194, 0.06);
+}
+
+tbody tr.is-alert {
+  border-left: 4px solid currentColor;
 }
 
 .numeric {

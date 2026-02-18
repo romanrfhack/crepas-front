@@ -84,3 +84,88 @@ export interface TopProductReportItemDto {
   qty: number;
   amount: number;
 }
+
+export interface SalesMixByCategoryItemDto {
+  categoryId: string;
+  categoryName: string;
+  tickets: number;
+  quantity: number;
+  grossSales: number;
+}
+
+export interface SalesMixByCategoriesDto {
+  items: SalesMixByCategoryItemDto[];
+}
+
+export interface SalesMixByProductItemDto {
+  productId: string;
+  sku: string | null;
+  productName: string;
+  tickets: number;
+  quantity: number;
+  grossSales: number;
+}
+
+export interface SalesMixByProductsDto {
+  items: SalesMixByProductItemDto[];
+}
+
+export interface AddonsExtraUsageItemDto {
+  extraId: string;
+  extraSku: string | null;
+  extraName: string;
+  quantity: number;
+  grossSales: number;
+}
+
+export interface AddonsExtrasUsageDto {
+  items: AddonsExtraUsageItemDto[];
+}
+
+export interface AddonsOptionUsageItemDto {
+  optionItemId: string;
+  optionItemSku: string | null;
+  optionItemName: string;
+  usageCount: number;
+  grossImpact: number;
+}
+
+export interface AddonsOptionsUsageDto {
+  items: AddonsOptionUsageItemDto[];
+}
+
+export interface KpisSummaryDto {
+  tickets: number;
+  totalItems: number;
+  grossSales: number;
+  avgTicket: number;
+  avgItemsPerTicket: number;
+  voidCount: number;
+  voidRate: number;
+}
+
+export interface CashDifferencesDailyItemDto {
+  date: string;
+  cashierUserId: string | null;
+  shifts: number;
+  expectedCash: number;
+  countedCash: number;
+  difference: number;
+  reasonCount: number;
+}
+
+export interface CashDifferencesShiftItemDto {
+  shiftId: string;
+  openedAt: string;
+  closedAt: string | null;
+  cashierUserId: string;
+  expectedCash: number;
+  countedCash: number;
+  difference: number;
+  closeReason: string | null;
+}
+
+export interface CashDifferencesControlDto {
+  daily: CashDifferencesDailyItemDto[];
+  shifts: CashDifferencesShiftItemDto[];
+}

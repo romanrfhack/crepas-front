@@ -2,11 +2,17 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../../core/services/api-client';
 import {
+  AddonsExtrasUsageDto,
+  AddonsOptionsUsageDto,
+  CashDifferencesControlDto,
   CashierSalesReportItemDto,
   DailySalesReportItemDto,
   HourlySalesReportItemDto,
+  KpisSummaryDto,
   PaymentsByMethodSummaryDto,
   PosReportFilters,
+  SalesMixByCategoriesDto,
+  SalesMixByProductsDto,
   ShiftSummaryReportItemDto,
   TopProductReportItemDto,
   VoidReasonReportItemDto,
@@ -14,6 +20,10 @@ import {
 import { StoreContextService } from './store-context.service';
 
 interface TopProductsParams extends PosReportFilters {
+  top?: number;
+}
+
+interface TopV2Params extends PosReportFilters {
   top?: number;
 }
 
@@ -74,6 +84,52 @@ export class PosReportsApiService {
     return firstValueFrom(
       this.apiClient.get<TopProductReportItemDto[]>(
         this.buildPath('/v1/pos/reports/top-products', params),
+      ),
+    );
+  }
+
+  getKpisSummary(params: PosReportFilters) {
+    return firstValueFrom(
+      this.apiClient.get<KpisSummaryDto>(this.buildPath('/v1/pos/reports/kpis/summary', params)),
+    );
+  }
+
+  getSalesMixByCategories(params: PosReportFilters) {
+    return firstValueFrom(
+      this.apiClient.get<SalesMixByCategoriesDto>(
+        this.buildPath('/v1/pos/reports/sales/categories', params),
+      ),
+    );
+  }
+
+  getSalesMixByProducts(params: TopV2Params) {
+    return firstValueFrom(
+      this.apiClient.get<SalesMixByProductsDto>(
+        this.buildPath('/v1/pos/reports/sales/products', params),
+      ),
+    );
+  }
+
+  getAddonsExtrasUsage(params: TopV2Params) {
+    return firstValueFrom(
+      this.apiClient.get<AddonsExtrasUsageDto>(
+        this.buildPath('/v1/pos/reports/sales/addons/extras', params),
+      ),
+    );
+  }
+
+  getAddonsOptionsUsage(params: TopV2Params) {
+    return firstValueFrom(
+      this.apiClient.get<AddonsOptionsUsageDto>(
+        this.buildPath('/v1/pos/reports/sales/addons/options', params),
+      ),
+    );
+  }
+
+  getCashDifferencesControl(params: Omit<PosReportFilters, 'shiftId'>) {
+    return firstValueFrom(
+      this.apiClient.get<CashDifferencesControlDto>(
+        this.buildPath('/v1/pos/reports/control/cash-differences', params),
       ),
     );
   }

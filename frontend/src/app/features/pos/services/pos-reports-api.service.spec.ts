@@ -76,4 +76,88 @@ describe('PosReportsApiService', () => {
       '/v1/pos/reports/payments/methods?dateFrom=2026-03-01&dateTo=2026-03-07&storeId=store-explicit',
     );
   });
+
+  it('builds v2 routes with cashier and shift filters when supported', async () => {
+    const getSpy = vi.fn().mockReturnValue(of({ items: [] }));
+
+    TestBed.configureTestingModule({
+      providers: [
+        PosReportsApiService,
+        { provide: ApiClient, useValue: { get: getSpy } },
+        { provide: StoreContextService, useValue: { getActiveStoreId: () => 'store-context' } },
+      ],
+    });
+
+    const service = TestBed.inject(PosReportsApiService);
+
+    await service.getSalesMixByProducts({
+      dateFrom: '2026-03-01',
+      dateTo: '2026-03-07',
+      cashierUserId: 'cashier-2',
+      shiftId: 'shift-2',
+      top: 20,
+    });
+
+    expect(getSpy).toHaveBeenCalledWith(
+      '/v1/pos/reports/sales/products?dateFrom=2026-03-01&dateTo=2026-03-07&cashierUserId=cashier-2&shiftId=shift-2&top=20&storeId=store-context',
+    );
+  });
+
+  it('omits shiftId for cash differences and keeps explicit store priority', async () => {
+    const getSpy = vi.fn().mockReturnValue(of({ daily: [], shifts: [] }));
+
+    TestBed.configureTestingModule({
+      providers: [
+        PosReportsApiService,
+        { provide: ApiClient, useValue: { get: getSpy } },
+        { provide: StoreContextService, useValue: { getActiveStoreId: () => 'store-context' } },
+      ],
+    });
+
+    const service = TestBed.inject(PosReportsApiService);
+
+    await service.getCashDifferencesControl({
+      dateFrom: '2026-03-01',
+      dateTo: '2026-03-07',
+      cashierUserId: 'cashier-2',
+      storeId: 'store-explicit',
+    });
+
+    expect(getSpy).toHaveBeenCalledWith(
+      '/v1/pos/reports/control/cash-differences?dateFrom=2026-03-01&dateTo=2026-03-07&cashierUserId=cashier-2&storeId=store-explicit',
+    );
+  });
+
+  it('keeps iso-like date text unchanged in query', async () => {
+    const getSpy = vi.fn().mockReturnValue(
+      of({
+        tickets: 0,
+        totalItems: 0,
+        grossSales: 0,
+        avgTicket: 0,
+        avgItemsPerTicket: 0,
+        voidCount: 0,
+        voidRate: 0,
+      }),
+    );
+
+    TestBed.configureTestingModule({
+      providers: [
+        PosReportsApiService,
+        { provide: ApiClient, useValue: { get: getSpy } },
+        { provide: StoreContextService, useValue: { getActiveStoreId: () => null } },
+      ],
+    });
+
+    const service = TestBed.inject(PosReportsApiService);
+
+    await service.getKpisSummary({
+      dateFrom: '2026-03-01T00:00:00.000Z',
+      dateTo: '2026-03-07T23:59:59.999Z',
+    });
+
+    expect(getSpy).toHaveBeenCalledWith(
+      '/v1/pos/reports/kpis/summary?dateFrom=2026-03-01T00%3A00%3A00.000Z&dateTo=2026-03-07T23%3A59%3A59.999Z',
+    );
+  });
 });
