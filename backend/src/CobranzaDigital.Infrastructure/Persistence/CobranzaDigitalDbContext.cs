@@ -3,6 +3,7 @@ using CobranzaDigital.Infrastructure.Identity;
 
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace CobranzaDigital.Infrastructure.Persistence;
 
@@ -48,5 +49,46 @@ public sealed class CobranzaDigitalDbContext
         });
 
         builder.ApplyConfigurationsFromAssembly(typeof(CobranzaDigitalDbContext).Assembly);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        TouchCatalogRows();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        TouchCatalogRows();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void TouchCatalogRows()
+    {
+        var utcNow = DateTimeOffset.UtcNow;
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                switch (entry.Entity)
+                {
+                    case Category category:
+                        category.UpdatedAtUtc = utcNow;
+                        break;
+                    case Product product:
+                        product.UpdatedAtUtc = utcNow;
+                        break;
+                    case OptionSet optionSet:
+                        optionSet.UpdatedAtUtc = utcNow;
+                        break;
+                    case OptionItem optionItem:
+                        optionItem.UpdatedAtUtc = utcNow;
+                        break;
+                    case Extra extra:
+                        extra.UpdatedAtUtc = utcNow;
+                        break;
+                }
+            }
+        }
     }
 }

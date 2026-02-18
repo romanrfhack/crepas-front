@@ -29,3 +29,9 @@ Este documento registra compatibilidades temporales agregadas para evitar romper
 - Endpoint: `DELETE /api/v1/admin/roles/{name}`
 - El identificador para eliminar rol es el `name` del rol.
 - Motivo: el backend opera por nombre de rol; el frontend fue ajustado para evitar enviar ids inexistentes.
+
+## POS catálogo: `isAvailable` y snapshot extendido
+
+- Endpoints admin de catálogo mantienen contratos existentes y agregan campo opcional/backward-compatible `isAvailable` en DTOs de `Product`, `Extra` y `OptionItem`.
+- Endpoint `GET /api/v1/pos/catalog/snapshot` agrega metadatos (`storeId`, `timeZoneId`, `generatedAtUtc`, `catalogVersion`, `etagSeed`) manteniendo secciones previas.
+- Caching HTTP incorporado con `ETag` + `If-None-Match` (`304`) sin romper clientes que no usen cache condicional.

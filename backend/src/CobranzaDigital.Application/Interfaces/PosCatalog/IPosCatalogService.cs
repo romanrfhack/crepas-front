@@ -43,5 +43,6 @@ public interface IPosCatalogService
     Task<IReadOnlyList<IncludedItemDto>> ReplaceIncludedItemsAsync(Guid productId, ReplaceIncludedItemsRequest request, CancellationToken ct);
 
     Task<ProductOverrideDto> UpsertOverrideAsync(Guid productId, string groupKey, OverrideUpsertRequest request, CancellationToken ct);
-    Task<CatalogSnapshotDto> GetSnapshotAsync(CancellationToken ct);
+    Task<CatalogSnapshotDto> GetSnapshotAsync(Guid? storeId, CancellationToken ct);
+    Task<string> ComputeCatalogEtagAsync(CancellationToken ct);
 }

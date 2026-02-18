@@ -14,6 +14,8 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.HasIndex(x => x.Name).IsUnique();
         builder.HasIndex(x => x.SortOrder);
+        builder.Property(x => x.UpdatedAtUtc)
+            .HasDefaultValueSql("SYSUTCDATETIME()");
     }
 }
 
@@ -27,6 +29,9 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(x => x.ExternalCode).HasMaxLength(100);
         builder.Property(x => x.SubcategoryName).HasMaxLength(200);
         builder.Property(x => x.BasePrice).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.IsAvailable).HasDefaultValue(true);
+        builder.Property(x => x.UpdatedAtUtc)
+            .HasDefaultValueSql("SYSUTCDATETIME()");
         builder.HasIndex(x => x.ExternalCode).IsUnique();
         builder.HasOne<Category>().WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<CustomizationSchema>().WithMany().HasForeignKey(x => x.CustomizationSchemaId).OnDelete(DeleteBehavior.Restrict);
@@ -40,6 +45,8 @@ public sealed class OptionSetConfiguration : IEntityTypeConfiguration<OptionSet>
         builder.ToTable("OptionSets");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.UpdatedAtUtc)
+            .HasDefaultValueSql("SYSUTCDATETIME()");
     }
 }
 
@@ -50,6 +57,9 @@ public sealed class OptionItemConfiguration : IEntityTypeConfiguration<OptionIte
         builder.ToTable("OptionItems");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.IsAvailable).HasDefaultValue(true);
+        builder.Property(x => x.UpdatedAtUtc)
+            .HasDefaultValueSql("SYSUTCDATETIME()");
         builder.HasOne<OptionSet>().WithMany().HasForeignKey(x => x.OptionSetId).OnDelete(DeleteBehavior.Restrict);
     }
 }
@@ -86,6 +96,9 @@ public sealed class ExtraConfiguration : IEntityTypeConfiguration<Extra>
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Price).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.IsAvailable).HasDefaultValue(true);
+        builder.Property(x => x.UpdatedAtUtc)
+            .HasDefaultValueSql("SYSUTCDATETIME()");
     }
 }
 
