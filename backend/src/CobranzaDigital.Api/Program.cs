@@ -158,11 +158,13 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
 {
+    Console.WriteLine($"Applying EF migrations for environment: {app.Environment.EnvironmentName}");
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-    await dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
+    await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+    Console.WriteLine("EF migrations applied");
 }
 
 var jwtLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("JwtStartup");
