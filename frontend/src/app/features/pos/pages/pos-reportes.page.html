@@ -1,9 +1,12 @@
 <div class="reportes-page">
+  <!-- HEADER con barra decorativa -->
   <header class="page-header">
-    <h2>Reportes Operativos v1</h2>
-    <p>Resumen operativo POS por rango, cajero y turno.</p>
+    <h2>&#128202; Reportes Operativos</h2>
+    <p>Resumen operativo POS por rango, cajero y turno</p>
+    <div class="header-decoration"></div>
   </header>
 
+  <!-- TARJETA DE FILTROS -->
   <section class="card filters-card" aria-label="Filtros de reportes">
     <div class="filters-grid">
       <label>
@@ -60,15 +63,25 @@
         (click)="loadReports()"
         [disabled]="loading()"
       >
-        {{ loading() ? 'Actualizando...' : 'Actualizar' }}
+        @if (loading()) {
+          <span class="spinner"></span>
+          <span>Actualizando...</span>
+        } @else {
+          <span>🔄 Actualizar</span>
+        }
       </button>
     </div>
   </section>
 
+  <!-- MENSAJE DE ERROR -->
   @if (errorMessage()) {
-    <p class="error" role="alert">{{ errorMessage() }}</p>
+    <p class="error" role="alert">
+      <span class="error-icon">⚠️</span>
+      {{ errorMessage() }}
+    </p>
   }
 
+  <!-- TARJETA DE RESUMEN -->
   <section class="card summary" data-testid="reports-summary">
     <h3>Resumen</h3>
     <div class="summary-grid">
@@ -87,6 +100,7 @@
     </div>
   </section>
 
+  <!-- TARJETA: VENTAS POR MÉTODO DE PAGO -->
   <section class="card">
     <h3>Ventas por método de pago</h3>
     <div class="table-wrap" data-testid="reports-payments-table">
@@ -117,6 +131,7 @@
     </div>
   </section>
 
+  <!-- TARJETA: VENTAS POR HORA -->
   <section class="card">
     <h3>Ventas por hora</h3>
     <div class="table-wrap" data-testid="reports-hourly-table">
@@ -151,6 +166,7 @@
     </div>
   </section>
 
+  <!-- TARJETA: TOP PRODUCTOS -->
   <section class="card">
     <h3>Top productos</h3>
     <div class="table-wrap" data-testid="reports-top-products-table">
@@ -179,6 +195,7 @@
     </div>
   </section>
 
+  <!-- TARJETA: CANCELACIONES POR MOTIVO -->
   <section class="card">
     <h3>Cancelaciones por motivo</h3>
     <div class="table-wrap" data-testid="reports-void-reasons-table">
