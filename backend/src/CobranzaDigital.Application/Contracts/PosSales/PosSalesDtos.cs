@@ -76,3 +76,72 @@ public sealed record PosShiftSummaryReportRowDto(
     decimal CashDifference);
 
 public sealed record PosVoidReasonReportRowDto(string? ReasonCode, string? ReasonText, int Count, decimal Amount);
+
+public sealed record PosCategorySalesMixItemDto(
+    Guid CategoryId,
+    string CategoryName,
+    int Tickets,
+    int Quantity,
+    decimal GrossSales);
+
+public sealed record PosCategorySalesMixResponseDto(IReadOnlyList<PosCategorySalesMixItemDto> Items);
+
+public sealed record PosProductSalesMixItemDto(
+    Guid ProductId,
+    string? Sku,
+    string ProductName,
+    int Tickets,
+    int Quantity,
+    decimal GrossSales);
+
+public sealed record PosProductSalesMixResponseDto(IReadOnlyList<PosProductSalesMixItemDto> Items);
+
+public sealed record PosTopExtraAddonItemDto(
+    Guid ExtraId,
+    string? ExtraSku,
+    string ExtraName,
+    int Quantity,
+    decimal GrossSales);
+
+public sealed record PosTopExtraAddonsResponseDto(IReadOnlyList<PosTopExtraAddonItemDto> Items);
+
+public sealed record PosTopOptionAddonItemDto(
+    Guid OptionItemId,
+    string? OptionItemSku,
+    string OptionItemName,
+    int UsageCount,
+    decimal GrossImpact);
+
+public sealed record PosTopOptionAddonsResponseDto(IReadOnlyList<PosTopOptionAddonItemDto> Items);
+
+public sealed record PosKpisSummaryDto(
+    int Tickets,
+    int TotalItems,
+    decimal GrossSales,
+    decimal AvgTicket,
+    decimal AvgItemsPerTicket,
+    int VoidCount,
+    decimal VoidRate);
+
+public sealed record PosCashDifferencesDailyRowDto(
+    DateOnly Date,
+    Guid? CashierUserId,
+    int Shifts,
+    decimal ExpectedCash,
+    decimal CountedCash,
+    decimal Difference,
+    int ReasonCount);
+
+public sealed record PosCashDifferencesShiftRowDto(
+    Guid ShiftId,
+    DateTimeOffset OpenedAt,
+    DateTimeOffset? ClosedAt,
+    Guid CashierUserId,
+    decimal ExpectedCash,
+    decimal CountedCash,
+    decimal Difference,
+    string? CloseReason);
+
+public sealed record PosCashDifferencesResponseDto(
+    IReadOnlyList<PosCashDifferencesDailyRowDto> Daily,
+    IReadOnlyList<PosCashDifferencesShiftRowDto> Shifts);

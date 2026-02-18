@@ -539,6 +539,189 @@ public sealed class PosSalesService : IPosSalesService
             .ToList();
     }
 
+    public async Task<PosCategorySalesMixResponseDto> GetSalesByCategoriesAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct)
+    {
+        var rows = await LoadCompletedSaleItemGrossLinesAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, ct).ConfigureAwait(false);
+
+        var items = rows
+            .GroupBy(x => new { x.CategoryId, x.CategoryName })
+            .Select(x => new PosCategorySalesMixItemDto(
+                x.Key.CategoryId,
+                x.Key.CategoryName,
+                x.Select(v => v.SaleId).Distinct().Count(),
+                x.Sum(v => v.Quantity),
+                x.Sum(v => v.GrossLine)))
+            .OrderByDescending(x => x.GrossSales)
+            .ThenBy(x => x.CategoryName)
+            .ToList();
+
+        return new PosCategorySalesMixResponseDto(items);
+    }
+
+    public async Task<PosProductSalesMixResponseDto> GetSalesByProductsAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, int top, CancellationToken ct)
+    {
+        top = NormalizeTop(top, 20, 200, "top");
+        var rows = await LoadCompletedSaleItemGrossLinesAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, ct).ConfigureAwait(false);
+
+        var items = rows
+            .GroupBy(x => new { x.ProductId, x.ProductSku, x.ProductName })
+            .Select(x => new PosProductSalesMixItemDto(
+                x.Key.ProductId,
+                x.Key.ProductSku,
+                x.Key.ProductName,
+                x.Select(v => v.SaleId).Distinct().Count(),
+                x.Sum(v => v.Quantity),
+                x.Sum(v => v.GrossLine)))
+            .OrderByDescending(x => x.GrossSales)
+            .ThenByDescending(x => x.Quantity)
+            .ThenBy(x => x.ProductName)
+            .Take(top)
+            .ToList();
+
+        return new PosProductSalesMixResponseDto(items);
+    }
+
+    public async Task<PosTopExtraAddonsResponseDto> GetSalesAddonsExtrasAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, int top, CancellationToken ct)
+    {
+        top = NormalizeTop(top, 20, 200, "top");
+
+        var completedSaleIds = await LoadCompletedSaleIdsAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, ct).ConfigureAwait(false);
+        if (completedSaleIds.Count == 0)
+        {
+            return new PosTopExtraAddonsResponseDto([]);
+        }
+
+        var items = await (from extra in _db.SaleItemExtras.AsNoTracking()
+                           join saleItem in _db.SaleItems.AsNoTracking() on extra.SaleItemId equals saleItem.Id
+                           join catalogExtra in _db.Extras.AsNoTracking() on extra.ExtraId equals catalogExtra.Id into catalogExtras
+                           from catalogExtra in catalogExtras.DefaultIfEmpty()
+                           where completedSaleIds.Contains(saleItem.SaleId)
+                           group new { extra, catalogExtra } by new { extra.ExtraId, extra.ExtraNameSnapshot, Sku = catalogExtra != null ? catalogExtra.Id.ToString() : null } into grouped
+                           orderby grouped.Sum(x => x.extra.LineTotal) descending, grouped.Sum(x => x.extra.Quantity) descending
+                           select new PosTopExtraAddonItemDto(
+                               grouped.Key.ExtraId,
+                               grouped.Key.Sku,
+                               grouped.Key.ExtraNameSnapshot,
+                               grouped.Sum(x => x.extra.Quantity),
+                               grouped.Sum(x => x.extra.LineTotal)))
+            .Take(top)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return new PosTopExtraAddonsResponseDto(items);
+    }
+
+    public async Task<PosTopOptionAddonsResponseDto> GetSalesAddonsOptionsAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, int top, CancellationToken ct)
+    {
+        top = NormalizeTop(top, 20, 200, "top");
+
+        var completedSaleIds = await LoadCompletedSaleIdsAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, ct).ConfigureAwait(false);
+        if (completedSaleIds.Count == 0)
+        {
+            return new PosTopOptionAddonsResponseDto([]);
+        }
+
+        var items = await (from selection in _db.SaleItemSelections.AsNoTracking()
+                           join saleItem in _db.SaleItems.AsNoTracking() on selection.SaleItemId equals saleItem.Id
+                           join option in _db.OptionItems.AsNoTracking() on selection.OptionItemId equals option.Id into options
+                           from option in options.DefaultIfEmpty()
+                           where completedSaleIds.Contains(saleItem.SaleId)
+                           group new { selection, saleItem, option } by new
+                           {
+                               selection.OptionItemId,
+                               selection.OptionItemNameSnapshot,
+                               OptionItemSku = option != null ? option.Id.ToString() : null
+                           }
+            into grouped
+                           orderby grouped.Sum(x => x.saleItem.Quantity) descending, grouped.Sum(x => x.selection.PriceDeltaSnapshot * x.saleItem.Quantity) descending
+                           select new PosTopOptionAddonItemDto(
+                               grouped.Key.OptionItemId,
+                               grouped.Key.OptionItemSku,
+                               grouped.Key.OptionItemNameSnapshot,
+                               grouped.Sum(x => x.saleItem.Quantity),
+                               grouped.Sum(x => x.selection.PriceDeltaSnapshot * x.saleItem.Quantity)))
+            .Take(top)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return new PosTopOptionAddonsResponseDto(items);
+    }
+
+    public async Task<PosKpisSummaryDto> GetKpisSummaryAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct)
+    {
+        var filteredSales = await LoadFilteredSalesAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, ct).ConfigureAwait(false);
+        var completedSales = filteredSales.Where(x => x.Status == SaleStatus.Completed).ToList();
+        var completedSaleIds = completedSales.Select(x => x.Id).ToArray();
+
+        var totalItems = completedSaleIds.Length == 0
+            ? 0
+            : await _db.SaleItems.AsNoTracking()
+                .Where(x => completedSaleIds.Contains(x.SaleId))
+                .SumAsync(x => x.Quantity, ct)
+                .ConfigureAwait(false);
+
+        var tickets = completedSales.Count;
+        var grossSales = completedSales.Sum(x => x.Total);
+        var avgTicket = tickets == 0 ? 0m : decimal.Round(grossSales / tickets, 2, MidpointRounding.AwayFromZero);
+        var avgItemsPerTicket = tickets == 0 ? 0m : decimal.Round((decimal)totalItems / tickets, 2, MidpointRounding.AwayFromZero);
+        var voidCount = filteredSales.Count(x => x.Status == SaleStatus.Void);
+        var totalSalesCount = filteredSales.Count;
+        var voidRate = totalSalesCount == 0 ? 0m : decimal.Round((decimal)voidCount / totalSalesCount, 4, MidpointRounding.AwayFromZero);
+
+        return new PosKpisSummaryDto(tickets, totalItems, grossSales, avgTicket, avgItemsPerTicket, voidCount, voidRate);
+    }
+
+    public async Task<PosCashDifferencesResponseDto> GetCashDifferencesControlAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, CancellationToken ct)
+    {
+        ValidateDateRange(dateFrom, dateTo);
+
+        var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
+        var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
+
+        var shifts = await _db.PosShifts.AsNoTracking()
+            .Where(x => x.StoreId == resolvedStoreId
+                        && (!cashierUserId.HasValue || x.OpenedByUserId == cashierUserId.Value)
+                        && ((x.ClosedAtUtc ?? x.OpenedAtUtc) >= utcStart)
+                        && ((x.ClosedAtUtc ?? x.OpenedAtUtc) < utcEndExclusive))
+            .Select(x => new PosCashDifferencesShiftRowDto(
+                x.Id,
+                x.OpenedAtUtc,
+                x.ClosedAtUtc,
+                x.OpenedByUserId,
+                x.ExpectedCashAmount ?? 0m,
+                x.ClosingCashAmount ?? 0m,
+                x.CashDifference ?? ((x.ClosingCashAmount ?? 0m) - (x.ExpectedCashAmount ?? 0m)),
+                x.CloseReason))
+            .OrderBy(x => x.OpenedAt)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var daily = shifts
+            .Select(x => new
+            {
+                LocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(x.ClosedAt ?? x.OpenedAt, timeZoneInfo).DateTime),
+                x.CashierUserId,
+                x.ExpectedCash,
+                x.CountedCash,
+                x.Difference,
+                x.CloseReason
+            })
+            .GroupBy(x => new { x.LocalDate, x.CashierUserId })
+            .Select(x => new PosCashDifferencesDailyRowDto(
+                x.Key.LocalDate,
+                x.Key.CashierUserId,
+                x.Count(),
+                x.Sum(v => v.ExpectedCash),
+                x.Sum(v => v.CountedCash),
+                x.Sum(v => v.Difference),
+                x.Count(v => !string.IsNullOrWhiteSpace(v.CloseReason))))
+            .OrderBy(x => x.Date)
+            .ThenBy(x => x.CashierUserId)
+            .ToList();
+
+        return new PosCashDifferencesResponseDto(daily, shifts);
+    }
+
     public async Task<VoidSaleResponseDto> VoidSaleAsync(Guid saleId, VoidSaleRequestDto request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.ReasonCode))
@@ -657,6 +840,118 @@ public sealed class PosSalesService : IPosSalesService
         return (sales, payments, timeZoneInfo);
     }
 
+    private async Task<List<SaleReportRow>> LoadFilteredSalesAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct)
+    {
+        ValidateDateRange(dateFrom, dateTo);
+
+        var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
+        var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
+
+        return await _db.Sales.AsNoTracking()
+            .Where(x => x.StoreId == resolvedStoreId
+                        && x.OccurredAtUtc >= utcStart
+                        && x.OccurredAtUtc < utcEndExclusive
+                        && (!cashierUserId.HasValue || x.CreatedByUserId == cashierUserId.Value)
+                        && (!shiftId.HasValue || x.ShiftId == shiftId.Value))
+            .Select(x => new SaleReportRow(
+                x.Id,
+                x.StoreId,
+                x.ShiftId,
+                x.CreatedByUserId,
+                x.OccurredAtUtc,
+                x.Subtotal,
+                x.Total,
+                x.Status,
+                x.VoidedAtUtc,
+                x.VoidReasonCode,
+                x.VoidReasonText))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<HashSet<Guid>> LoadCompletedSaleIdsAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct)
+    {
+        var filteredSales = await LoadFilteredSalesAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, ct).ConfigureAwait(false);
+        return filteredSales
+            .Where(x => x.Status == SaleStatus.Completed)
+            .Select(x => x.Id)
+            .ToHashSet();
+    }
+
+    private async Task<List<SaleItemGrossLineRow>> LoadCompletedSaleItemGrossLinesAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct)
+    {
+        var completedSaleIds = await LoadCompletedSaleIdsAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, ct).ConfigureAwait(false);
+        if (completedSaleIds.Count == 0)
+        {
+            return [];
+        }
+
+        var saleItems = await _db.SaleItems.AsNoTracking()
+            .Where(x => completedSaleIds.Contains(x.SaleId))
+            .Select(x => new { x.Id, x.SaleId, x.ProductId, x.ProductExternalCode, x.ProductNameSnapshot, x.Quantity, x.LineTotal })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var saleItemIds = saleItems.Select(x => x.Id).ToArray();
+        var extrasBySaleItemId = saleItemIds.Length == 0
+            ? new Dictionary<Guid, decimal>()
+            : await _db.SaleItemExtras.AsNoTracking()
+                .Where(x => saleItemIds.Contains(x.SaleItemId))
+                .GroupBy(x => x.SaleItemId)
+                .ToDictionaryAsync(x => x.Key, x => x.Sum(v => v.LineTotal), ct)
+                .ConfigureAwait(false);
+
+        var selectionsBySaleItemId = saleItemIds.Length == 0
+            ? new Dictionary<Guid, decimal>()
+            : await _db.SaleItemSelections.AsNoTracking()
+                .Where(x => saleItemIds.Contains(x.SaleItemId))
+                .GroupBy(x => x.SaleItemId)
+                .ToDictionaryAsync(x => x.Key, x => x.Sum(v => v.PriceDeltaSnapshot), ct)
+                .ConfigureAwait(false);
+
+        var categoryByProductId = await (from product in _db.Products.AsNoTracking()
+                                         join category in _db.Categories.AsNoTracking() on product.CategoryId equals category.Id into categories
+                                         from category in categories.DefaultIfEmpty()
+                                         where saleItems.Select(x => x.ProductId).Contains(product.Id)
+                                         select new
+                                         {
+                                             product.Id,
+                                             CategoryId = category != null ? category.Id : Guid.Empty,
+                                             CategoryName = category != null ? category.Name : "Sin categoría"
+                                         })
+            .ToDictionaryAsync(x => x.Id, ct)
+            .ConfigureAwait(false);
+
+        return saleItems.Select(x =>
+            {
+                var extras = extrasBySaleItemId.GetValueOrDefault(x.Id);
+                var selectionsDelta = selectionsBySaleItemId.GetValueOrDefault(x.Id) * x.Quantity;
+                var category = categoryByProductId.GetValueOrDefault(x.ProductId);
+
+                return new SaleItemGrossLineRow(
+                    x.SaleId,
+                    x.ProductId,
+                    x.ProductExternalCode,
+                    x.ProductNameSnapshot,
+                    category?.CategoryId ?? Guid.Empty,
+                    category?.CategoryName ?? "Sin categoría",
+                    x.Quantity,
+                    x.LineTotal + extras + selectionsDelta);
+            })
+            .ToList();
+    }
+
+    private static int NormalizeTop(int? top, int defaultValue, int maxValue, string field)
+    {
+        var value = top.GetValueOrDefault(defaultValue);
+        if (value <= 0 || value > maxValue)
+        {
+            throw ValidationError(field, $"{field} must be between 1 and {maxValue}.");
+        }
+
+        return value;
+    }
+
     private async Task<(Guid StoreId, TimeZoneInfo TimeZoneInfo)> ResolveStoreTimeZoneAsync(Guid? storeId, CancellationToken ct)
     {
         var (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
@@ -718,6 +1013,15 @@ public sealed class PosSalesService : IPosSalesService
         string? VoidReasonText);
 
     private sealed record PaymentReportRow(Guid SaleId, PaymentMethod Method, decimal Amount);
+    private sealed record SaleItemGrossLineRow(
+        Guid SaleId,
+        Guid ProductId,
+        string? ProductSku,
+        string ProductName,
+        Guid CategoryId,
+        string CategoryName,
+        int Quantity,
+        decimal GrossLine);
 
     private static string GenerateFolio(DateTimeOffset timestamp)
     {

@@ -14,6 +14,12 @@ public interface IPosSalesService
     Task<IReadOnlyList<PosCashierSalesReportRowDto>> GetCashiersSalesReportAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, CancellationToken ct);
     Task<IReadOnlyList<PosShiftSummaryReportRowDto>> GetShiftsSummaryReportAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, CancellationToken ct);
     Task<IReadOnlyList<PosVoidReasonReportRowDto>> GetVoidReasonsReportAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, CancellationToken ct);
+    Task<PosCategorySalesMixResponseDto> GetSalesByCategoriesAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct);
+    Task<PosProductSalesMixResponseDto> GetSalesByProductsAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, int top, CancellationToken ct);
+    Task<PosTopExtraAddonsResponseDto> GetSalesAddonsExtrasAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, int top, CancellationToken ct);
+    Task<PosTopOptionAddonsResponseDto> GetSalesAddonsOptionsAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, int top, CancellationToken ct);
+    Task<PosKpisSummaryDto> GetKpisSummaryAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct);
+    Task<PosCashDifferencesResponseDto> GetCashDifferencesControlAsync(DateOnly dateFrom, DateOnly dateTo, Guid? storeId, Guid? cashierUserId, CancellationToken ct);
 }
 
 public interface IPosShiftService
