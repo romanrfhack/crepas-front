@@ -47,8 +47,9 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
     public CobranzaDigitalApiFactory()
     {
         _verboseLogs = string.Equals(Environment.GetEnvironmentVariable("TESTS_VERBOSE_LOGS"), "1", StringComparison.Ordinal);
-        _sqlServerConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection") 
-            ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
+        _sqlServerConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer")
+        ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+
         _originalSqlServerConnectionString = _sqlServerConnectionString;
         _useSqlServerForTests = !string.IsNullOrWhiteSpace(_sqlServerConnectionString);
 

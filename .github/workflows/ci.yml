@@ -58,7 +58,7 @@ jobs:
           --health-retries 20
     env:
       TESTS_USE_SQLSERVER: "1"
-      ConnectionStrings__DefaultConnection: Server=localhost,1433;Database=CrepasDBTest;User Id=sa;Password=Strong_Passw0rd_2026!;Encrypt=False;TrustServerCertificate=True;MultipleActiveResultSets=True
+      ConnectionStrings__SqlServer: Server=localhost,1433;Database=CrepasDBTest;User Id=sa;Password=Strong_Passw0rd_2026!;Encrypt=False;TrustServerCertificate=True;MultipleActiveResultSets=True
     steps:
       - uses: actions/checkout@v4
 

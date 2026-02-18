@@ -21,7 +21,7 @@ docker start cobranzadigital-sql-test
 ## Variables de entorno para Integration Tests API
 ```bash
 export TESTS_USE_SQLSERVER=true
-export ConnectionStrings__DefaultConnection='Server=localhost,1433;Database=CobranzaDigitalTests;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=true;MultipleActiveResultSets=true'
+export ConnectionStrings__SqlServer='Server=localhost,1433;Database=CobranzaDigitalTests;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=true;MultipleActiveResultSets=true'
 ```
 
 ## Ejecutar tests

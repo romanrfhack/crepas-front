@@ -108,13 +108,23 @@ public static class DependencyInjection
 
     private static string ResolveProvider(DatabaseOptions databaseOptions, IHostEnvironment? environment)
     {
-        if (environment is not null && environment.IsEnvironment("Testing"))
+        // Si el usuario configuró Provider explícitamente, respétalo SIEMPRE (aunque sea Testing)
+        if (!string.IsNullOrWhiteSpace(databaseOptions.Provider))
         {
-            return "Sqlite";
+            return databaseOptions.Provider;
         }
 
-        return string.IsNullOrWhiteSpace(databaseOptions.Provider)
-            ? "SqlServer"
-            : databaseOptions.Provider;
+        // En Testing, por defecto SQLite… salvo que el test pida SQL Server
+        if (environment is not null && environment.IsEnvironment("Testing"))
+        {
+            var useSqlServer =
+                string.Equals(Environment.GetEnvironmentVariable("TESTS_USE_SQLSERVER"), "1", StringComparison.Ordinal) ||
+                string.Equals(Environment.GetEnvironmentVariable("TESTS_USE_SQLSERVER"), "true", StringComparison.OrdinalIgnoreCase);
+
+            return useSqlServer ? "SqlServer" : "Sqlite";
+        }
+
+        return "SqlServer";
     }
+
 }
