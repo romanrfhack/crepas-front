@@ -90,3 +90,8 @@ Response:
 
 - SQLite puede fallar o comportarse distinto al ordenar directamente por `DateTimeOffset` en EF.
 - En pruebas, materializar resultados y ordenar en memoria cuando se requiera orden por fecha/hora offset.
+
+
+## Reportes operativos v1
+
+La especificación de los nuevos endpoints de reportes POS se documenta en `docs/pos-reports.md`.

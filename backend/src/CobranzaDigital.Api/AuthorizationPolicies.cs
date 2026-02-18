@@ -6,5 +6,6 @@ public static class AuthorizationPolicies
     public const string RequireScope = "RequireScope";
     public const string PosAdmin = "PosAdmin";
     public const string PosOperator = "PosOperator";
+    public const string PosReportViewer = "PosReportViewer";
     public const string RequiredScopeValue = "cobranza.read";
 }
