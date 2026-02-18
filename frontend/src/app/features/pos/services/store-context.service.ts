@@ -1,21 +1,24 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 
 const ACTIVE_STORE_KEY = 'pos_active_store_id';
 
 @Injectable({ providedIn: 'root' })
 export class StoreContextService {
-  private activeStoreId: string | null = this.readStoreId();
+  private readonly activeStoreIdState = signal<string | null>(this.readStoreId());
+
+  readonly activeStoreId = this.activeStoreIdState.asReadonly();
 
   getActiveStoreId(): string | null {
-    return this.activeStoreId;
+    return this.activeStoreIdState();
   }
 
   setActiveStoreId(id: string | null): void {
     const normalized = id?.trim() ?? '';
-    this.activeStoreId = normalized.length > 0 ? normalized : null;
+    const nextStoreId = normalized.length > 0 ? normalized : null;
+    this.activeStoreIdState.set(nextStoreId);
 
-    if (this.activeStoreId) {
-      localStorage.setItem(ACTIVE_STORE_KEY, this.activeStoreId);
+    if (nextStoreId) {
+      localStorage.setItem(ACTIVE_STORE_KEY, nextStoreId);
       return;
     }
 

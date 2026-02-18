@@ -54,6 +54,8 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
     closePreviewRequests: [] as Array<{ method: string; body: Record<string, unknown> }>,
     closeRequests: [] as Record<string, unknown>[],
     voidRequests: [] as Record<string, unknown>[],
+    snapshotCalls: () => snapshotCalls,
+    createSaleCalls: () => createSaleCalls,
   };
 
   await page.route('**/api/v1/pos/**', async (route) => {
@@ -414,8 +416,50 @@ test('D) Producto no disponible se renderiza disabled con badge Agotado', async 
 test('E) Cache stale: create sale 409 unavailable y actualización de catálogo refresca estado', async ({
   page,
 }) => {
-  await setupFakePosApi(page, { role: 'Cashier', staleUnavailableOnCreateSale: true });
+  const captured = await setupFakePosApi(page, {
+    role: 'Cashier',
+    staleUnavailableOnCreateSale: true,
+  });
   await seedAuth(page, 'Cashier');
+
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'pos_catalog_snapshot_cache:default',
+      JSON.stringify({
+        etag: '"snapshot-stale"',
+        snapshot: {
+          storeId: 'store-e2e',
+          timeZoneId: 'America/Mexico_City',
+          generatedAtUtc: '2026-01-01T07:00:00Z',
+          catalogVersion: 'stale-v0',
+          etagSeed: 'stale-seed',
+          categories: [{ id: 'C1', name: 'Bebidas', sortOrder: 1, isActive: true }],
+          products: [
+            {
+              id: 'P1',
+              externalCode: null,
+              name: 'Café americano',
+              categoryId: 'C1',
+              subcategoryName: null,
+              basePrice: 120,
+              isActive: true,
+              isAvailable: true,
+              customizationSchemaId: null,
+            },
+          ],
+          optionSets: [],
+          optionItems: [],
+          schemas: [],
+          selectionGroups: [],
+          extras: [],
+          includedItems: [],
+          overrides: [],
+          versionStamp: 'stale-v0',
+        },
+      }),
+    );
+  });
+
   await openPosCaja(page);
   await ensureShiftOpen(page);
 
@@ -423,8 +467,12 @@ test('E) Cache stale: create sale 409 unavailable y actualización de catálogo 
   await submitMixedPayment(page);
 
   await expect(page.getByText(/No disponible: Café americano/i)).toBeVisible();
+  await expect(page.getByTestId('refresh-catalog-unavailable')).toBeVisible();
+
+  const callsBeforeRefresh = captured.snapshotCalls();
   await page.getByTestId('refresh-catalog-unavailable').click();
   await expect(page.getByTestId('product-P1')).toBeDisabled();
   await expect(page.getByTestId('product-unavailable-P1')).toBeVisible();
+  expect(captured.snapshotCalls()).toBeGreaterThan(callsBeforeRefresh);
+  expect(captured.createSaleCalls()).toBe(1);
 });
-

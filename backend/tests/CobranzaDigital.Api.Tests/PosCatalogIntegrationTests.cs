@@ -93,30 +93,33 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"etag-cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var optionSet = await PostAsync<OptionSetResponse>("/api/v1/pos/admin/option-sets", token, new { name = $"etag-set-{Guid.NewGuid():N}", isActive = true });
+        var optionItem = await PostAsync<OptionItemResponse>($"/api/v1/pos/admin/option-sets/{optionSet.Id}/items", token, new { name = "ETag Option", isActive = true, isAvailable = true, sortOrder = 1 });
+        var extra = await PostAsync<ExtraResponse>("/api/v1/pos/admin/extras", token, new { name = "ETag Extra", price = 5m, isActive = true, isAvailable = true });
         var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "ETag Product", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true });
 
-        using var firstReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
-        using var firstResp = await _client.SendAsync(firstReq);
-        Assert.Equal(HttpStatusCode.OK, firstResp.StatusCode);
-        Assert.True(firstResp.Headers.TryGetValues("ETag", out var etags));
-        var etag = etags!.Single();
+        var etag = await GetSnapshotEtagAsync(token);
+        await AssertSnapshotNotModifiedAsync(token, etag);
 
-        using var secondReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
-        secondReq.Headers.TryAddWithoutValidation("If-None-Match", etag);
-        using var secondResp = await _client.SendAsync(secondReq);
-        Assert.Equal(HttpStatusCode.NotModified, secondResp.StatusCode);
+        etag = await ToggleAvailabilityAndAssertEtagChangedAsync(
+            token,
+            etag,
+            () => UpdateProductAsync(token, product with { IsAvailable = false }));
 
-        using var updateReq = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/pos/admin/products/{product.Id}", token);
-        updateReq.Content = JsonContent.Create(new { product.ExternalCode, product.Name, product.CategoryId, product.SubcategoryName, product.BasePrice, product.IsActive, isAvailable = false, product.CustomizationSchemaId });
-        using var updateResp = await _client.SendAsync(updateReq);
-        Assert.Equal(HttpStatusCode.OK, updateResp.StatusCode);
+        etag = await ToggleAvailabilityAndAssertEtagChangedAsync(
+            token,
+            etag,
+            () => UpdateExtraAsync(token, extra with { IsAvailable = false }));
 
-        using var thirdReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
-        thirdReq.Headers.TryAddWithoutValidation("If-None-Match", etag);
-        using var thirdResp = await _client.SendAsync(thirdReq);
-        Assert.Equal(HttpStatusCode.OK, thirdResp.StatusCode);
-        Assert.True(thirdResp.Headers.TryGetValues("ETag", out var changedEtags));
-        Assert.NotEqual(etag, changedEtags!.Single());
+        etag = await ToggleAvailabilityAndAssertEtagChangedAsync(
+            token,
+            etag,
+            () => UpdateOptionItemAsync(token, optionSet.Id, optionItem with { IsAvailable = false }));
+
+        _ = await ToggleAvailabilityAndAssertEtagChangedAsync(
+            token,
+            etag,
+            () => UpdateProductAsync(token, product with { Name = "ETag Product Renamed", IsAvailable = false }));
     }
 
     [Fact]
@@ -154,6 +157,75 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var snapshotResp = await _client.SendAsync(snapshotReq);
 
         Assert.Equal(HttpStatusCode.Forbidden, snapshotResp.StatusCode);
+    }
+
+    private async Task<string> GetSnapshotEtagAsync(string token)
+    {
+        using var req = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
+        using var response = await _client.SendAsync(req);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.TryGetValues("ETag", out var etagValues));
+        return etagValues!.Single();
+    }
+
+    private async Task AssertSnapshotNotModifiedAsync(string token, string etag)
+    {
+        using var req = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
+        req.Headers.TryAddWithoutValidation("If-None-Match", etag);
+        using var response = await _client.SendAsync(req);
+
+        Assert.Equal(HttpStatusCode.NotModified, response.StatusCode);
+    }
+
+    private async Task<string> ToggleAvailabilityAndAssertEtagChangedAsync(string token, string previousEtag, Func<Task> updater)
+    {
+        await updater();
+
+        using var req = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
+        req.Headers.TryAddWithoutValidation("If-None-Match", previousEtag);
+        using var response = await _client.SendAsync(req);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.TryGetValues("ETag", out var etagValues));
+
+        var changedEtag = etagValues!.Single();
+        Assert.NotEqual(previousEtag, changedEtag);
+        return changedEtag;
+    }
+
+    private async Task UpdateProductAsync(string token, ProductResponse product)
+    {
+        using var updateReq = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/pos/admin/products/{product.Id}", token);
+        updateReq.Content = JsonContent.Create(new
+        {
+            product.ExternalCode,
+            product.Name,
+            product.CategoryId,
+            product.SubcategoryName,
+            product.BasePrice,
+            product.IsActive,
+            product.IsAvailable,
+            product.CustomizationSchemaId,
+        });
+        using var response = await _client.SendAsync(updateReq);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private async Task UpdateExtraAsync(string token, ExtraResponse extra)
+    {
+        using var updateReq = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/pos/admin/extras/{extra.Id}", token);
+        updateReq.Content = JsonContent.Create(new { extra.Name, extra.Price, extra.IsActive, extra.IsAvailable });
+        using var response = await _client.SendAsync(updateReq);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private async Task UpdateOptionItemAsync(string token, Guid optionSetId, OptionItemResponse item)
+    {
+        using var updateReq = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/pos/admin/option-sets/{optionSetId}/items/{item.Id}", token);
+        updateReq.Content = JsonContent.Create(new { item.Name, item.IsActive, item.IsAvailable, item.SortOrder });
+        using var response = await _client.SendAsync(updateReq);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     private async Task<T> PostAsync<T>(string url, string token, object body)

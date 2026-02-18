@@ -144,25 +144,80 @@ public sealed class PosCatalogService : IPosCatalogService
 
     public async Task<string> ComputeCatalogEtagAsync(CancellationToken ct)
     {
-        var maxCategory = await _db.Categories.AsNoTracking().MaxAsync(x => (DateTimeOffset?)x.UpdatedAtUtc, ct).ConfigureAwait(false);
-        var maxProduct = await _db.Products.AsNoTracking().MaxAsync(x => (DateTimeOffset?)x.UpdatedAtUtc, ct).ConfigureAwait(false);
-        var maxExtra = await _db.Extras.AsNoTracking().MaxAsync(x => (DateTimeOffset?)x.UpdatedAtUtc, ct).ConfigureAwait(false);
-        var maxOptionSet = await _db.OptionSets.AsNoTracking().MaxAsync(x => (DateTimeOffset?)x.UpdatedAtUtc, ct).ConfigureAwait(false);
-        var maxOptionItem = await _db.OptionItems.AsNoTracking().MaxAsync(x => (DateTimeOffset?)x.UpdatedAtUtc, ct).ConfigureAwait(false);
+        var categories = await _db.Categories.AsNoTracking()
+            .OrderBy(x => x.Id)
+            .Select(x => $"{x.Id:N}|{x.Name}|{x.SortOrder}|{x.IsActive}")
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
-        var maxTicks = new[] { maxCategory, maxProduct, maxExtra, maxOptionSet, maxOptionItem }
-            .Where(x => x.HasValue)
-            .Select(x => x!.Value.UtcTicks)
-            .DefaultIfEmpty(0L)
-            .Max();
+        var products = await _db.Products.AsNoTracking()
+            .OrderBy(x => x.Id)
+            .Select(x => $"{x.Id:N}|{x.ExternalCode}|{x.Name}|{x.CategoryId:N}|{x.SubcategoryName}|{x.BasePrice}|{x.IsActive}|{x.IsAvailable}|{x.CustomizationSchemaId}")
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
-        var categoryCount = await _db.Categories.AsNoTracking().CountAsync(ct).ConfigureAwait(false);
-        var productCount = await _db.Products.AsNoTracking().CountAsync(ct).ConfigureAwait(false);
-        var extraCount = await _db.Extras.AsNoTracking().CountAsync(ct).ConfigureAwait(false);
-        var optionSetCount = await _db.OptionSets.AsNoTracking().CountAsync(ct).ConfigureAwait(false);
-        var optionItemCount = await _db.OptionItems.AsNoTracking().CountAsync(ct).ConfigureAwait(false);
+        var optionSets = await _db.OptionSets.AsNoTracking()
+            .OrderBy(x => x.Id)
+            .Select(x => $"{x.Id:N}|{x.Name}|{x.IsActive}")
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
-        return $"W/\"{maxTicks}-{categoryCount}-{productCount}-{extraCount}-{optionSetCount}-{optionItemCount}\"";
+        var optionItems = await _db.OptionItems.AsNoTracking()
+            .OrderBy(x => x.Id)
+            .Select(x => $"{x.Id:N}|{x.OptionSetId:N}|{x.Name}|{x.IsActive}|{x.IsAvailable}|{x.SortOrder}")
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var schemas = await _db.CustomizationSchemas.AsNoTracking()
+            .OrderBy(x => x.Id)
+            .Select(x => $"{x.Id:N}|{x.Name}|{x.IsActive}")
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var groups = await _db.SelectionGroups.AsNoTracking()
+            .OrderBy(x => x.Id)
+            .Select(x => $"{x.Id:N}|{x.SchemaId:N}|{x.Key}|{x.Label}|{x.SelectionMode}|{x.MinSelections}|{x.MaxSelections}|{x.OptionSetId:N}|{x.IsActive}|{x.SortOrder}")
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var extras = await _db.Extras.AsNoTracking()
+            .OrderBy(x => x.Id)
+            .Select(x => $"{x.Id:N}|{x.Name}|{x.Price}|{x.IsActive}|{x.IsAvailable}")
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var included = await _db.IncludedItems.AsNoTracking()
+            .OrderBy(x => x.Id)
+            .Select(x => $"{x.Id:N}|{x.ProductId:N}|{x.ExtraId:N}|{x.Quantity}")
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var overrides = await _db.ProductGroupOverrides.AsNoTracking()
+            .OrderBy(x => x.Id)
+            .Select(x => $"{x.Id:N}|{x.ProductId:N}|{x.GroupKey}|{x.IsActive}")
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var overrideAllowed = await _db.ProductGroupOverrideAllowedItems.AsNoTracking()
+            .OrderBy(x => x.ProductGroupOverrideId)
+            .ThenBy(x => x.OptionItemId)
+            .Select(x => $"{x.ProductGroupOverrideId:N}|{x.OptionItemId:N}")
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var sections = categories
+            .Concat(products)
+            .Concat(optionSets)
+            .Concat(optionItems)
+            .Concat(schemas)
+            .Concat(groups)
+            .Concat(extras)
+            .Concat(included)
+            .Concat(overrides)
+            .Concat(overrideAllowed);
+        var etagSeed = string.Join('\n', sections);
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(etagSeed));
+        return $"W/\"{Convert.ToHexString(bytes)}\"";
     }
 
     private static ProductDto Map(Product x) => new(x.Id, x.ExternalCode, x.Name, x.CategoryId, x.SubcategoryName, x.BasePrice, x.IsActive, x.IsAvailable, x.CustomizationSchemaId);

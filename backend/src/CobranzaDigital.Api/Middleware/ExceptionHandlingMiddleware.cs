@@ -84,10 +84,7 @@ public sealed partial class ExceptionHandlingMiddleware
         {
             problemDetails.Extensions["itemType"] = unavailableException.ItemType;
             problemDetails.Extensions["itemId"] = unavailableException.ItemId;
-            if (!string.IsNullOrWhiteSpace(unavailableException.ItemName))
-            {
-                problemDetails.Extensions["itemName"] = unavailableException.ItemName;
-            }
+            problemDetails.Extensions["itemName"] = unavailableException.ItemName ?? string.Empty;
         }
 
         problemDetails.Extensions["traceId"] = Activity.Current?.Id ?? context.TraceIdentifier;
