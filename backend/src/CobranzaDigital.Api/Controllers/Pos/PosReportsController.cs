@@ -100,4 +100,78 @@ public sealed class PosReportsController : ControllerBase
     {
         return _service.GetVoidReasonsReportAsync(dateFrom, dateTo, storeId, ct);
     }
+
+    [HttpGet("sales/categories")]
+    public Task<PosCategorySalesMixResponseDto> GetSalesByCategories(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        [FromQuery] Guid? storeId,
+        [FromQuery] Guid? cashierUserId,
+        [FromQuery] Guid? shiftId,
+        CancellationToken ct)
+    {
+        return _service.GetSalesByCategoriesAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, ct);
+    }
+
+    [HttpGet("sales/products")]
+    public Task<PosProductSalesMixResponseDto> GetSalesByProducts(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        [FromQuery] Guid? storeId,
+        [FromQuery] Guid? cashierUserId,
+        [FromQuery] Guid? shiftId,
+        [FromQuery] int top = 20,
+        CancellationToken ct = default)
+    {
+        return _service.GetSalesByProductsAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, top, ct);
+    }
+
+    [HttpGet("sales/addons/extras")]
+    public Task<PosTopExtraAddonsResponseDto> GetSalesAddonsExtras(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        [FromQuery] Guid? storeId,
+        [FromQuery] Guid? cashierUserId,
+        [FromQuery] Guid? shiftId,
+        [FromQuery] int top = 20,
+        CancellationToken ct = default)
+    {
+        return _service.GetSalesAddonsExtrasAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, top, ct);
+    }
+
+    [HttpGet("sales/addons/options")]
+    public Task<PosTopOptionAddonsResponseDto> GetSalesAddonsOptions(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        [FromQuery] Guid? storeId,
+        [FromQuery] Guid? cashierUserId,
+        [FromQuery] Guid? shiftId,
+        [FromQuery] int top = 20,
+        CancellationToken ct = default)
+    {
+        return _service.GetSalesAddonsOptionsAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, top, ct);
+    }
+
+    [HttpGet("kpis/summary")]
+    public Task<PosKpisSummaryDto> GetKpisSummary(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        [FromQuery] Guid? storeId,
+        [FromQuery] Guid? cashierUserId,
+        [FromQuery] Guid? shiftId,
+        CancellationToken ct)
+    {
+        return _service.GetKpisSummaryAsync(dateFrom, dateTo, storeId, cashierUserId, shiftId, ct);
+    }
+
+    [HttpGet("control/cash-differences")]
+    public Task<PosCashDifferencesResponseDto> GetControlCashDifferences(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        [FromQuery] Guid? storeId,
+        [FromQuery] Guid? cashierUserId,
+        CancellationToken ct)
+    {
+        return _service.GetCashDifferencesControlAsync(dateFrom, dateTo, storeId, cashierUserId, ct);
+    }
 }

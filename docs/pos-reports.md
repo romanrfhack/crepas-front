@@ -122,6 +122,144 @@ Base path: `GET /api/v1/pos/reports/*`
 - Filtros nuevos opcionales: `storeId`, `cashierUserId`, `shiftId`.
 - Si no se envían, se preserva el comportamiento previo (rango + top).
 
+## v2 endpoints (operativos extendidos)
+
+Los endpoints siguientes se exponen también bajo `GET /api/v1/pos/reports/*` y **no rompen v1**.
+
+### Cálculo de `grossSales` (v2)
+
+Para mix por categoría/producto:
+
+- `base = SaleItems.LineTotal`
+- `extras = SUM(SaleItemExtras.LineTotal)` por `SaleItemId`
+- `selectionsImpact = SUM(SaleItemSelections.PriceDeltaSnapshot * SaleItems.Quantity)` por `SaleItemId`
+- `grossLine = base + extras + selectionsImpact`
+
+Notas:
+- Se excluyen ventas `Status=Void` de métricas de ventas/pagos.
+- Las fechas `dateFrom/dateTo` se interpretan en zona local del store (`Store.TimeZoneId`) y luego se convierten a UTC para filtrar.
+
+### 8) Mix de ventas por categoría
+
+`GET /api/v1/pos/reports/sales/categories?dateFrom=2026-04-01&dateTo=2026-04-02&storeId=<guid>&cashierUserId=<guid>&shiftId=<guid>`
+
+```json
+{
+  "items": [
+    {
+      "categoryId": "<guid>",
+      "categoryName": "Bebidas",
+      "tickets": 12,
+      "quantity": 21,
+      "grossSales": 3560.0
+    }
+  ]
+}
+```
+
+### 9) Mix de ventas por producto
+
+`GET /api/v1/pos/reports/sales/products?dateFrom=2026-04-01&dateTo=2026-04-02&storeId=<guid>&top=20`
+
+```json
+{
+  "items": [
+    {
+      "productId": "<guid>",
+      "sku": "P-A",
+      "productName": "Producto A",
+      "tickets": 8,
+      "quantity": 14,
+      "grossSales": 1820.0
+    }
+  ]
+}
+```
+
+### 10) Add-ons: extras más vendidos
+
+`GET /api/v1/pos/reports/sales/addons/extras?dateFrom=2026-04-01&dateTo=2026-04-02&storeId=<guid>&top=20`
+
+```json
+{
+  "items": [
+    {
+      "extraId": "<guid>",
+      "extraSku": "<guid>",
+      "extraName": "Queso extra",
+      "quantity": 18,
+      "grossSales": 360.0
+    }
+  ]
+}
+```
+
+### 11) Add-ons: opciones más usadas
+
+`GET /api/v1/pos/reports/sales/addons/options?dateFrom=2026-04-01&dateTo=2026-04-02&storeId=<guid>&top=20`
+
+```json
+{
+  "items": [
+    {
+      "optionItemId": "<guid>",
+      "optionItemSku": "<guid>",
+      "optionItemName": "Salsa especial",
+      "usageCount": 11,
+      "grossImpact": 220.0
+    }
+  ]
+}
+```
+
+### 12) KPIs operativos resumidos
+
+`GET /api/v1/pos/reports/kpis/summary?dateFrom=2026-04-01&dateTo=2026-04-02&storeId=<guid>`
+
+```json
+{
+  "tickets": 42,
+  "totalItems": 97,
+  "grossSales": 10240.0,
+  "avgTicket": 243.81,
+  "avgItemsPerTicket": 2.31,
+  "voidCount": 3,
+  "voidRate": 0.0667
+}
+```
+
+### 13) Control de diferencias de caja
+
+`GET /api/v1/pos/reports/control/cash-differences?dateFrom=2026-04-01&dateTo=2026-04-02&storeId=<guid>&cashierUserId=<guid>`
+
+```json
+{
+  "daily": [
+    {
+      "date": "2026-04-01",
+      "cashierUserId": "<guid>",
+      "shifts": 1,
+      "expectedCash": 1000.0,
+      "countedCash": 980.0,
+      "difference": -20.0,
+      "reasonCount": 1
+    }
+  ],
+  "shifts": [
+    {
+      "shiftId": "<guid>",
+      "openedAt": "2026-04-01T14:00:00Z",
+      "closedAt": "2026-04-01T22:00:00Z",
+      "cashierUserId": "<guid>",
+      "expectedCash": 1000.0,
+      "countedCash": 980.0,
+      "difference": -20.0,
+      "closeReason": "Short"
+    }
+  ]
+}
+```
+
 ## Frontend usage (Dashboard Reportes Operativos v1)
 
 - Pantalla: `/app/pos/reportes`.
