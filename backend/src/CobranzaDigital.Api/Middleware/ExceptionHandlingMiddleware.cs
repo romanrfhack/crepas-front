@@ -80,6 +80,16 @@ public sealed partial class ExceptionHandlingMiddleware
             _ => CreateProblemDetails(context, StatusCodes.Status500InternalServerError, "Unexpected error")
         };
 
+        if (exception is ItemUnavailableException unavailableException)
+        {
+            problemDetails.Extensions["itemType"] = unavailableException.ItemType;
+            problemDetails.Extensions["itemId"] = unavailableException.ItemId;
+            if (!string.IsNullOrWhiteSpace(unavailableException.ItemName))
+            {
+                problemDetails.Extensions["itemName"] = unavailableException.ItemName;
+            }
+        }
+
         problemDetails.Extensions["traceId"] = Activity.Current?.Id ?? context.TraceIdentifier;
         problemDetails.Extensions["correlationId"] = correlationId;
 

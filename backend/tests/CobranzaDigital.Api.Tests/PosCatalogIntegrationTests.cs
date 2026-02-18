@@ -69,6 +69,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.NotNull(snapshot);
         Assert.NotEmpty(snapshot!.Products);
         Assert.Contains(snapshot.Overrides, x => x.ProductId == product.Id && x.AllowedOptionItemIds.Contains(itemA.Id));
+        Assert.True(snapshot.Products.Any(x => x.IsAvailable));
     }
 
     [Fact]
@@ -85,6 +86,63 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var snapshotResp = await _client.SendAsync(snapshotReq);
 
         Assert.Equal(HttpStatusCode.OK, snapshotResp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Snapshot_Uses_Etag_And_Changes_When_Availability_Changes()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"etag-cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "ETag Product", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true });
+
+        using var firstReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
+        using var firstResp = await _client.SendAsync(firstReq);
+        Assert.Equal(HttpStatusCode.OK, firstResp.StatusCode);
+        Assert.True(firstResp.Headers.TryGetValues("ETag", out var etags));
+        var etag = etags!.Single();
+
+        using var secondReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
+        secondReq.Headers.TryAddWithoutValidation("If-None-Match", etag);
+        using var secondResp = await _client.SendAsync(secondReq);
+        Assert.Equal(HttpStatusCode.NotModified, secondResp.StatusCode);
+
+        using var updateReq = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/pos/admin/products/{product.Id}", token);
+        updateReq.Content = JsonContent.Create(new { product.ExternalCode, product.Name, product.CategoryId, product.SubcategoryName, product.BasePrice, product.IsActive, isAvailable = false, product.CustomizationSchemaId });
+        using var updateResp = await _client.SendAsync(updateReq);
+        Assert.Equal(HttpStatusCode.OK, updateResp.StatusCode);
+
+        using var thirdReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
+        thirdReq.Headers.TryAddWithoutValidation("If-None-Match", etag);
+        using var thirdResp = await _client.SendAsync(thirdReq);
+        Assert.Equal(HttpStatusCode.OK, thirdResp.StatusCode);
+        Assert.True(thirdResp.Headers.TryGetValues("ETag", out var changedEtags));
+        Assert.NotEqual(etag, changedEtags!.Single());
+    }
+
+    [Fact]
+    public async Task Catalog_Admin_Modifications_Allow_AdminAndManager_But_Deny_Cashier()
+    {
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var managerEmail = $"manager.catalog.{Guid.NewGuid():N}@test.local";
+        var cashierEmail = $"cashier.catalog.{Guid.NewGuid():N}@test.local";
+        _ = await RegisterAndGetAccessTokenAsync(managerEmail, "User1234!");
+        _ = await RegisterAndGetAccessTokenAsync(cashierEmail, "User1234!");
+
+        await SetUserRolesAsync(adminToken, managerEmail, ["Manager"]);
+        await SetUserRolesAsync(adminToken, cashierEmail, ["Cashier"]);
+
+        var managerToken = await LoginAndGetAccessTokenAsync(managerEmail, "User1234!");
+        var cashierToken = await LoginAndGetAccessTokenAsync(cashierEmail, "User1234!");
+
+        using var managerCreate = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/categories", managerToken);
+        managerCreate.Content = JsonContent.Create(new { name = $"ManagerCat-{Guid.NewGuid():N}", sortOrder = 5, isActive = true });
+        using var managerResp = await _client.SendAsync(managerCreate);
+        Assert.Equal(HttpStatusCode.OK, managerResp.StatusCode);
+
+        using var cashierCreate = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/categories", cashierToken);
+        cashierCreate.Content = JsonContent.Create(new { name = $"CashierCat-{Guid.NewGuid():N}", sortOrder = 6, isActive = true });
+        using var cashierResp = await _client.SendAsync(cashierCreate);
+        Assert.Equal(HttpStatusCode.Forbidden, cashierResp.StatusCode);
     }
 
     [Fact]
@@ -166,13 +224,13 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
     private sealed record CategoryResponse(Guid Id, string Name, int SortOrder, bool IsActive);
-    private sealed record ProductResponse(Guid Id, string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive, Guid? CustomizationSchemaId);
+    private sealed record ProductResponse(Guid Id, string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive, bool IsAvailable, Guid? CustomizationSchemaId);
     private sealed record OptionSetResponse(Guid Id, string Name, bool IsActive);
-    private sealed record OptionItemResponse(Guid Id, Guid OptionSetId, string Name, bool IsActive, int SortOrder);
+    private sealed record OptionItemResponse(Guid Id, Guid OptionSetId, string Name, bool IsActive, bool IsAvailable, int SortOrder);
     private sealed record SchemaResponse(Guid Id, string Name, bool IsActive);
-    private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive);
+    private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive, bool IsAvailable);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
-    private sealed record SnapshotResponse(List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
+    private sealed record SnapshotResponse(Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record PagedResponse(List<UserListItem> Items);
     private sealed record UserListItem([property: JsonPropertyName("id")] string Id);
     private sealed record AdminUserResponse(string Id, string Email, string UserName, IReadOnlyCollection<string> Roles, bool IsLockedOut, DateTimeOffset? LockoutEnd);

@@ -16,6 +16,7 @@ public sealed class Category : Entity
     public string Name { get; set; } = string.Empty;
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
+    public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public sealed class Product : Entity
@@ -26,6 +27,8 @@ public sealed class Product : Entity
     public string? SubcategoryName { get; set; }
     public decimal BasePrice { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsAvailable { get; set; } = true;
+    public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public Guid? CustomizationSchemaId { get; set; }
 }
 
@@ -33,6 +36,7 @@ public sealed class OptionSet : Entity
 {
     public string Name { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
+    public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public sealed class OptionItem : Entity
@@ -40,7 +44,9 @@ public sealed class OptionItem : Entity
     public Guid OptionSetId { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
+    public bool IsAvailable { get; set; } = true;
     public int SortOrder { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public sealed class CustomizationSchema : Entity
@@ -67,6 +73,8 @@ public sealed class Extra : Entity
     public string Name { get; set; } = string.Empty;
     public decimal Price { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsAvailable { get; set; } = true;
+    public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public sealed class IncludedItem : Entity

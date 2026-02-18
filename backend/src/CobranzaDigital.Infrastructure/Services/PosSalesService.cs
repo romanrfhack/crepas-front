@@ -109,7 +109,13 @@ public sealed class PosSalesService : IPosSalesService
 
             if (products.Count != productIds.Length)
             {
-                throw new NotFoundException("One or more products were not found or are inactive.");
+                throw ValidationError("items.productId", "One or more products were not found or are inactive.");
+            }
+
+            var unavailableProduct = products.Values.FirstOrDefault(x => !x.IsAvailable);
+            if (unavailableProduct is not null)
+            {
+                throw new ItemUnavailableException("Product", unavailableProduct.Id, unavailableProduct.Name);
             }
 
             var optionIds = request.Items
@@ -126,7 +132,13 @@ public sealed class PosSalesService : IPosSalesService
 
             if (options.Count != optionIds.Length)
             {
-                throw new NotFoundException("One or more option items were not found or are inactive.");
+                throw ValidationError("items.selections.optionItemId", "One or more option items were not found or are inactive.");
+            }
+
+            var unavailableOption = options.Values.FirstOrDefault(x => !x.IsAvailable);
+            if (unavailableOption is not null)
+            {
+                throw new ItemUnavailableException("OptionItem", unavailableOption.Id, unavailableOption.Name);
             }
 
             var extraIds = request.Items
@@ -143,7 +155,13 @@ public sealed class PosSalesService : IPosSalesService
 
             if (extras.Count != extraIds.Length)
             {
-                throw new NotFoundException("One or more extras were not found or are inactive.");
+                throw ValidationError("items.extras.extraId", "One or more extras were not found or are inactive.");
+            }
+
+            var unavailableExtra = extras.Values.FirstOrDefault(x => !x.IsAvailable);
+            if (unavailableExtra is not null)
+            {
+                throw new ItemUnavailableException("Extra", unavailableExtra.Id, unavailableExtra.Name);
             }
 
             var saleId = Guid.NewGuid();

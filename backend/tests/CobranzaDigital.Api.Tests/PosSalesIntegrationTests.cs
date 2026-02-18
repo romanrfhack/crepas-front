@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 using CobranzaDigital.Infrastructure.Persistence;
 
@@ -362,6 +363,52 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     }
 
     [Fact]
+    public async Task CreateSale_ReturnsConflict_When_Product_NotAvailable()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"prod-unavail-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "No Latte", categoryId = category.Id, basePrice = 70m, isActive = true, isAvailable = false });
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        request.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 70m } });
+        using var response = await _client.SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<JsonObject>();
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("Product", payload!["itemType"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task CreateSale_ReturnsConflict_When_Extra_Or_Option_NotAvailable_And_Validation400_For_MissingIds()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var optionSet = await PostAsync<OptionSetResponse>("/api/v1/pos/admin/option-sets", token, new { name = $"opt-{Guid.NewGuid():N}", isActive = true });
+        var optionItem = await PostAsync<OptionItemResponse>($"/api/v1/pos/admin/option-sets/{optionSet.Id}/items", token, new { name = "No topping", isActive = true, isAvailable = false, sortOrder = 1 });
+        var extra = await PostAsync<ExtraResponse>("/api/v1/pos/admin/extras", token, new { name = "No whip", price = 5m, isActive = true, isAvailable = false });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Cocoa", categoryId = category.Id, basePrice = 80m, isActive = true, isAvailable = true });
+
+        using var optionRequest = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        optionRequest.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 1, selections = new[] { new { groupKey = "x", optionItemId = optionItem.Id } }, extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 80m } });
+        using var optionResponse = await _client.SendAsync(optionRequest);
+        Assert.Equal(HttpStatusCode.Conflict, optionResponse.StatusCode);
+
+        using var extraRequest = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        extraRequest.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = new[] { new { extraId = extra.Id, quantity = 1 } } } }, payment = new { method = "Cash", amount = 85m } });
+        using var extraResponse = await _client.SendAsync(extraRequest);
+        Assert.Equal(HttpStatusCode.Conflict, extraResponse.StatusCode);
+
+        using var invalidIdsRequest = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        invalidIdsRequest.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = Guid.NewGuid(), quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 1m } });
+        using var invalidIdsResponse = await _client.SendAsync(invalidIdsRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidIdsResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task VoidSale_IsIdempotent_ByClientVoidId()
     {
         await CloseAnyOpenShiftAsync();
@@ -472,8 +519,10 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
 
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
     private sealed record CategoryResponse(Guid Id, string Name, int SortOrder, bool IsActive);
-    private sealed record ProductResponse(Guid Id, string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive, Guid? CustomizationSchemaId);
-    private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive);
+    private sealed record ProductResponse(Guid Id, string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive, bool IsAvailable, Guid? CustomizationSchemaId);
+    private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive, bool IsAvailable);
+    private sealed record OptionSetResponse(Guid Id, string Name, bool IsActive);
+    private sealed record OptionItemResponse(Guid Id, Guid OptionSetId, string Name, bool IsActive, bool IsAvailable, int SortOrder);
     private sealed record CreateSaleResponse(Guid SaleId, string Folio, DateTimeOffset OccurredAtUtc, decimal Total);
     private sealed record PosShiftResponse(Guid Id, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc, decimal OpeningCashAmount, decimal? ClosingCashAmount, string? Notes, Guid StoreId);
     private sealed record ShiftClosePreviewResponse(Guid ShiftId, DateTimeOffset OpenedAtUtc, decimal OpeningCashAmount, decimal SalesCashTotal, decimal ExpectedCashAmount, decimal? CountedCashAmount, decimal? Difference);

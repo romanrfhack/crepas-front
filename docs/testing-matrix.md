@@ -35,3 +35,7 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 2. Actualiza tests de la columna “qué actualizar”.
 3. Si el cambio introduce un nuevo feature/endpoint, agrega una nueva fila a esta matriz.
 4. Vincula también cambios de contrato en `docs/compatibility-notes.md` cuando aplique.
+
+| `GET /api/v1/pos/catalog/snapshot` | `backend/tests/CobranzaDigital.Api.Tests/PosCatalogIntegrationTests.cs` valida autorización, payload con `isAvailable` y contrato de ETag/304. | Actualizar al modificar shape del snapshot, reglas de store/timezone o estrategia de cache. |
+
+| Disponibilidad al crear venta (`POST /api/v1/pos/sales`) | `backend/tests/CobranzaDigital.Api.Tests/PosSalesIntegrationTests.cs` valida `409` para `Product/Extra/OptionItem` no disponibles y `400` para IDs inválidos. | Ajustar cuando cambien reglas de disponibilidad o formato de errores `ProblemDetails`. |

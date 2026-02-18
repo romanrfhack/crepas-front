@@ -150,7 +150,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthorizationPolicies.AdminOnly, policy =>
         policy.RequireRole("Admin"));
     options.AddPolicy(AuthorizationPolicies.PosAdmin, policy =>
-        policy.RequireRole("Admin"));
+        policy.RequireRole("Admin", "Manager"));
     options.AddPolicy(AuthorizationPolicies.PosOperator, policy =>
         policy.RequireRole("Admin", "Cashier", "Manager"));
     options.AddPolicy(AuthorizationPolicies.PosReportViewer, policy =>

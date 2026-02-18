@@ -95,3 +95,9 @@ Response:
 ## Reportes operativos v1
 
 La especificación de los nuevos endpoints de reportes POS se documenta en `docs/pos-reports.md`.
+
+
+## Catálogo y disponibilidad
+
+- El contrato de snapshot de catálogo, caching con ETag y semántica `isActive`/`isAvailable` se documenta en `docs/pos-catalog.md`.
+- La creación de venta valida disponibilidad en servidor y devuelve `409 Conflict` cuando un item está temporalmente no disponible.
