@@ -25,24 +25,20 @@ const snapshotFixture = {
 
 describe('PosCatalogSnapshotService', () => {
   let service: PosCatalogSnapshotService;
+  let storeContext: StoreContextService;
   let httpMock: HttpTestingController;
 
   beforeEach(() => {
     localStorage.clear();
+    localStorage.setItem('pos_active_store_id', 'context-store');
+
     TestBed.configureTestingModule({
       imports: [HttpClientTestingModule],
-      providers: [
-        PosCatalogSnapshotService,
-        {
-          provide: StoreContextService,
-          useValue: {
-            getActiveStoreId: () => 'context-store',
-          },
-        },
-      ],
+      providers: [PosCatalogSnapshotService, StoreContextService],
     });
 
     service = TestBed.inject(PosCatalogSnapshotService);
+    storeContext = TestBed.inject(StoreContextService);
     httpMock = TestBed.inject(HttpTestingController);
   });
 
@@ -53,7 +49,9 @@ describe('PosCatalogSnapshotService', () => {
 
   it('stores ETag on 200 and sends If-None-Match on next request', async () => {
     const first = firstValueFrom(service.getSnapshot({ storeId: 'store-1' }));
-    const req1 = httpMock.expectOne(`${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=store-1`);
+    const req1 = httpMock.expectOne(
+      `${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=store-1`,
+    );
     expect(req1.request.headers.has('If-None-Match')).toBe(false);
     req1.flush(snapshotFixture, {
       status: 200,
@@ -63,7 +61,9 @@ describe('PosCatalogSnapshotService', () => {
     await first;
 
     const second = firstValueFrom(service.getSnapshot({ storeId: 'store-1' }));
-    const req2 = httpMock.expectOne(`${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=store-1`);
+    const req2 = httpMock.expectOne(
+      `${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=store-1`,
+    );
     expect(req2.request.headers.get('If-None-Match')).toBe('"abc"');
     req2.flush(snapshotFixture, { status: 200, statusText: 'OK' });
     await second;
@@ -71,7 +71,9 @@ describe('PosCatalogSnapshotService', () => {
 
   it('returns cached snapshot when server responds 304', async () => {
     const prime = firstValueFrom(service.getSnapshot({ storeId: 'store-1' }));
-    const req1 = httpMock.expectOne(`${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=store-1`);
+    const req1 = httpMock.expectOne(
+      `${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=store-1`,
+    );
     req1.flush(snapshotFixture, {
       status: 200,
       statusText: 'OK',
@@ -80,7 +82,9 @@ describe('PosCatalogSnapshotService', () => {
     await prime;
 
     const getCached = firstValueFrom(service.getSnapshot({ storeId: 'store-1' }));
-    const req2 = httpMock.expectOne(`${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=store-1`);
+    const req2 = httpMock.expectOne(
+      `${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=store-1`,
+    );
     req2.flush('', { status: 304, statusText: 'Not Modified' });
 
     await expect(getCached).resolves.toEqual(snapshotFixture);
@@ -101,23 +105,40 @@ describe('PosCatalogSnapshotService', () => {
     contextReq.flush(snapshotFixture, { status: 200, statusText: 'OK' });
     await context;
 
-    TestBed.resetTestingModule();
-    TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule],
-      providers: [
-        PosCatalogSnapshotService,
-        { provide: StoreContextService, useValue: { getActiveStoreId: () => null } },
-      ],
-    });
-    const withoutStoreService = TestBed.inject(PosCatalogSnapshotService);
-    const withoutStoreHttpMock = TestBed.inject(HttpTestingController);
+    storeContext.setActiveStoreId(null);
 
-    const omitted = firstValueFrom(withoutStoreService.getSnapshot());
-    const omittedReq = withoutStoreHttpMock.expectOne(
-      `${environment.apiBaseUrl}/v1/pos/catalog/snapshot`,
-    );
+    const omitted = firstValueFrom(service.getSnapshot());
+    const omittedReq = httpMock.expectOne(`${environment.apiBaseUrl}/v1/pos/catalog/snapshot`);
     omittedReq.flush(snapshotFixture, { status: 200, statusText: 'OK' });
     await omitted;
-    withoutStoreHttpMock.verify();
+  });
+
+  it('invalidates previous store cache and refetches when active store changes', async () => {
+    const first = firstValueFrom(service.getSnapshot());
+    const firstReq = httpMock.expectOne(
+      `${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=context-store`,
+    );
+    firstReq.flush(snapshotFixture, {
+      status: 200,
+      statusText: 'OK',
+      headers: { ETag: '"etag-context-store"' },
+    });
+    await first;
+
+    const cachedEntryKey = 'pos_catalog_snapshot_cache:context-store';
+    expect(localStorage.getItem(cachedEntryKey)).toContain('etag-context-store');
+
+    storeContext.setActiveStoreId('store-2');
+    TestBed.flushEffects();
+
+    expect(localStorage.getItem(cachedEntryKey)).toBeNull();
+
+    const second = firstValueFrom(service.getSnapshot());
+    const secondReq = httpMock.expectOne(
+      `${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=store-2`,
+    );
+    expect(secondReq.request.headers.has('If-None-Match')).toBe(false);
+    secondReq.flush({ ...snapshotFixture, storeId: 'store-2' }, { status: 200, statusText: 'OK' });
+    await second;
   });
 });

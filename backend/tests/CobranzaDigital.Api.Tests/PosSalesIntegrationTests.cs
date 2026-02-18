@@ -363,7 +363,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     }
 
     [Fact]
-    public async Task CreateSale_ReturnsConflict_When_Product_NotAvailable()
+    public async Task CreateSale_ReturnsConflict_WithStableItemUnavailablePayload_When_Product_NotAvailable()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         await EnsureOpenShiftAsync(token, "admin@test.local");
@@ -374,14 +374,12 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
         request.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 70m } });
         using var response = await _client.SendAsync(request);
-        var payload = await response.Content.ReadFromJsonAsync<JsonObject>();
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Equal("Product", payload!["itemType"]!.GetValue<string>());
+        await AssertItemUnavailableResponseAsync(response, "Product", product.Id, product.Name);
     }
 
     [Fact]
-    public async Task CreateSale_ReturnsConflict_When_Extra_Or_Option_NotAvailable_And_Validation400_For_MissingIds()
+    public async Task CreateSale_ReturnsConflict_WithStableItemUnavailablePayload_When_OptionItem_NotAvailable()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         await EnsureOpenShiftAsync(token, "admin@test.local");
@@ -389,18 +387,29 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
         var optionSet = await PostAsync<OptionSetResponse>("/api/v1/pos/admin/option-sets", token, new { name = $"opt-{Guid.NewGuid():N}", isActive = true });
         var optionItem = await PostAsync<OptionItemResponse>($"/api/v1/pos/admin/option-sets/{optionSet.Id}/items", token, new { name = "No topping", isActive = true, isAvailable = false, sortOrder = 1 });
-        var extra = await PostAsync<ExtraResponse>("/api/v1/pos/admin/extras", token, new { name = "No whip", price = 5m, isActive = true, isAvailable = false });
         var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Cocoa", categoryId = category.Id, basePrice = 80m, isActive = true, isAvailable = true });
 
-        using var optionRequest = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
-        optionRequest.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 1, selections = new[] { new { groupKey = "x", optionItemId = optionItem.Id } }, extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 80m } });
-        using var optionResponse = await _client.SendAsync(optionRequest);
-        Assert.Equal(HttpStatusCode.Conflict, optionResponse.StatusCode);
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        request.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 1, selections = new[] { new { groupKey = "x", optionItemId = optionItem.Id } }, extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 80m } });
+        using var response = await _client.SendAsync(request);
+
+        await AssertItemUnavailableResponseAsync(response, "OptionItem", optionItem.Id, optionItem.Name);
+    }
+
+    [Fact]
+    public async Task CreateSale_ReturnsConflict_WithStableItemUnavailablePayload_When_Extra_NotAvailable_And_Validation400_For_MissingIds()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var extra = await PostAsync<ExtraResponse>("/api/v1/pos/admin/extras", token, new { name = "No whip", price = 5m, isActive = true, isAvailable = false });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Cocoa", categoryId = category.Id, basePrice = 80m, isActive = true, isAvailable = true });
 
         using var extraRequest = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
         extraRequest.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = new[] { new { extraId = extra.Id, quantity = 1 } } } }, payment = new { method = "Cash", amount = 85m } });
         using var extraResponse = await _client.SendAsync(extraRequest);
-        Assert.Equal(HttpStatusCode.Conflict, extraResponse.StatusCode);
+        await AssertItemUnavailableResponseAsync(extraResponse, "Extra", extra.Id, extra.Name);
 
         using var invalidIdsRequest = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
         invalidIdsRequest.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = Guid.NewGuid(), quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 1m } });
@@ -455,6 +464,18 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
 
         using var resp = await _client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    private static async Task AssertItemUnavailableResponseAsync(HttpResponseMessage response, string expectedItemType, Guid expectedItemId, string expectedItemName)
+    {
+        var payload = await response.Content.ReadFromJsonAsync<JsonObject>();
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal("Conflict", payload!["title"]!.GetValue<string>());
+        Assert.Equal(expectedItemType, payload["itemType"]!.GetValue<string>());
+        Assert.Equal(expectedItemId.ToString("D"), payload["itemId"]!.GetValue<string>());
+        Assert.Equal(expectedItemName, payload["itemName"]!.GetValue<string>());
     }
 
     private async Task<T> PostAsync<T>(string url, string token, object body)

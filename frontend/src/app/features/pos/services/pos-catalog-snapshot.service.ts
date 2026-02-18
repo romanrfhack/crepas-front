@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse, HttpHeaders, HttpResponse } from '@angular/common/http';
-import { inject, Injectable, signal } from '@angular/core';
+import { effect, inject, Injectable, signal } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { environment } from '../../../../environments/environment';
@@ -23,8 +23,27 @@ export class PosCatalogSnapshotService {
   private readonly path = '/v1/pos/catalog/snapshot';
   private readonly cachePrefix = 'pos_catalog_snapshot_cache';
   private readonly snapshotState = signal<CatalogSnapshotDto | null>(null);
+  private previousStoreId: string | null;
 
   readonly snapshot = this.snapshotState.asReadonly();
+
+  constructor() {
+    this.previousStoreId = this.normalizeStoreId(this.storeContext.activeStoreId());
+
+    effect(() => {
+      const activeStoreId = this.normalizeStoreId(this.storeContext.activeStoreId());
+      if (activeStoreId === this.previousStoreId) {
+        return;
+      }
+
+      if (this.previousStoreId !== null) {
+        localStorage.removeItem(this.getScopedCacheKey(this.previousStoreId));
+      }
+
+      this.snapshotState.set(null);
+      this.previousStoreId = activeStoreId;
+    });
+  }
 
   getSnapshot(request: SnapshotRequest = {}): Observable<CatalogSnapshotDto> {
     const storeId = this.resolveStoreId(request.storeId);
@@ -96,12 +115,17 @@ export class PosCatalogSnapshotService {
   }
 
   private resolveStoreId(explicitStoreId?: string): string | null {
-    const normalizedExplicitStoreId = explicitStoreId?.trim();
+    const normalizedExplicitStoreId = this.normalizeStoreId(explicitStoreId);
     if (normalizedExplicitStoreId) {
       return normalizedExplicitStoreId;
     }
 
-    return this.storeContext.getActiveStoreId()?.trim() ?? null;
+    return this.normalizeStoreId(this.storeContext.getActiveStoreId());
+  }
+
+  private normalizeStoreId(storeId: string | null | undefined): string | null {
+    const normalizedStoreId = storeId?.trim();
+    return normalizedStoreId ? normalizedStoreId : null;
   }
 
   private buildUrl(storeId: string | null): string {
