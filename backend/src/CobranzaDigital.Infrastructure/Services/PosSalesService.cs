@@ -678,23 +678,37 @@ public sealed class PosSalesService : IPosSalesService
         var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
         var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
 
-        var shifts = await _db.PosShifts.AsNoTracking()
+        var shiftsData = await _db.PosShifts.AsNoTracking()
             .Where(x => x.StoreId == resolvedStoreId
                         && (!cashierUserId.HasValue || x.OpenedByUserId == cashierUserId.Value)
-                        && ((x.ClosedAtUtc ?? x.OpenedAtUtc) >= utcStart)
-                        && ((x.ClosedAtUtc ?? x.OpenedAtUtc) < utcEndExclusive))
+                        && x.OpenedAtUtc < utcEndExclusive
+                        && (x.ClosedAtUtc == null || x.ClosedAtUtc >= utcStart))
+            .Select(x => new
+            {
+                x.Id,
+                x.OpenedAtUtc,
+                x.ClosedAtUtc,
+                x.OpenedByUserId,
+                ExpectedCash = x.ExpectedCashAmount ?? 0m,
+                ClosingCash = x.ClosingCashAmount ?? 0m,
+                x.CashDifference,
+                x.CloseReason
+            })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var shifts = shiftsData
             .Select(x => new PosCashDifferencesShiftRowDto(
                 x.Id,
                 x.OpenedAtUtc,
                 x.ClosedAtUtc,
                 x.OpenedByUserId,
-                x.ExpectedCashAmount ?? 0m,
-                x.ClosingCashAmount ?? 0m,
-                x.CashDifference ?? ((x.ClosingCashAmount ?? 0m) - (x.ExpectedCashAmount ?? 0m)),
+                x.ExpectedCash,
+                x.ClosingCash,
+                x.CashDifference ?? (x.ClosingCash - x.ExpectedCash),
                 x.CloseReason))
             .OrderBy(x => x.OpenedAt)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+            .ToList();
 
         var daily = shifts
             .Select(x => new
