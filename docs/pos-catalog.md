@@ -31,6 +31,36 @@ Respuesta (resumen):
   - Conteos de esas tablas para evitar colisiones triviales.
 - Si el cliente manda `If-None-Match` igual al ETag vigente, el endpoint responde `304 Not Modified` sin body.
 
+## Frontend usage (POS)
+
+- El frontend consume `GET /api/v1/pos/catalog/snapshot` mediante un servicio dedicado (`PosCatalogSnapshotService`).
+- Estrategia de cache en cliente:
+  - Persistencia en `localStorage` por alcance de tienda (`storeId`) con entrada separada para `default`.
+  - Primer `GET`: guarda `snapshot + etag`.
+  - Siguientes `GET`: envía `If-None-Match` con el ETag guardado.
+  - `304 Not Modified`: reutiliza snapshot cacheado tipado.
+  - `200 OK`: reemplaza snapshot cacheado + ETag.
+- Scoping de tienda (`storeId`) en frontend:
+  1. `storeId` explícito de la llamada.
+  2. `StoreContextService.activeStoreId`.
+  3. omitido (backend resuelve tienda por defecto).
+
+## UX de disponibilidad en POS
+
+- Productos `isAvailable=false` se muestran `disabled` con badge **Agotado** y bloqueo duro de click.
+- Extras y OptionItems `isAvailable=false` se muestran deshabilitados en modal de personalización.
+- Además del bloqueo UI, se mantiene validación server-side por si el snapshot local está stale.
+
+### Fallback cuando backend devuelve 409 ItemUnavailable
+
+- Si `POST /api/v1/pos/sales` devuelve `409` con `itemType/itemId/itemName`, la UI muestra:
+  - `No disponible: {itemName}`
+  - acción “Actualizar catálogo”.
+- Al confirmar actualización:
+  - `invalidate()` del cache de snapshot,
+  - `getSnapshot({ forceRefresh: true })`,
+  - rerender del catálogo para reflejar disponibilidad real.
+
 ## Validación de disponibilidad al crear venta
 
 `POST /api/v1/pos/sales` valida en servidor:

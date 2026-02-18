@@ -13,6 +13,8 @@ interface FakeSale {
 interface FakeServerOptions {
   role?: Role;
   voidFirstAttemptForbidden?: boolean;
+  unavailableProductOnSnapshot?: boolean;
+  staleUnavailableOnCreateSale?: boolean;
 }
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -43,6 +45,8 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
   const shiftId = 'SHIFT-E2E-1';
   let shiftOpen = false;
   let voidAttempts = 0;
+  let snapshotCalls = 0;
+  let createSaleCalls = 0;
   const sales: FakeSale[] = [];
 
   const captured = {
@@ -64,10 +68,20 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
         : {};
 
     if (pathname.endsWith('/catalog/snapshot') && method === 'GET') {
+      snapshotCalls += 1;
+      const unavailableByConfig = options.unavailableProductOnSnapshot;
+      const unavailableAfterRefresh = options.staleUnavailableOnCreateSale && snapshotCalls > 1;
+      const productAvailable = !(unavailableByConfig || unavailableAfterRefresh);
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
+        headers: { ETag: `"snapshot-${snapshotCalls}"` },
         body: JSON.stringify({
+          storeId: 'store-e2e',
+          timeZoneId: 'America/Mexico_City',
+          generatedAtUtc: '2026-01-01T08:00:00Z',
+          catalogVersion: `v${snapshotCalls}`,
+          etagSeed: `seed-${snapshotCalls}`,
           categories: [{ id: 'C1', name: 'Bebidas', sortOrder: 1, isActive: true }],
           products: [
             {
@@ -78,6 +92,7 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
               subcategoryName: null,
               basePrice: 120,
               isActive: true,
+              isAvailable: productAvailable,
               customizationSchemaId: null,
             },
           ],
@@ -141,6 +156,20 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
     }
 
     if (pathname.endsWith('/sales') && method === 'POST') {
+      createSaleCalls += 1;
+      if (options.staleUnavailableOnCreateSale && createSaleCalls === 1) {
+        return route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            title: 'Conflict',
+            itemType: 'Product',
+            itemId: 'P1',
+            itemName: 'Café americano',
+          }),
+        });
+      }
+
       captured.saleRequests.push(body);
       const payments = (body.payments as FakeSale['payments']) ?? [];
       const saleId = `S${sales.length + 1}`;
@@ -372,4 +401,30 @@ test('C) Close shift exige closeReason con diferencia grande y envía clientOper
   expect(successfulRequest.closeReason).toBe('Sobrante detectado por redondeo operativo');
 });
 
+test('D) Producto no disponible se renderiza disabled con badge Agotado', async ({ page }) => {
+  await setupFakePosApi(page, { role: 'Cashier', unavailableProductOnSnapshot: true });
+  await seedAuth(page, 'Cashier');
+  await openPosCaja(page);
+
+  const productButton = page.getByTestId('product-P1');
+  await expect(productButton).toBeDisabled();
+  await expect(page.getByTestId('product-unavailable-P1')).toBeVisible();
+});
+
+test('E) Cache stale: create sale 409 unavailable y actualización de catálogo refresca estado', async ({
+  page,
+}) => {
+  await setupFakePosApi(page, { role: 'Cashier', staleUnavailableOnCreateSale: true });
+  await seedAuth(page, 'Cashier');
+  await openPosCaja(page);
+  await ensureShiftOpen(page);
+
+  await addSingleProductToCart(page);
+  await submitMixedPayment(page);
+
+  await expect(page.getByText(/No disponible: Café americano/i)).toBeVisible();
+  await page.getByTestId('refresh-catalog-unavailable').click();
+  await expect(page.getByTestId('product-P1')).toBeDisabled();
+  await expect(page.getByTestId('product-unavailable-P1')).toBeVisible();
+});
 

@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { of } from 'rxjs';
 import { CreateSaleRequestDto } from '../models/pos.models';
 import { PosCatalogSnapshotService } from '../services/pos-catalog-snapshot.service';
 import { PosSalesApiService } from '../services/pos-sales-api.service';
@@ -13,11 +14,13 @@ describe('PosCajaPage', () => {
   let salesCalls: { payload: CreateSaleRequestDto; correlationId: string }[];
   let voidCalls: { saleId: string; payload: { clientVoidId: string }; correlationId: string }[];
   let closePreviewCalls: unknown[];
+  let invalidateCalls: (string | undefined)[];
 
   beforeEach(async () => {
     salesCalls = [];
     voidCalls = [];
     closePreviewCalls = [];
+    invalidateCalls = [];
 
     await TestBed.configureTestingModule({
       imports: [PosCajaPage],
@@ -25,7 +28,12 @@ describe('PosCajaPage', () => {
         {
           provide: PosCatalogSnapshotService,
           useValue: {
-            getSnapshot: async () => ({
+            getSnapshot: () => of({
+              storeId: 'store-1',
+              timeZoneId: 'America/Mexico_City',
+              generatedAtUtc: '2026-02-12T10:00:00Z',
+              catalogVersion: 'v1',
+              etagSeed: 'seed',
               categories: [],
               products: [],
               optionSets: [],
@@ -37,6 +45,7 @@ describe('PosCajaPage', () => {
               overrides: [],
               versionStamp: 'v1',
             }),
+            invalidate: (storeId?: string) => invalidateCalls.push(storeId),
           },
         },
         {
@@ -279,5 +288,45 @@ describe('PosCajaPage', () => {
     );
     expect(fixture.componentInstance.showVoidModal()).toBeFalsy();
     expect(fixture.componentInstance.voidForbiddenError()).toBeFalsy();
+  });
+
+  it('blocks unavailable products from being added to cart', () => {
+    fixture.componentInstance.onProductSelected({
+      id: 'product-unavailable',
+      externalCode: null,
+      name: 'Sin stock',
+      categoryId: 'c-1',
+      subcategoryName: null,
+      basePrice: 100,
+      isActive: true,
+      isAvailable: false,
+      customizationSchemaId: null,
+    });
+
+    expect(
+      fixture.componentInstance.cartItems().some((item) => item.productId === 'product-unavailable'),
+    ).toBe(false);
+  });
+
+  it('shows item unavailable message and allows forced refresh when create sale returns 409', async () => {
+    const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
+      createSale: (payload: CreateSaleRequestDto, correlationId: string) => Promise<unknown>;
+    };
+    salesApi.createSale = async () => {
+      throw new HttpErrorResponse({
+        status: 409,
+        error: { itemType: 'Product', itemId: 'product-1', itemName: 'Waffle Fresa' },
+      });
+    };
+
+    await fixture.componentInstance.confirmPayment({
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
+    });
+
+    expect(fixture.componentInstance.errorMessage()).toContain('No disponible: Waffle Fresa');
+    expect(fixture.componentInstance.canRefreshCatalogAfterUnavailable()).toBe(true);
+
+    await fixture.componentInstance.refreshCatalogAfterUnavailable();
+    expect(invalidateCalls.length).toBe(1);
   });
 });

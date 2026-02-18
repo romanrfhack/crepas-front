@@ -52,6 +52,10 @@ export class CustomizationModalComponent {
 
   /** Alterna la selección de una opción, respetando mínimos y máximos */
   toggleSelection(group: SelectionGroupDto, optionItem: OptionItemDto): void {
+    if (!optionItem.isAvailable) {
+      return;
+    }
+
     this.selectedByGroup.update((state) => {
       const current = state[group.key] ?? [];
       const exists = current.includes(optionItem.id);
@@ -81,6 +85,11 @@ export class CustomizationModalComponent {
 
   /** Cambia la cantidad de un extra */
   changeExtraQuantity(extraId: string, delta: number): void {
+    const extra = this.extras().find((current) => current.id === extraId);
+    if (!extra?.isAvailable && delta > 0) {
+      return;
+    }
+
     this.extraQty.update((state) => {
       const current = state[extraId] ?? 0;
       const next = Math.max(0, current + delta);

@@ -135,6 +135,16 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
                   <span class="checkbox-text">Activo</span>
                 </label>
               </div>
+              <div class="form-field checkbox-field">
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    [formControl]="itemIsAvailableControl"
+                    class="checkbox-input"
+                  />
+                  <span class="checkbox-text">Disponible</span>
+                </label>
+              </div>
             </div>
             <div class="form-actions">
               @if (editingItemId()) {
@@ -199,6 +209,15 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
                         >
                           {{ item.isActive ? '&#9989; Activo' : '&#9940; Inactivo' }}
                         </span>
+                        <button
+                          type="button"
+                          class="status-badge"
+                          [class.status-badge--active]="item.isAvailable"
+                          [class.status-badge--inactive]="!item.isAvailable"
+                          (click)="onToggleItemAvailability(item)"
+                        >
+                          {{ item.isAvailable ? '&#128994; Disponible' : '&#9898; Agotado' }}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -779,6 +798,7 @@ export class OptionSetsPage {
   });
 
   readonly itemIsActiveControl = new FormControl(true, { nonNullable: true });
+  readonly itemIsAvailableControl = new FormControl(true, { nonNullable: true });
 
   constructor() {
     this.selectedSetIdControl.valueChanges.subscribe(() => {
@@ -833,6 +853,7 @@ export class OptionSetsPage {
         name: this.itemNameControl.value.trim(),
         sortOrder: this.itemSortOrderControl.value,
         isActive: this.itemIsActiveControl.value,
+        isAvailable: this.itemIsAvailableControl.value,
       };
       const itemId = this.editingItemId();
       if (itemId) {
@@ -852,6 +873,37 @@ export class OptionSetsPage {
     this.itemNameControl.setValue(item.name);
     this.itemSortOrderControl.setValue(item.sortOrder);
     this.itemIsActiveControl.setValue(item.isActive);
+    this.itemIsAvailableControl.setValue(item.isAvailable);
+  }
+
+  async onToggleItemAvailability(item: OptionItemDto) {
+    const setId = this.selectedSetIdControl.value;
+    if (!setId) {
+      return;
+    }
+
+    const previous = item.isAvailable;
+    this.optionItems.update((items) =>
+      items.map((current) =>
+        current.id === item.id ? { ...current, isAvailable: !current.isAvailable } : current,
+      ),
+    );
+
+    try {
+      await this.api.updateOptionItem(setId, item.id, {
+        name: item.name,
+        sortOrder: item.sortOrder,
+        isActive: item.isActive,
+        isAvailable: !previous,
+      });
+    } catch {
+      this.optionItems.update((items) =>
+        items.map((current) =>
+          current.id === item.id ? { ...current, isAvailable: previous } : current,
+        ),
+      );
+      this.errorMessage.set('No fue posible actualizar disponibilidad del item.');
+    }
   }
 
   cancelItemEdit() {
@@ -859,6 +911,7 @@ export class OptionSetsPage {
     this.itemNameControl.setValue('');
     this.itemSortOrderControl.setValue(0);
     this.itemIsActiveControl.setValue(true);
+    this.itemIsAvailableControl.setValue(true);
     this.itemNameControl.markAsUntouched();
     this.itemSortOrderControl.markAsUntouched();
   }

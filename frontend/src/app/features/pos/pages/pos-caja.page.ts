@@ -15,7 +15,7 @@ import {
   Validators,
 } from '@angular/forms';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { map, startWith } from 'rxjs';
+import { firstValueFrom, map, startWith } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import { CategoryListComponent } from '../components/category-list/category-list.component';
 import {
@@ -77,6 +77,7 @@ export class PosCajaPage implements OnDestroy {
   readonly showPayment = signal(false);
   readonly loading = signal(false);
   readonly errorMessage = signal<string | null>(null);
+  readonly canRefreshCatalogAfterUnavailable = signal(false);
   readonly saleSuccess = signal<SaleResponseDto | null>(null);
   readonly currentShift = signal<PosShiftDto | null>(null);
   readonly showOpenShiftModal = signal(false);
@@ -200,7 +201,9 @@ export class PosCajaPage implements OnDestroy {
     );
   });
 
-  readonly customizationOptionItems = computed(() => this.snapshot()?.optionItems ?? []);
+  readonly customizationOptionItems = computed(
+    () => this.snapshot()?.optionItems.filter((item) => item.isActive) ?? [],
+  );
   readonly customizationExtras = computed(
     () => this.snapshot()?.extras.filter((extra) => extra.isActive) ?? [],
   );
@@ -221,8 +224,11 @@ export class PosCajaPage implements OnDestroy {
 
   async loadSnapshot(forceRefresh = false) {
     this.errorMessage.set(null);
+    this.canRefreshCatalogAfterUnavailable.set(false);
     try {
-      const data = await this.snapshotService.getSnapshot(forceRefresh);
+      const data = await firstValueFrom(
+        this.snapshotService.getSnapshot({ forceRefresh }),
+      );
       this.snapshot.set(data);
     } catch {
       this.errorMessage.set('No se pudo cargar el catálogo. Intenta nuevamente.');
@@ -381,6 +387,10 @@ export class PosCajaPage implements OnDestroy {
   }
 
   onProductSelected(product: ProductDto) {
+    if (!product.isAvailable) {
+      return;
+    }
+
     if (product.customizationSchemaId) {
       this.activeCustomizationProduct.set(product);
       return;
@@ -695,6 +705,14 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
+    if (httpError.status === 409 && this.isItemUnavailableError(httpError.error)) {
+      const itemName = this.getUnavailableItemName(httpError.error);
+      this.errorMessage.set(`No disponible: ${itemName}. Actualiza catálogo e intenta de nuevo.`);
+      this.canRefreshCatalogAfterUnavailable.set(true);
+      this.inProgressClientSaleId.set(null);
+      return;
+    }
+
     if (httpError.status === 409) {
       this.errorMessage.set('Esta venta ya fue registrada.');
       this.inProgressClientSaleId.set(null);
@@ -727,6 +745,35 @@ export class PosCajaPage implements OnDestroy {
     const detail = String(data['detail'] ?? '').toLowerCase();
 
     return code.includes('open_shift') || title.includes('turno') || detail.includes('open shift');
+  }
+
+  async refreshCatalogAfterUnavailable() {
+    this.snapshotService.invalidate(this.storeContext.getActiveStoreId() ?? undefined);
+    await this.loadSnapshot(true);
+  }
+
+  private isItemUnavailableError(payload: unknown) {
+    if (!payload || typeof payload !== 'object') {
+      return false;
+    }
+
+    const data = payload as Record<string, unknown>;
+    const itemType = data['itemType'];
+    const itemId = data['itemId'];
+    return typeof itemType === 'string' && typeof itemId === 'string';
+  }
+
+  private getUnavailableItemName(payload: unknown) {
+    if (!payload || typeof payload !== 'object') {
+      return 'ítem';
+    }
+
+    const itemName = (payload as Record<string, unknown>)['itemName'];
+    if (typeof itemName === 'string' && itemName.trim()) {
+      return itemName.trim();
+    }
+
+    return 'ítem seleccionado';
   }
 
   private round2(value: number) {

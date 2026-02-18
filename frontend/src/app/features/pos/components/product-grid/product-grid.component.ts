@@ -10,4 +10,12 @@ import { ProductDto } from '../../models/pos.models';
 export class ProductGridComponent {
   readonly products = input.required<ProductDto[]>();
   readonly addProduct = output<ProductDto>();
+
+  onProductClick(product: ProductDto) {
+    if (!product.isAvailable) {
+      return;
+    }
+
+    this.addProduct.emit(product);
+  }
 }
