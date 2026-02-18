@@ -31,7 +31,7 @@ dotnet tool install --global dotnet-ef
 ## Bootstrap de ambiente desde cero (BD limpia)
 
 1. **Configura la conexión a la base de datos.**
-   - Edita `src/CobranzaDigital.Api/appsettings.json` o usa variables de entorno/secretos para definir `ConnectionStrings:SqlServer` y el `DatabaseOptions:ConnectionStringName`.【F:src/CobranzaDigital.Api/appsettings.json†L1-L29】
+   - Edita `src/CobranzaDigital.Api/appsettings.json` o usa variables de entorno/secretos para definir `ConnectionStrings:DefaultConnection` y el `DatabaseOptions:ConnectionStringName`.
 
 2. **(Opcional) Elimina la base de datos existente para arrancar limpia.**
    ```bash
@@ -54,7 +54,7 @@ dotnet tool install --global dotnet-ef
 
 ## Seed mínimo (admin/roles) — opcional
 
-En **Development**, la API ejecuta un seed de identidad al iniciar, que crea los roles `Admin`, `Manager` y `Collector`.【F:src/CobranzaDigital.Api/Program.cs†L131-L155】【F:src/CobranzaDigital.Infrastructure/Identity/IdentitySeeder.cs†L10-L71】
+En **Development**, la API ejecuta un seed de identidad al iniciar, que crea los roles `Admin`, `Manager` y `Collector`.
 
 Para crear el usuario admin automáticamente:
 
@@ -68,6 +68,6 @@ Para crear el usuario admin automáticamente:
        }
      }
      ```
-2. Arranca la API en `Development` y el usuario se crea/asigna al rol `Admin`.【F:src/CobranzaDigital.Infrastructure/Identity/IdentitySeeder.cs†L29-L71】
+2. Arranca la API en `Development` y el usuario se crea/asigna al rol `Admin`.
 
-> Si faltan `AdminEmail` o `AdminPassword`, el seed del admin se omite y solo se crean los roles por defecto.【F:src/CobranzaDigital.Infrastructure/Identity/IdentitySeeder.cs†L10-L54】
+> Si faltan `AdminEmail` o `AdminPassword`, el seed del admin se omite y solo se crean los roles por defecto.

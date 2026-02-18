@@ -250,13 +250,6 @@ public sealed class PosShiftService : IPosShiftService
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
         var openShiftsQuery = _db.PosShifts.AsNoTracking().Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId);
 
-        if (_db.Database.IsSqlite())
-        {
-            return (await openShiftsQuery.ToListAsync(ct).ConfigureAwait(false))
-                .OrderByDescending(x => x.OpenedAtUtc)
-                .FirstOrDefault();
-        }
-
         return await openShiftsQuery.OrderByDescending(x => x.OpenedAtUtc).FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
@@ -269,41 +262,18 @@ public sealed class PosShiftService : IPosShiftService
             openShiftsQuery = openShiftsQuery.Where(x => x.Id == shiftId.Value);
         }
 
-        if (_db.Database.IsSqlite())
-        {
-            return (await openShiftsQuery.ToListAsync(ct).ConfigureAwait(false))
-                .OrderByDescending(x => x.OpenedAtUtc)
-                .FirstOrDefault();
-        }
-
         return await openShiftsQuery.OrderByDescending(x => x.OpenedAtUtc).FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
     private async Task<PaymentBreakdownDto> GetPaymentBreakdownAsync(Guid shiftId, DateTimeOffset openedAtUtc, DateTimeOffset untilUtc, CancellationToken ct)
     {
-        List<Guid> sales;
-        if (_db.Database.IsSqlite())
-        {
-            sales = (await _db.Sales.AsNoTracking()
-                    .Where(x => x.ShiftId == shiftId)
-                    .Select(x => new { x.Id, x.Status, x.OccurredAtUtc })
-                    .ToListAsync(ct)
-                    .ConfigureAwait(false))
-                .Where(x => x.Status == SaleStatus.Completed)
-                .Where(x => x.OccurredAtUtc >= openedAtUtc && x.OccurredAtUtc <= untilUtc)
-                .Select(x => x.Id)
-                .ToList();
-        }
-        else
-        {
-            sales = await _db.Sales.AsNoTracking()
-                .Where(x => x.ShiftId == shiftId)
-                .Where(x => x.Status == SaleStatus.Completed)
-                .Where(x => x.OccurredAtUtc >= openedAtUtc && x.OccurredAtUtc <= untilUtc)
-                .Select(x => x.Id)
-                .ToListAsync(ct)
-                .ConfigureAwait(false);
-        }
+        var sales = await _db.Sales.AsNoTracking()
+            .Where(x => x.ShiftId == shiftId)
+            .Where(x => x.Status == SaleStatus.Completed)
+            .Where(x => x.OccurredAtUtc >= openedAtUtc && x.OccurredAtUtc <= untilUtc)
+            .Select(x => x.Id)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
 
         if (sales.Count == 0)
         {
