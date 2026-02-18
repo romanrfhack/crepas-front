@@ -1,12 +1,10 @@
 <div class="reportes-page">
-  <!-- HEADER con barra decorativa -->
   <header class="page-header">
     <h2>&#128202; Reportes Operativos</h2>
     <p>Resumen operativo POS por rango, cajero y turno</p>
     <div class="header-decoration"></div>
   </header>
 
-  <!-- TARJETA DE FILTROS -->
   <section class="card filters-card" aria-label="Filtros de reportes">
     <div class="filters-grid">
       <label>
@@ -67,23 +65,50 @@
           <span class="spinner"></span>
           <span>Actualizando...</span>
         } @else {
-          <span>🔄 Actualizar</span>
+          <span>🔄 Recargar</span>
         }
       </button>
     </div>
   </section>
 
-  <!-- MENSAJE DE ERROR -->
-  @if (errorMessage()) {
-    <p class="error" role="alert">
-      <span class="error-icon">⚠️</span>
-      {{ errorMessage() }}
-    </p>
-  }
+  <section class="card kpi-section">
+    <h3>KPIs</h3>
+    @if (getSectionError('kpis')) {
+      <p class="error" role="alert" data-testid="report-error-kpis">
+        {{ getSectionError('kpis') }}
+      </p>
+    }
+    <div class="kpi-grid">
+      <article data-testid="kpi-gross-sales">
+        <span>Venta bruta</span>
+        <strong>{{ kpis()?.grossSales ?? 0 | currency: 'MXN' : 'symbol' : '1.2-2' }}</strong>
+      </article>
+      <article data-testid="kpi-tickets">
+        <span>Tickets</span>
+        <strong>{{ kpis()?.tickets ?? '—' }}</strong>
+      </article>
+      <article data-testid="kpi-avg-ticket">
+        <span>Ticket promedio</span>
+        <strong>{{ kpis()?.avgTicket ?? 0 | currency: 'MXN' : 'symbol' : '1.2-2' }}</strong>
+      </article>
+      <article data-testid="kpi-avg-items-per-ticket">
+        <span>Ítems por ticket</span>
+        <strong>{{ kpis()?.avgItemsPerTicket ?? '—' }}</strong>
+      </article>
+      <article data-testid="kpi-void-rate">
+        <span>Tasa de voids</span>
+        <strong>{{ ((kpis()?.voidRate ?? 0) * 100 | number: '1.0-2') + '%' }}</strong>
+      </article>
+    </div>
+  </section>
 
-  <!-- TARJETA DE RESUMEN -->
   <section class="card summary" data-testid="reports-summary">
     <h3>Resumen</h3>
+    @if (getSectionError('dailySales')) {
+      <p class="error" role="alert" data-testid="report-error-dailySales">
+        {{ getSectionError('dailySales') }}
+      </p>
+    }
     <div class="summary-grid">
       <article>
         <span>Total ventas</span>
@@ -100,9 +125,199 @@
     </div>
   </section>
 
-  <!-- TARJETA: VENTAS POR MÉTODO DE PAGO -->
+  <section class="card">
+    <h3>Mix por categorías</h3>
+    @if (getSectionError('mixCategories')) {
+      <p class="error" role="alert" data-testid="report-error-mixCategories">
+        {{ getSectionError('mixCategories') }}
+      </p>
+    }
+    <div class="table-wrap" data-testid="mix-categories-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Categoría</th>
+            <th class="numeric">Cantidad</th>
+            <th class="numeric">Venta bruta</th>
+            <th class="numeric">%</th>
+            <th>Barra</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of mixCategoriesRows(); track item.categoryId; let i = $index) {
+            <tr [attr.data-testid]="'mix-category-row-' + i">
+              <td>{{ item.categoryName }}</td>
+              <td class="numeric">{{ item.quantity }}</td>
+              <td class="numeric">{{ item.grossSales | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
+              <td class="numeric">{{ item.percent | number: '1.0-1' }}%</td>
+              <td>
+                <div class="mini-bar-track">
+                  <div class="mini-bar" [style.width]="getPercentBarWidth(item.percent)"></div>
+                </div>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5">Sin categorías para mostrar.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Mix por productos (Top 20)</h3>
+    @if (getSectionError('mixProducts')) {
+      <p class="error" role="alert" data-testid="report-error-mixProducts">
+        {{ getSectionError('mixProducts') }}
+      </p>
+    }
+    <div class="table-wrap" data-testid="mix-products-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th class="numeric">Cantidad</th>
+            <th class="numeric">Venta bruta</th>
+            <th class="numeric">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of mixProductsRows(); track item.productId; let i = $index) {
+            <tr [attr.data-testid]="'mix-product-row-' + i">
+              <td>{{ item.productName }}</td>
+              <td class="numeric">{{ item.quantity }}</td>
+              <td class="numeric">{{ item.grossSales | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
+              <td class="numeric">{{ item.percent | number: '1.0-1' }}%</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4">Sin productos para mostrar.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Add-ons: Extras</h3>
+    @if (getSectionError('addonsExtras')) {
+      <p class="error" role="alert" data-testid="report-error-addonsExtras">
+        {{ getSectionError('addonsExtras') }}
+      </p>
+    }
+    <div class="table-wrap" data-testid="addons-extras-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Extra</th>
+            <th class="numeric">Cantidad</th>
+            <th class="numeric">Impacto bruto</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of addonsExtras(); track item.extraId) {
+            <tr>
+              <td>{{ item.extraName }}</td>
+              <td class="numeric">{{ item.quantity }}</td>
+              <td class="numeric">{{ item.grossSales | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="3">Sin extras para mostrar.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Add-ons: Opciones</h3>
+    @if (getSectionError('addonsOptions')) {
+      <p class="error" role="alert" data-testid="report-error-addonsOptions">
+        {{ getSectionError('addonsOptions') }}
+      </p>
+    }
+    <div class="table-wrap" data-testid="addons-options-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Opción</th>
+            <th class="numeric">Uso</th>
+            <th class="numeric">Impacto bruto</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of addonsOptions(); track item.optionItemId) {
+            <tr>
+              <td>{{ item.optionItemName }}</td>
+              <td class="numeric">{{ item.usageCount }}</td>
+              <td class="numeric">{{ item.grossImpact | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="3">Sin opciones para mostrar.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <h3>Control de caja (diferencias)</h3>
+    @if (getSectionError('cashDifferences')) {
+      <p class="error" role="alert" data-testid="report-error-cashDifferences">
+        {{ getSectionError('cashDifferences') }}
+      </p>
+    }
+    <div class="table-wrap" data-testid="cash-diff-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Turno</th>
+            <th>Cajero</th>
+            <th>Apertura</th>
+            <th class="numeric">Esperado</th>
+            <th class="numeric">Contado</th>
+            <th class="numeric">Diferencia</th>
+            <th>Razón</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of cashDifferenceShifts(); track item.shiftId; let i = $index) {
+            <tr
+              [attr.data-testid]="'cash-diff-row-' + i"
+              [class.is-alert]="shouldHighlightCashDifference(item)"
+            >
+              <td>{{ item.shiftId }}</td>
+              <td>{{ item.cashierUserId }}</td>
+              <td>{{ timezoneService.formatDateTime(item.openedAt) }}</td>
+              <td class="numeric">
+                {{ item.expectedCash | currency: 'MXN' : 'symbol' : '1.2-2' }}
+              </td>
+              <td class="numeric">{{ item.countedCash | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
+              <td class="numeric">{{ item.difference | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
+              <td>{{ item.closeReason || '—' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7">Sin diferencias de caja para mostrar.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="card">
     <h3>Ventas por método de pago</h3>
+    @if (getSectionError('payments')) {
+      <p class="error" role="alert" data-testid="report-error-payments">
+        {{ getSectionError('payments') }}
+      </p>
+    }
     <div class="table-wrap" data-testid="reports-payments-table">
       <table>
         <thead>
@@ -131,9 +346,13 @@
     </div>
   </section>
 
-  <!-- TARJETA: VENTAS POR HORA -->
   <section class="card">
     <h3>Ventas por hora</h3>
+    @if (getSectionError('hourly')) {
+      <p class="error" role="alert" data-testid="report-error-hourly">
+        {{ getSectionError('hourly') }}
+      </p>
+    }
     <div class="table-wrap" data-testid="reports-hourly-table">
       <table>
         <thead>
@@ -166,9 +385,13 @@
     </div>
   </section>
 
-  <!-- TARJETA: TOP PRODUCTOS -->
   <section class="card">
     <h3>Top productos</h3>
+    @if (getSectionError('topProducts')) {
+      <p class="error" role="alert" data-testid="report-error-topProducts">
+        {{ getSectionError('topProducts') }}
+      </p>
+    }
     <div class="table-wrap" data-testid="reports-top-products-table">
       <table>
         <thead>
@@ -195,9 +418,13 @@
     </div>
   </section>
 
-  <!-- TARJETA: CANCELACIONES POR MOTIVO -->
   <section class="card">
     <h3>Cancelaciones por motivo</h3>
+    @if (getSectionError('voidReasons')) {
+      <p class="error" role="alert" data-testid="report-error-voidReasons">
+        {{ getSectionError('voidReasons') }}
+      </p>
+    }
     <div class="table-wrap" data-testid="reports-void-reasons-table">
       <table>
         <thead>

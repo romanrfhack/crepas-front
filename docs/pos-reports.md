@@ -136,6 +136,7 @@ Para mix por categoría/producto:
 - `grossLine = base + extras + selectionsImpact`
 
 Notas:
+
 - Se excluyen ventas `Status=Void` de métricas de ventas/pagos.
 - Las fechas `dateFrom/dateTo` se interpretan en zona local del store (`Store.TimeZoneId`) y luego se convierten a UTC para filtrar.
 
@@ -267,3 +268,31 @@ Notas:
 - Si no se selecciona tienda en UI, se usa `StoreContextService.getActiveStoreId()` y se envía como `storeId`.
 - Rango por defecto recomendado en UI: últimos 7 días en zona horaria de negocio (`America/Mexico_City`) usando `PosTimezoneService`.
 - La UI usa selectores `data-testid` estables para contrato E2E (filtros y tablas de salida).
+
+## Frontend usage v2 (Dashboard extendido)
+
+- Pantalla: `/app/pos/reportes` mantiene bloques v1 y agrega secciones v2 sin romper compatibilidad.
+- Filtros compartidos: `dateFrom`, `dateTo`, `cashierUserId`, `shiftId`; botón **Recargar** vuelve a consultar v1 + v2.
+- Resolución de `storeId` en frontend:
+  1. `storeId` explícito (si algún consumidor lo envía),
+  2. `StoreContextService.getActiveStoreId()`,
+  3. omitido para fallback backend (`DefaultStoreId`).
+- KPIs y tablas v2 se renderizan con fallback visual (`—` o tabla vacía) y error por bloque (`report-error-*`) sin bloquear toda la pantalla.
+
+### Endpoints v2 consumidos por FE
+
+- `GET /api/v1/pos/reports/kpis/summary?dateFrom&dateTo&storeId?&cashierUserId?&shiftId?`
+- `GET /api/v1/pos/reports/sales/categories?dateFrom&dateTo&storeId?&cashierUserId?&shiftId?`
+- `GET /api/v1/pos/reports/sales/products?dateFrom&dateTo&storeId?&cashierUserId?&shiftId?&top?`
+- `GET /api/v1/pos/reports/sales/addons/extras?dateFrom&dateTo&storeId?&cashierUserId?&shiftId?&top?`
+- `GET /api/v1/pos/reports/sales/addons/options?dateFrom&dateTo&storeId?&cashierUserId?&shiftId?&top?`
+- `GET /api/v1/pos/reports/control/cash-differences?dateFrom&dateTo&storeId?&cashierUserId?`
+
+### `data-testid` relevantes (v2)
+
+- KPIs: `kpi-gross-sales`, `kpi-tickets`, `kpi-avg-ticket`, `kpi-avg-items-per-ticket`, `kpi-void-rate`.
+- Mix por categorías: `mix-categories-table`, `mix-category-row-{i}`.
+- Mix por productos: `mix-products-table`, `mix-product-row-{i}`.
+- Add-ons: `addons-extras-table`, `addons-options-table`.
+- Control de caja: `cash-diff-table`, `cash-diff-row-{i}`.
+- Errores por bloque: `report-error-kpis`, `report-error-mixCategories`, `report-error-mixProducts`, `report-error-addonsExtras`, `report-error-addonsOptions`, `report-error-cashDifferences`.
