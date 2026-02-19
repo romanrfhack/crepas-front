@@ -483,6 +483,7 @@ test('E) Cache stale: create sale 409 unavailable y actualización de catálogo 
   await expect(page.locator('.error')).toBeVisible();
   await expect(page.getByTestId('unavailable-alert')).toBeVisible({ timeout: 10000 });
   await expect(page.getByTestId('refresh-catalog-unavailable')).toBeVisible();
+  await expect(page.getByTestId('unavailable-item-name')).toBeVisible();
   await expect(page.getByTestId('unavailable-item-name')).toHaveText(/Cafe|Café/i);
 
   const callsBeforeRefresh = captured.snapshotCalls();
