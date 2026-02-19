@@ -55,6 +55,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     env:
+      TESTS_USE_SQLSERVER: "1"
       ConnectionStrings__DefaultConnection: Server=localhost,1433;Database=CrepasDB_CI_${{ github.run_id }}_${{ github.run_attempt }};User Id=sa;Password=Strong_Passw0rd_2026!;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;
     steps:
       - uses: actions/checkout@v4

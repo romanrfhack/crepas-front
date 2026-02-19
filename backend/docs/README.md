@@ -47,14 +47,21 @@ dotnet tool install --global dotnet-ef
      --startup-project src/CobranzaDigital.Api
    ```
 
-4. **Levanta la API.**
+4. **(Opcional) Habilita migraciones automáticas al arrancar.**
+   ```bash
+   export APPLY_MIGRATIONS_ON_STARTUP=1
+   ```
+
+5. **Levanta la API.**
    ```bash
    dotnet run --project src/CobranzaDigital.Api
    ```
 
 ## Seed mínimo (admin/roles) — opcional
 
-En **Development**, la API ejecuta un seed de identidad al iniciar, que crea los roles `Admin`, `Manager` y `Collector`.
+La API **no ejecuta seed automáticamente por defecto**.
+
+Para habilitar seed de datos al inicio (incluye seed de identidad fuera de `Testing`), define `SEED_DEV_DATA=1` en el proceso que arranca la API.
 
 Para crear el usuario admin automáticamente:
 

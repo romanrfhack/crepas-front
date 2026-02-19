@@ -45,6 +45,18 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
 
     public CobranzaDigitalApiFactory()
     {
+        if (!IsTestHostProcess())
+        {
+            throw new InvalidOperationException("CobranzaDigitalApiFactory can only run under the .NET test host process.");
+        }
+
+        var useSqlServer = string.Equals(Environment.GetEnvironmentVariable("TESTS_USE_SQLSERVER"), "1", StringComparison.Ordinal);
+        if (!useSqlServer)
+        {
+            throw new InvalidOperationException(
+                "SQL Server integration tests require TESTS_USE_SQLSERVER=1 in the test process.");
+        }
+
         _verboseLogs = string.Equals(Environment.GetEnvironmentVariable("TESTS_VERBOSE_LOGS"), "1", StringComparison.Ordinal);
         var baseConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
             ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
@@ -234,6 +246,18 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
                 }
             });
         });
+    }
+
+
+    private static bool IsTestHostProcess()
+    {
+        var processName = Environment.ProcessPath is null
+            ? string.Empty
+            : Path.GetFileNameWithoutExtension(Environment.ProcessPath);
+
+        return processName.Contains("testhost", StringComparison.OrdinalIgnoreCase)
+            || AppDomain.CurrentDomain.GetAssemblies().Any(assembly =>
+                assembly.GetName().Name?.Contains("xunit", StringComparison.OrdinalIgnoreCase) == true);
     }
 
     private static string DescribeTokenValidationParameters(TokenValidationParameters? parameters)
