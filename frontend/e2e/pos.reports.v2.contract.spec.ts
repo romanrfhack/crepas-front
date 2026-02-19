@@ -266,6 +266,12 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
 
   await expect(page.getByTestId('cash-diff-table').locator('thead')).not.toContainText('Turno');
   await expect(page.getByTestId('cash-diff-row-0')).toContainText('Cashier E2E');
+  await expect(
+    page.locator('[data-testid="reports-cashier"] option[value="cashier-e2e"]'),
+  ).toHaveCount(1);
+  await expect(page.locator('[data-testid="reports-shift"] option[value="shift-e2e"]')).toHaveCount(
+    1,
+  );
 
   await page.getByTestId('reports-cashier').selectOption('cashier-e2e');
   await page.getByTestId('reports-shift').selectOption('shift-e2e');
