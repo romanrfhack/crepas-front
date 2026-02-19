@@ -69,28 +69,89 @@
   <div class="section-card">
     <div class="section-header">
       <span class="section-icon">📉</span>
-      <h3>Ventas por mes (demo con ngx-charts)</h3>
+      <h3>Reportes reales (últimos 7 días)</h3>
     </div>
 
-    <div class="chart-container" aria-label="Gráfico de barras de ventas mensuales de demostración">
-      <ngx-charts-bar-vertical
-        [results]="monthlySalesData()"
-        [scheme]="chartColorScheme()"        
-        [xAxis]="true"
-        [yAxis]="true"
-        [showDataLabel]="true"
-        [showGridLines]="true"
-        [animations]="true"
-        [roundDomains]="true"
-        [barPadding]="14"
-        [yScaleMax]="20000"
-        [xAxisLabel]="'Mes'"
-        [yAxisLabel]="'Ventas($)'"
-      />
-    </div>
-    <div class="demo-hint">
-      <span class="hint-icon">🔵</span>
-      <span>Datos de ejemplo para validar integración visual y paleta del tema</span>
+    <div class="charts-grid">
+      <article class="chart-card" data-testid="dashboard-payments-chart-card">
+        <h4>Métodos de pago</h4>
+        @if (loadingPayments()) {
+          <p class="chart-status">Cargando gráfico...</p>
+        }
+        @if (paymentError()) {
+          <p class="error" role="alert" data-testid="dashboard-payments-chart-error">
+            {{ paymentError() }}
+          </p>
+        }
+        @if (!loadingPayments() && !paymentError() && hasPaymentData()) {
+          <div class="chart-container" aria-label="Distribución de métodos de pago">
+            <ngx-charts-pie-chart
+              [results]="paymentMethodData()"
+              [scheme]="chartColorScheme()"
+              [legend]="true"
+              [doughnut]="true"
+              [labels]="true"
+              [animations]="true"
+            />
+          </div>
+        }
+      </article>
+
+      <article class="chart-card" data-testid="dashboard-top-products-chart-card">
+        <h4>Top 5 productos</h4>
+        @if (loadingTopProducts()) {
+          <p class="chart-status">Cargando gráfico...</p>
+        }
+        @if (topProductsError()) {
+          <p class="error" role="alert" data-testid="dashboard-top-products-chart-error">
+            {{ topProductsError() }}
+          </p>
+        }
+        @if (!loadingTopProducts() && !topProductsError() && hasTopProductsData()) {
+          <div class="chart-container" aria-label="Top 5 productos por venta total">
+            <ngx-charts-bar-horizontal
+              [results]="topProductsData()"
+              [scheme]="chartColorScheme()"
+              [xAxis]="true"
+              [yAxis]="true"
+              [showDataLabel]="true"
+              [showGridLines]="true"
+              [animations]="true"
+              [xAxisLabel]="'Monto ($)'"
+              [yAxisLabel]="'Producto'"
+            />
+          </div>
+        }
+      </article>
+
+      <article class="chart-card" data-testid="dashboard-hourly-sales-chart-card">
+        <h4>Ventas por hora</h4>
+        @if (loadingHourlySales()) {
+          <p class="chart-status">Cargando gráfico...</p>
+        }
+        @if (hourlySalesError()) {
+          <p class="error" role="alert" data-testid="dashboard-hourly-sales-chart-error">
+            {{ hourlySalesError() }}
+          </p>
+        }
+        @if (!loadingHourlySales() && !hourlySalesError() && hasHourlySalesData()) {
+          <div class="chart-container" aria-label="Ventas por hora en el rango de 7 días">
+            <ngx-charts-bar-vertical
+              [results]="hourlySalesData()"
+              [scheme]="chartColorScheme()"
+              [xAxis]="true"
+              [yAxis]="true"
+              [showDataLabel]="true"
+              [showGridLines]="true"
+              [animations]="true"
+              [roundDomains]="true"
+              [barPadding]="14"
+              [xAxisLabel]="'Hora'"
+              [yAxisLabel]="'Ventas($)'"
+            />
+          </div>
+        }
+      </article>
     </div>
   </div>
 
