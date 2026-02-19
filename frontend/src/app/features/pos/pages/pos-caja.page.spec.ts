@@ -365,6 +365,21 @@ describe('PosCajaPage', () => {
     expect(fixture.componentInstance.unavailableItemName()).toBe('Waffle Fresa');
   });
 
+  it('keeps unavailable refresh alert rendered even if generic error message is cleared', () => {
+    fixture.componentInstance.errorMessage.set(null);
+    fixture.componentInstance.canRefreshCatalogAfterUnavailable.set(true);
+    fixture.componentInstance.unavailableItemName.set('Waffle Fresa');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="unavailable-alert"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="refresh-catalog-unavailable"]'),
+    ).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="unavailable-item-name"]')?.textContent,
+    ).toContain('Waffle Fresa');
+  });
+
   it('shows unavailable alert when api error is wrapped inside nested error objects', async () => {
     const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
       createSale: (payload: CreateSaleRequestDto, correlationId: string) => Promise<unknown>;
