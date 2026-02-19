@@ -726,6 +726,7 @@ export class PosCajaPage implements OnDestroy {
       this.unavailableItemName.set(unavailable.itemName);
       this.errorMessage.set('No disponible. Actualiza catálogo e intenta de nuevo.');
       this.canRefreshCatalogAfterUnavailable.set(true);
+      this.showPayment.set(false);
       this.inProgressClientSaleId.set(null);
       return;
     }
@@ -741,6 +742,7 @@ export class PosCajaPage implements OnDestroy {
       this.unavailableItemName.set(unavailable.itemName);
       this.errorMessage.set('No disponible. Actualiza catálogo e intenta de nuevo.');
       this.canRefreshCatalogAfterUnavailable.set(true);
+      this.showPayment.set(false);
       this.inProgressClientSaleId.set(null);
       return;
     }
