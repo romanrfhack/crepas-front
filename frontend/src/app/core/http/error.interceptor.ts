@@ -3,10 +3,11 @@ import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { GlobalErrorService } from '../services/global-error.service';
 
-export const errorInterceptor: HttpInterceptorFn = (req, next) =>
-  next(req).pipe(
+export const errorInterceptor: HttpInterceptorFn = (req, next) => {
+  const globalErrorService = inject(GlobalErrorService);
+
+  return next(req).pipe(
     catchError((err: unknown) => {
-      const globalErrorService = inject(GlobalErrorService);
       if (err instanceof HttpErrorResponse) {
         console.error('[HTTP ERROR]', {
           method: req.method,
@@ -26,3 +27,4 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) =>
       return throwError(() => err);
     }),
   );
+};
