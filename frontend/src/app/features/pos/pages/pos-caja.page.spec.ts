@@ -389,4 +389,48 @@ describe('PosCajaPage', () => {
     expect(fixture.componentInstance.canRefreshCatalogAfterUnavailable()).toBe(true);
     expect(fixture.componentInstance.unavailableItemName()).toBe('Waffle Fresa');
   });
+
+  it('treats unknown 409 create-sale conflicts as unavailable to allow catalog refresh', async () => {
+    const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
+      createSale: (payload: CreateSaleRequestDto, correlationId: string) => Promise<unknown>;
+    };
+    salesApi.createSale = async () => {
+      throw new HttpErrorResponse({
+        status: 409,
+        error: {
+          title: 'Conflict',
+          detail: 'The request could not be completed because the resource state changed.',
+        },
+      });
+    };
+
+    await fixture.componentInstance.confirmPayment({
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
+    });
+
+    expect(fixture.componentInstance.errorMessage()).toContain('No disponible');
+    expect(fixture.componentInstance.canRefreshCatalogAfterUnavailable()).toBe(true);
+  });
+
+  it('keeps duplicate-sale message when 409 conflict explicitly indicates duplicate', async () => {
+    const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
+      createSale: (payload: CreateSaleRequestDto, correlationId: string) => Promise<unknown>;
+    };
+    salesApi.createSale = async () => {
+      throw new HttpErrorResponse({
+        status: 409,
+        error: {
+          code: 'DUPLICATE_CLIENT_SALE_ID',
+          detail: 'Sale already exists for this clientSaleId.',
+        },
+      });
+    };
+
+    await fixture.componentInstance.confirmPayment({
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
+    });
+
+    expect(fixture.componentInstance.errorMessage()).toContain('ya fue registrada');
+    expect(fixture.componentInstance.canRefreshCatalogAfterUnavailable()).toBe(false);
+  });
 });

@@ -730,8 +730,17 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
-    if (status === 409) {
+    if (status === 409 && this.isDuplicateSaleError(payload)) {
       this.errorMessage.set('Esta venta ya fue registrada.');
+      this.inProgressClientSaleId.set(null);
+      return;
+    }
+
+    if (status === 409) {
+      const unavailable = this.getUnavailableItemData(payload);
+      this.unavailableItemName.set(unavailable.itemName);
+      this.errorMessage.set('No disponible. Actualiza catálogo e intenta de nuevo.');
+      this.canRefreshCatalogAfterUnavailable.set(true);
       this.inProgressClientSaleId.set(null);
       return;
     }
@@ -788,6 +797,25 @@ export class PosCajaPage implements OnDestroy {
       code.includes('item_unavailable') ||
       title.includes('itemunavailable') ||
       detail.includes('no disponible')
+    );
+  }
+
+  private isDuplicateSaleError(payload: unknown) {
+    if (!payload || typeof payload !== 'object') {
+      return false;
+    }
+
+    const data = payload as Record<string, unknown>;
+    const code = this.getStringValue(data, null, 'code')?.toLowerCase() ?? '';
+    const title = this.getStringValue(data, null, 'title')?.toLowerCase() ?? '';
+    const detail = this.getStringValue(data, null, 'detail')?.toLowerCase() ?? '';
+
+    return (
+      code.includes('duplicate') ||
+      code.includes('already_exists') ||
+      title.includes('duplicate') ||
+      detail.includes('duplicad') ||
+      detail.includes('already')
     );
   }
 
