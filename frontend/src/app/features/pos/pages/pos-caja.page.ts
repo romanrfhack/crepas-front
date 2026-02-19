@@ -756,7 +756,25 @@ export class PosCajaPage implements OnDestroy {
   }
 
   private isItemUnavailableError(payload: unknown) {
-    return this.getUnavailableItemData(payload).isItemUnavailable;
+    const unavailableData = this.getUnavailableItemData(payload);
+    if (unavailableData.isItemUnavailable) {
+      return true;
+    }
+
+    if (!payload || typeof payload !== 'object') {
+      return false;
+    }
+
+    const data = payload as Record<string, unknown>;
+    const code = this.getStringValue(data, null, 'code')?.toLowerCase() ?? '';
+    const title = this.getStringValue(data, null, 'title')?.toLowerCase() ?? '';
+    const detail = this.getStringValue(data, null, 'detail')?.toLowerCase() ?? '';
+
+    return (
+      code.includes('item_unavailable') ||
+      title.includes('itemunavailable') ||
+      detail.includes('no disponible')
+    );
   }
 
   private getUnavailableItemData(payload: unknown) {
