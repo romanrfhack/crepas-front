@@ -364,4 +364,29 @@ describe('PosCajaPage', () => {
     expect(fixture.componentInstance.canRefreshCatalogAfterUnavailable()).toBe(true);
     expect(fixture.componentInstance.unavailableItemName()).toBe('Waffle Fresa');
   });
+
+  it('shows unavailable alert when api error is wrapped inside nested error objects', async () => {
+    const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
+      createSale: (payload: CreateSaleRequestDto, correlationId: string) => Promise<unknown>;
+    };
+    salesApi.createSale = async () => {
+      throw {
+        error: new HttpErrorResponse({
+          status: 409,
+          error: {
+            title: 'ItemUnavailable',
+            extensions: { itemType: 'Product', itemId: 'product-1', itemName: 'Waffle Fresa' },
+          },
+        }),
+      };
+    };
+
+    await fixture.componentInstance.confirmPayment({
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
+    });
+
+    expect(fixture.componentInstance.errorMessage()).toContain('No disponible');
+    expect(fixture.componentInstance.canRefreshCatalogAfterUnavailable()).toBe(true);
+    expect(fixture.componentInstance.unavailableItemName()).toBe('Waffle Fresa');
+  });
 });
