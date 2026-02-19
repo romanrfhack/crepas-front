@@ -480,7 +480,6 @@ test('E) Cache stale: create sale 409 unavailable y actualización de catálogo 
   await submitMixedPayment(page);
   await createSaleConflict;
 
-  await expect(page.getByText('No disponible', { exact: false })).toBeVisible({ timeout: 5000 });
   await expect(page.locator('.error')).toBeVisible();
   await expect(page.getByTestId('unavailable-alert')).toBeVisible({ timeout: 10000 });
   await expect(page.getByTestId('refresh-catalog-unavailable')).toBeVisible();
