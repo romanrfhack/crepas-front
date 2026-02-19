@@ -216,6 +216,28 @@
   font-size: 0.9rem;
 }
 
+.charts-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.chart-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: #fff;
+}
+
+.chart-card h4 {
+  margin: 0;
+  color: var(--brand-ink);
+  font-size: 1rem;
+}
+
 .chart-container {
   background: rgba(243, 182, 194, 0.04);
   border-radius: var(--radius-md);
@@ -223,7 +245,25 @@
   min-height: 320px;
 }
 
-ngx-charts-bar-vertical {
+.chart-status {
+  margin: 0;
+  color: var(--brand-muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.error {
+  margin: 0;
+  color: #b42318;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  padding: 0.625rem 0.75rem;
+}
+
+ngx-charts-bar-vertical,
+ngx-charts-bar-horizontal,
+ngx-charts-pie-chart {
   display: block;
   width: 100%;
   min-height: 280px;

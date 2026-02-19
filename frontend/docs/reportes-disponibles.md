@@ -17,22 +17,11 @@
 | Diferencias de caja                  | `PosReportsApiService.getCashDifferencesControl(filters)`                                                               | `CashDifferencesControlDto.daily[]` y `shifts[]` con `difference`, `expectedCash`, `countedCash` | `{ name: date o shiftId, value: difference }[]`                               | Barras divergentes (positivo/negativo), tabla de alertas                           |
 | Ventas del turno actual (flujo caja) | `PosCajaPage.shiftSales` (signal local actualizado tras `createSale` y `voidSale`)                                      | `SaleListItemUi[]` con `folio`, `total`, `occurredAtUtc`, `status`                               | agregado por hora/estado en UI (`{ name, value }[]`)                          | Línea/barras de ventas del turno en tiempo real, donut de estatus `Completed/Void` |
 
-## Propuesta inicial (primeras 3 gráficas para implementar)
+## Estado de implementación (dashboard)
 
-1. **Métodos de pago (pastel/dona)**
-   - Fuente: `getPaymentsByMethod`.
-   - Valor: participación de `amount` por método.
-   - Valor de negocio: lectura rápida de mix de cobro.
-
-2. **Top 5 productos (barras horizontales)**
-   - Fuente: `getTopProducts`.
-   - Valor: `amount` por producto (con toggle opcional a `qty`).
-   - Valor de negocio: identifica productos estrella y oportunidad de upsell.
-
-3. **Ventas por hora (barras verticales)**
-   - Fuente: `getHourlySales`.
-   - Valor: `totalSales` por `hour`.
-   - Valor de negocio: detecta horas pico para operación y staffing.
+- ✅ **Métodos de pago (pastel/dona)** implementada en dashboard con `getPaymentsByMethod` y mapping `{ name: method, value: amount }[]` (con agrupación opcional en `Otros`).
+- ✅ **Top 5 productos (barras horizontales)** implementada en dashboard con `getTopProducts({ ...filters, top: 5 })` y mapping `{ name: productNameSnapshot, value: amount }[]`.
+- ✅ **Ventas por hora (barras verticales)** implementada en dashboard con `getHourlySales` y mapping `{ name: "HH:00", value: totalSales }[]`.
 
 ## Nota de integración con ngx-charts
 
