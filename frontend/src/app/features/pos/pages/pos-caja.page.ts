@@ -492,6 +492,7 @@ export class PosCajaPage implements OnDestroy {
       this.inProgressClientSaleId.set(null);
       await this.refreshClosePreviewWithCashCount();
     } catch (error) {
+      console.log('[confirmPayment] Caught error:', error);
       await this.handleSaleError(error);
     } finally {
       this.loading.set(false);
@@ -712,6 +713,7 @@ export class PosCajaPage implements OnDestroy {
   }
 
   private async handleSaleError(error: unknown) {
+    console.log('[handleSaleError] Entered with error:', error);
     const status = this.getHttpStatus(error);
     const payload = this.extractErrorPayload(error);
 
