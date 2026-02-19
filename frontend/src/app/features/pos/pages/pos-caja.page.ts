@@ -224,9 +224,11 @@ export class PosCajaPage implements OnDestroy {
   }
 
   async loadSnapshot(forceRefresh = false) {
-    this.errorMessage.set(null);
-    this.canRefreshCatalogAfterUnavailable.set(false);
-    this.unavailableItemName.set(null);
+    if (forceRefresh) {
+      this.errorMessage.set(null);
+      this.canRefreshCatalogAfterUnavailable.set(false);
+      this.unavailableItemName.set(null);
+    }
     try {
       const data = await firstValueFrom(this.snapshotService.getSnapshot({ forceRefresh }));
       this.snapshot.set(data);
