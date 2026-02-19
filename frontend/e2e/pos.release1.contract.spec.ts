@@ -160,6 +160,7 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
     if (pathname.endsWith('/sales') && method === 'POST') {
       createSaleCalls += 1;
       if (options.staleUnavailableOnCreateSale && createSaleCalls === 1) {
+        console.log('[Fake API] Returning 409 ITEM_UNAVAILABLE');
         return route.fulfill({
           status: 409,
           contentType: 'application/json',
@@ -423,6 +424,8 @@ test('D) Producto no disponible se renderiza disabled con badge Agotado', async 
 test('E) Cache stale: create sale 409 unavailable y actualización de catálogo refresca estado', async ({
   page,
 }) => {
+  page.on('console', (msg) => console.log('BROWSER LOG:', msg.text()));
+
   const captured = await setupFakePosApi(page, {
     role: 'Cashier',
     staleUnavailableOnCreateSale: true,
@@ -477,6 +480,8 @@ test('E) Cache stale: create sale 409 unavailable y actualización de catálogo 
   await submitMixedPayment(page);
   await createSaleConflict;
 
+  await expect(page.getByText('No disponible', { exact: false })).toBeVisible({ timeout: 5000 });
+  await expect(page.locator('.error')).toBeVisible();
   await expect(page.getByTestId('unavailable-alert')).toBeVisible({ timeout: 10000 });
   await expect(page.getByTestId('refresh-catalog-unavailable')).toBeVisible();
   await expect(page.getByTestId('unavailable-item-name')).toHaveText(/Cafe|Café/i);
