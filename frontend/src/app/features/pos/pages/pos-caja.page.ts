@@ -663,6 +663,18 @@ export class PosCajaPage implements OnDestroy {
     return -1;
   }
 
+  private extractErrorPayload(error: unknown): unknown {
+    if (error instanceof HttpErrorResponse) {
+      return error.error;
+    }
+
+    if (typeof error === 'object' && error && 'error' in error) {
+      return this.extractErrorPayload((error as { error: unknown }).error);
+    }
+
+    return null;
+  }
+
   private addToCart(product: ProductDto, customization: ProductCustomizationResult) {
     this.cartItems.update((items) => [
       ...items,
@@ -698,8 +710,10 @@ export class PosCajaPage implements OnDestroy {
   }
 
   private async handleSaleError(error: unknown) {
-    const httpError = error as HttpErrorResponse;
-    if (httpError.status === 409 && this.isNoOpenShiftError(httpError.error)) {
+    const status = this.getHttpStatus(error);
+    const payload = this.extractErrorPayload(error);
+
+    if (status === 409 && this.isNoOpenShiftError(payload)) {
       this.errorMessage.set('No hay turno abierto. Debes abrir turno para continuar.');
       this.inProgressClientSaleId.set(null);
       await this.loadCurrentShift();
@@ -707,8 +721,8 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
-    if (httpError.status === 409 && this.isItemUnavailableError(httpError.error)) {
-      const unavailable = this.getUnavailableItemData(httpError.error);
+    if (status === 409 && this.isItemUnavailableError(payload)) {
+      const unavailable = this.getUnavailableItemData(payload);
       this.unavailableItemName.set(unavailable.itemName);
       this.errorMessage.set('No disponible. Actualiza catálogo e intenta de nuevo.');
       this.canRefreshCatalogAfterUnavailable.set(true);
@@ -716,20 +730,20 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
-    if (httpError.status === 409) {
+    if (status === 409) {
       this.errorMessage.set('Esta venta ya fue registrada.');
       this.inProgressClientSaleId.set(null);
       return;
     }
 
-    if (httpError.status === 0) {
+    if (status === 0) {
       this.errorMessage.set(
         'Error de red. Puedes reintentar y se reutilizará el mismo clientSaleId para evitar duplicados.',
       );
       return;
     }
 
-    if (httpError.status === 400) {
+    if (status === 400) {
       this.errorMessage.set('Solicitud inválida. Revisa los datos del cobro.');
       return;
     }
