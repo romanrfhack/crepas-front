@@ -341,4 +341,27 @@ describe('PosCajaPage', () => {
     await fixture.componentInstance.refreshCatalogAfterUnavailable();
     expect(invalidateCalls.length).toBe(1);
   });
+  it('shows unavailable alert even when backend only provides unavailable title/detail', async () => {
+    const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
+      createSale: (payload: CreateSaleRequestDto, correlationId: string) => Promise<unknown>;
+    };
+    salesApi.createSale = async () => {
+      throw new HttpErrorResponse({
+        status: 409,
+        error: {
+          title: 'ItemUnavailable',
+          detail: 'Producto no disponible en catálogo actual',
+          extensions: { itemName: 'Waffle Fresa' },
+        },
+      });
+    };
+
+    await fixture.componentInstance.confirmPayment({
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
+    });
+
+    expect(fixture.componentInstance.errorMessage()).toContain('No disponible');
+    expect(fixture.componentInstance.canRefreshCatalogAfterUnavailable()).toBe(true);
+    expect(fixture.componentInstance.unavailableItemName()).toBe('Waffle Fresa');
+  });
 });
