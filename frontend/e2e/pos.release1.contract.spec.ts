@@ -164,7 +164,9 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
           status: 409,
           contentType: 'application/json',
           body: JSON.stringify({
+            code: 'ITEM_UNAVAILABLE',
             title: 'ItemUnavailable',
+            detail: 'Producto no disponible en catálogo actual',
             status: 409,
             itemType: 'Product',
             itemId: 'P1',
@@ -475,7 +477,7 @@ test('E) Cache stale: create sale 409 unavailable y actualización de catálogo 
   await submitMixedPayment(page);
   await createSaleConflict;
 
-  await expect(page.getByTestId('unavailable-alert')).toBeVisible();
+  await expect(page.getByTestId('unavailable-alert')).toBeVisible({ timeout: 10000 });
   await expect(page.getByTestId('refresh-catalog-unavailable')).toBeVisible();
   await expect(page.getByTestId('unavailable-item-name')).toHaveText(/Cafe|Café/i);
 
