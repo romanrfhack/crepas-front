@@ -75,9 +75,7 @@
     <div class="chart-container" aria-label="Gráfico de barras de ventas mensuales de demostración">
       <ngx-charts-bar-vertical
         [results]="monthlySalesData()"
-        [scheme]="chartColorScheme()"
-        [showXAxis]="true"
-        [showYAxis]="true"
+        [scheme]="chartColorScheme()"        
         [xAxis]="true"
         [yAxis]="true"
         [showDataLabel]="true"
@@ -86,8 +84,8 @@
         [roundDomains]="true"
         [barPadding]="14"
         [yScaleMax]="20000"
-        [xAxisLabel]="Mes"
-        [yAxisLabel]="Ventas($)"
+        [xAxisLabel]="'Mes'"
+        [yAxisLabel]="'Ventas($)'"
       />
     </div>
     <div class="demo-hint">
