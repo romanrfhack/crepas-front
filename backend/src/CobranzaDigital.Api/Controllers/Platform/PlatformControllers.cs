@@ -80,9 +80,13 @@ public sealed class PlatformTenantsController : ControllerBase
             Name = request.Name,
             Slug = request.Slug,
             IsActive = true,
+            DefaultStoreId = null,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
+
+        _db.Tenants.Add(tenant);
+        await _db.SaveChangesAsync(ct);
 
         var store = new Store
         {
@@ -95,10 +99,13 @@ public sealed class PlatformTenantsController : ControllerBase
             UpdatedAtUtc = now
         };
 
-        tenant.DefaultStoreId = store.Id;
-        _db.Tenants.Add(tenant);
         _db.Stores.Add(store);
         await _db.SaveChangesAsync(ct);
+
+        tenant.DefaultStoreId = store.Id;
+        tenant.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
         return tenant;
     }
 

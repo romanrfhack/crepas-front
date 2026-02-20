@@ -156,7 +156,11 @@ public sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(x => x.Slug).HasMaxLength(100).IsRequired();
         builder.HasIndex(x => x.Slug).IsUnique();
         builder.HasOne<Vertical>().WithMany().HasForeignKey(x => x.VerticalId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.DefaultStoreId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Store>()
+            .WithMany()
+            .HasForeignKey(x => x.DefaultStoreId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 
