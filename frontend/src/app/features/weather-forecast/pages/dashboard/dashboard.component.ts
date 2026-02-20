@@ -2,9 +2,9 @@ import { CommonModule, DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
-  OnInit,
   afterNextRender,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -18,6 +18,8 @@ interface ChartDataPoint {
   value: number;
 }
 
+type DashboardPeriod = 'today' | 'week' | 'month' | 'custom';
+
 @Component({
   selector: 'app-dashboard',
   imports: [CommonModule, NgxChartsModule],
@@ -25,7 +27,7 @@ interface ChartDataPoint {
   styleUrl: './dashboard.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent {
   private readonly document = inject(DOCUMENT);
   private readonly reportsApi = inject(PosReportsApiService);
   private readonly timezoneService = inject(PosTimezoneService);
@@ -33,6 +35,10 @@ export class DashboardComponent implements OnInit {
   readonly loadingPayments = signal(false);
   readonly loadingTopProducts = signal(false);
   readonly loadingHourlySales = signal(false);
+
+  readonly selectedPeriod = signal<DashboardPeriod>('week');
+  readonly customDateFrom = signal('');
+  readonly customDateTo = signal('');
 
   readonly paymentError = signal<string | null>(null);
   readonly topProductsError = signal<string | null>(null);
@@ -45,6 +51,52 @@ export class DashboardComponent implements OnInit {
   readonly hasPaymentData = computed(() => this.paymentMethodData().length > 0);
   readonly hasTopProductsData = computed(() => this.topProductsData().length > 0);
   readonly hasHourlySalesData = computed(() => this.hourlySalesData().length > 0);
+  readonly isCustomPeriod = computed(() => this.selectedPeriod() === 'custom');
+
+  readonly customDateError = computed(() => {
+    if (!this.isCustomPeriod()) {
+      return null;
+    }
+
+    const dateFrom = this.customDateFrom();
+    const dateTo = this.customDateTo();
+
+    if (!dateFrom || !dateTo) {
+      return 'Selecciona un rango de fechas válido.';
+    }
+
+    if (dateFrom > dateTo) {
+      return 'La fecha "Desde" no puede ser mayor que "Hasta".';
+    }
+
+    return null;
+  });
+
+  readonly effectiveDateRange = computed<PosReportFilters | null>(() => {
+    const selectedPeriod = this.selectedPeriod();
+    const today = this.timezoneService.todayIsoDate();
+
+    if (selectedPeriod === 'today') {
+      return { dateFrom: today, dateTo: today };
+    }
+
+    if (selectedPeriod === 'week') {
+      return { dateFrom: this.getWeekStart(today), dateTo: today };
+    }
+
+    if (selectedPeriod === 'month') {
+      return { dateFrom: this.getMonthStart(today), dateTo: this.getMonthEnd(today) };
+    }
+
+    if (this.customDateError()) {
+      return null;
+    }
+
+    return {
+      dateFrom: this.customDateFrom(),
+      dateTo: this.customDateTo(),
+    };
+  });
 
   readonly chartColorScheme = signal<Color>({
     name: 'brand-dashboard',
@@ -54,25 +106,70 @@ export class DashboardComponent implements OnInit {
   });
 
   constructor() {
+    const initialRange = this.buildLast7DaysFilters();
+    this.customDateFrom.set(initialRange.dateFrom);
+    this.customDateTo.set(initialRange.dateTo);
+
+    effect(() => {
+      const dateRange = this.effectiveDateRange();
+      if (!dateRange) {
+        return;
+      }
+
+      void this.loadAllCharts(dateRange);
+    });
+
     afterNextRender(() => {
       this.chartColorScheme.set(this.buildColorSchemeFromCssVariables());
     });
   }
 
-  ngOnInit(): void {
-    void Promise.all([
-      this.loadPaymentsByMethodChart(),
-      this.loadTopProductsChart(),
-      this.loadHourlySalesChart(),
+  onPeriodChange(period: DashboardPeriod): void {
+    this.selectedPeriod.set(period);
+  }
+
+  onPeriodSelectChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement | null)?.value;
+    if (value === 'today' || value === 'week' || value === 'month' || value === 'custom') {
+      this.onPeriodChange(value);
+    }
+  }
+
+  onCustomDateFromChange(value: string): void {
+    this.customDateFrom.set(value);
+  }
+
+  onCustomDateFromInput(event: Event): void {
+    this.onCustomDateFromChange((event.target as HTMLInputElement | null)?.value ?? '');
+  }
+
+  onCustomDateToChange(value: string): void {
+    this.customDateTo.set(value);
+  }
+
+  onCustomDateToInput(event: Event): void {
+    this.onCustomDateToChange((event.target as HTMLInputElement | null)?.value ?? '');
+  }
+
+  async loadAllCharts(filters: PosReportFilters): Promise<void> {
+    await Promise.all([
+      this.loadPaymentsByMethodChart(filters),
+      this.loadTopProductsChart(filters),
+      this.loadHourlySalesChart(filters),
     ]);
   }
 
-  async loadPaymentsByMethodChart() {
+  async loadPaymentsByMethodChart(filters?: PosReportFilters): Promise<void> {
+    const resolvedFilters = filters ?? this.effectiveDateRange();
+    if (!resolvedFilters) {
+      return;
+    }
+
     this.loadingPayments.set(true);
     this.paymentError.set(null);
 
     try {
-      const response = await this.reportsApi.getPaymentsByMethod(this.buildLast7DaysFilters());
+      const response = await this.reportsApi.getPaymentsByMethod(resolvedFilters);
       this.paymentMethodData.set(this.toPaymentMethodChartData(response.totals));
     } catch {
       this.paymentError.set('No disponible temporalmente. Intenta nuevamente.');
@@ -82,13 +179,18 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  async loadTopProductsChart() {
+  async loadTopProductsChart(filters?: PosReportFilters): Promise<void> {
+    const resolvedFilters = filters ?? this.effectiveDateRange();
+    if (!resolvedFilters) {
+      return;
+    }
+
     this.loadingTopProducts.set(true);
     this.topProductsError.set(null);
 
     try {
       const response = await this.reportsApi.getTopProducts({
-        ...this.buildLast7DaysFilters(),
+        ...resolvedFilters,
         top: 5,
       });
       this.topProductsData.set(
@@ -102,12 +204,17 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  async loadHourlySalesChart() {
+  async loadHourlySalesChart(filters?: PosReportFilters): Promise<void> {
+    const resolvedFilters = filters ?? this.effectiveDateRange();
+    if (!resolvedFilters) {
+      return;
+    }
+
     this.loadingHourlySales.set(true);
     this.hourlySalesError.set(null);
 
     try {
-      const response = await this.reportsApi.getHourlySales(this.buildLast7DaysFilters());
+      const response = await this.reportsApi.getHourlySales(resolvedFilters);
       this.hourlySalesData.set(
         response.map((item) => ({
           name: `${item.hour.toString().padStart(2, '0')}:00`,
@@ -122,7 +229,9 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  private toPaymentMethodChartData(items: Array<{ method: string; amount: number }>): ChartDataPoint[] {
+  private toPaymentMethodChartData(
+    items: Array<{ method: string; amount: number }>,
+  ): ChartDataPoint[] {
     const sorted = [...items]
       .map((item) => ({ name: item.method, value: item.amount }))
       .sort((left, right) => right.value - left.value);
@@ -146,6 +255,36 @@ export class DashboardComponent implements OnInit {
       dateFrom: this.timezoneService.getIsoDateInBusinessTimezone(fromDate),
       dateTo: today,
     };
+  }
+
+  private getWeekStart(isoDate: string): string {
+    const date = this.parseIsoDateAsUtc(isoDate);
+    const day = date.getUTCDay();
+    const daysFromMonday = day === 0 ? 6 : day - 1;
+    date.setUTCDate(date.getUTCDate() - daysFromMonday);
+    return this.toIsoDate(date);
+  }
+
+  private getMonthStart(isoDate: string): string {
+    const [year, month] = isoDate.split('-');
+    return `${year}-${month}-01`;
+  }
+
+  private getMonthEnd(isoDate: string): string {
+    const [yearValue, monthValue] = isoDate.split('-').map((part) => Number(part));
+    const lastDay = new Date(Date.UTC(yearValue, monthValue, 0)).getUTCDate();
+    return `${yearValue.toString().padStart(4, '0')}-${monthValue
+      .toString()
+      .padStart(2, '0')}-${lastDay.toString().padStart(2, '0')}`;
+  }
+
+  private parseIsoDateAsUtc(isoDate: string): Date {
+    const [year, month, day] = isoDate.split('-').map((part) => Number(part));
+    return new Date(Date.UTC(year, month - 1, day));
+  }
+
+  private toIsoDate(value: Date): string {
+    return value.toISOString().slice(0, 10);
   }
 
   private buildColorSchemeFromCssVariables(): Color {

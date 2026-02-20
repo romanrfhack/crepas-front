@@ -22,6 +22,7 @@
 - ✅ **Métodos de pago (pastel/dona)** implementada en dashboard con `getPaymentsByMethod` y mapping `{ name: method, value: amount }[]` (con agrupación opcional en `Otros`).
 - ✅ **Top 5 productos (barras horizontales)** implementada en dashboard con `getTopProducts({ ...filters, top: 5 })` y mapping `{ name: productNameSnapshot, value: amount }[]`.
 - ✅ **Ventas por hora (barras verticales)** implementada en dashboard con `getHourlySales` y mapping `{ name: "HH:00", value: totalSales }[]`.
+- ✅ **Filtros interactivos de período** en dashboard (`Hoy`, `Esta semana`, `Este mes`, `Personalizado`) con cálculo de `dateFrom/dateTo` en zona horaria del negocio y recarga reactiva de las tres gráficas al cambiar filtros.
 
 ## Nota de integración con ngx-charts
 

@@ -86,6 +86,49 @@
   letter-spacing: 0.03em;
 }
 
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--brand-ink);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(107, 63, 42, 0.16);
+  background: white;
+  font-size: 0.95rem;
+  transition: all var(--transition);
+  font-family: inherit;
+}
+
+input:hover,
+select:hover {
+  border-color: rgba(232, 154, 172, 0.45);
+}
+
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 1px;
+  border-color: rgba(232, 154, 172, 0.55);
+  box-shadow: 0 0 0 4px rgba(232, 154, 172, 0.16);
+}
+
 .coming-soon-card {
   background: linear-gradient(145deg, #fff8f5, #fff0ed);
   border-color: rgba(232, 154, 172, 0.3);
