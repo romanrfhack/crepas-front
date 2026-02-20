@@ -11,6 +11,7 @@
       </div>
 
       <div class="shift-indicator">
+        <div class="action-buttons">
         @if (openedShiftSummary(); as shift) {
           <span
             class="shift-badge shift-badge--open"
@@ -48,9 +49,6 @@
             🔓
           </button>
         }
-      </div>
-
-      <div class="action-buttons">
         <button
           type="button"
           class="btn-icon-small"
@@ -70,13 +68,15 @@
         >
           ⏱️
         </button>
-      </div>
-
-      @if (showCorrelationId && correlationId(); as cid) {
+        @if (showCorrelationId && correlationId(); as cid) {
         <span class="correlation-id" [title]="'Correlation ID: ' + cid">
           {{ cid.slice(0, 8) }}...
         </span>
       }
+      </div>        
+      </div>
+      
+      
     </div>
   </header>
 

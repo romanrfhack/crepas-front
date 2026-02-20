@@ -23,11 +23,11 @@
 }
 
 .search-wrapper {
-  flex: 1 1 200px;
+  flex: 1 1 20px;
 }
 
 .search-wrapper input {
-  width: 100%;
+  width: 95%;
   padding: 0.5rem 0.8rem;
   font-size: 0.95rem;
 }
@@ -242,7 +242,7 @@
 .modal-card input,
 .modal-card select,
 .modal-card textarea {
-  width: 100%;
+  width: 95%;
   padding: 0.5rem 0.7rem; /* Reducido */
   border-radius: 12px;
   border: 1px solid rgba(107, 63, 42, 0.16);
@@ -315,7 +315,7 @@
 .denomination-item input[type='number'] {
   width: 3rem; /* Reducido */
   min-width: 3rem;
-  max-width: 100%;
+  max-width: 95%;
   padding: 0.15rem 0.2rem;
   font-size: 0.75rem;
   text-align: right;
@@ -428,7 +428,7 @@
   bottom: 90px;
   right: 2rem;
   width: 360px;
-  max-width: 90vw;
+  max-width: 50vw;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -510,7 +510,7 @@
   }
 
   .modal-card {
-    width: 94vw;
+    width: 80vw;
     padding: 1.25rem;
   }
 

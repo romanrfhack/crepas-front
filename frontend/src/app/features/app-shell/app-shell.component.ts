@@ -364,7 +364,7 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
       grid-template-columns: minmax(0, 1fr);
       gap: 1.5rem;
       flex: 1;
-      padding: 1.75rem 2rem 2rem;
+      padding: 0.25rem 2rem 2rem;
       align-items: start;
       transition: grid-template-columns var(--transition);
     }
