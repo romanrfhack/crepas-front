@@ -12,6 +12,40 @@ public static class PosBootstrapper
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
 
+        var now = DateTimeOffset.UtcNow;
+        var defaultVertical = await db.Verticals.OrderBy(x => x.Name).FirstOrDefaultAsync().ConfigureAwait(false);
+        if (defaultVertical is null)
+        {
+            defaultVertical = new Vertical
+            {
+                Id = Guid.NewGuid(),
+                Name = "Restaurant",
+                Description = "Default vertical",
+                IsActive = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            };
+            db.Verticals.Add(defaultVertical);
+            await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+
+        var defaultTenant = await db.Tenants.OrderBy(x => x.Name).FirstOrDefaultAsync().ConfigureAwait(false);
+        if (defaultTenant is null)
+        {
+            defaultTenant = new Tenant
+            {
+                Id = Guid.NewGuid(),
+                Name = "Default Tenant",
+                Slug = "default-tenant",
+                VerticalId = defaultVertical.Id,
+                IsActive = true,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            };
+            db.Tenants.Add(defaultTenant);
+            await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+
         var defaultStore = await db.Stores.OrderBy(s => s.Id).FirstOrDefaultAsync().ConfigureAwait(false);
         if (defaultStore is null)
         {
@@ -19,6 +53,7 @@ public static class PosBootstrapper
             {
                 Id = Guid.NewGuid(),
                 Name = "Default",
+                TenantId = defaultTenant.Id,
                 IsActive = true,
                 TimeZoneId = "America/Mexico_City",
                 CreatedAtUtc = DateTimeOffset.UtcNow,
@@ -26,6 +61,17 @@ public static class PosBootstrapper
             };
 
             db.Stores.Add(defaultStore);
+            await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+        else if (defaultStore.TenantId == Guid.Empty)
+        {
+            defaultStore.TenantId = defaultTenant.Id;
+            await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+
+        if (!defaultTenant.DefaultStoreId.HasValue)
+        {
+            defaultTenant.DefaultStoreId = defaultStore.Id;
             await db.SaveChangesAsync().ConfigureAwait(false);
         }
 

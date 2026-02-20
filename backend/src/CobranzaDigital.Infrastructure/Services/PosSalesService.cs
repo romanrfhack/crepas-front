@@ -32,6 +32,7 @@ public sealed class PosSalesService : IPosSalesService
     private readonly IBusinessTime _businessTime;
     private readonly PosStoreContextService _storeContext;
     private readonly IPointsReversalService _pointsReversalService;
+    private readonly ITenantContext _tenantContext;
 
     public PosSalesService(
         CobranzaDigitalDbContext db,
@@ -41,7 +42,8 @@ public sealed class PosSalesService : IPosSalesService
         IOptions<PosOptions> posOptions,
         IBusinessTime businessTime,
         PosStoreContextService storeContext,
-        IPointsReversalService pointsReversalService)
+        IPointsReversalService pointsReversalService,
+        ITenantContext tenantContext)
     {
         _db = db;
         _auditLogger = auditLogger;
@@ -51,6 +53,7 @@ public sealed class PosSalesService : IPosSalesService
         _businessTime = businessTime;
         _storeContext = storeContext;
         _pointsReversalService = pointsReversalService;
+        _tenantContext = tenantContext;
     }
 
     public async Task<CreateSaleResponseDto> CreateSaleAsync(CreateSaleRequestDto request, CancellationToken ct)
@@ -64,13 +67,14 @@ public sealed class PosSalesService : IPosSalesService
         {
             var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
             var correlationId = GetCorrelationId();
+            var tenantId = RequireTenantId();
             var (storeId, _) = await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false);
 
             Guid? openShiftId = null;
             if (_posOptions.RequireOpenShiftForSales)
             {
                 var openShiftCandidates = await _db.PosShifts.AsNoTracking()
-                    .Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId)
+                    .Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId && x.TenantId == tenantId)
                     .Select(x => new { x.Id, x.OpenedAtUtc })
                     .ToListAsync(ct)
                     .ConfigureAwait(false);
@@ -89,7 +93,7 @@ public sealed class PosSalesService : IPosSalesService
             if (request.ClientSaleId.HasValue)
             {
                 var existing = await _db.Sales.AsNoTracking()
-                    .Where(x => x.ClientSaleId == request.ClientSaleId.Value)
+                    .Where(x => x.ClientSaleId == request.ClientSaleId.Value && x.TenantId == tenantId)
                     .Select(x => new CreateSaleResponseDto(x.Id, x.Folio, x.OccurredAtUtc, x.Total))
                     .FirstOrDefaultAsync(ct)
                     .ConfigureAwait(false);
@@ -177,6 +181,7 @@ public sealed class PosSalesService : IPosSalesService
                 ClientSaleId = request.ClientSaleId,
                 ShiftId = openShiftId,
                 StoreId = storeId,
+                TenantId = tenantId,
                 Status = SaleStatus.Completed
             };
 
@@ -506,9 +511,10 @@ public sealed class PosSalesService : IPosSalesService
         var paymentsBySaleId = payments.Where(x => saleIds.Contains(x.SaleId)).GroupBy(x => x.SaleId).ToDictionary(x => x.Key, x => x.ToList());
 
         var (resolvedStoreId, _) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
+        var tenantId = RequireTenantId();
         var shiftIds = saleGroupsByShift.Keys.ToArray();
         var shifts = await _db.PosShifts.AsNoTracking()
-            .Where(x => x.StoreId == resolvedStoreId &&
+            .Where(x => x.StoreId == resolvedStoreId && x.TenantId == tenantId &&
                         (!cashierUserId.HasValue || x.OpenedByUserId == cashierUserId.Value) &&
                         shiftIds.Contains(x.Id))
             .Select(x => new
@@ -775,7 +781,8 @@ public sealed class PosSalesService : IPosSalesService
             throw ValidationError("reasonCode", "reasonCode is required.");
         }
 
-        var sale = await _db.Sales.FirstOrDefaultAsync(x => x.Id == saleId, ct).ConfigureAwait(false)
+        var tenantId = RequireTenantId();
+        var sale = await _db.Sales.FirstOrDefaultAsync(x => x.Id == saleId && x.TenantId == tenantId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException("Sale not found.");
 
         if (sale.Status == SaleStatus.Void)
@@ -790,7 +797,7 @@ public sealed class PosSalesService : IPosSalesService
 
         if (request.ClientVoidId.HasValue)
         {
-            var existing = await _db.Sales.AsNoTracking().FirstOrDefaultAsync(x => x.ClientVoidId == request.ClientVoidId, ct).ConfigureAwait(false);
+            var existing = await _db.Sales.AsNoTracking().FirstOrDefaultAsync(x => x.ClientVoidId == request.ClientVoidId && x.TenantId == tenantId, ct).ConfigureAwait(false);
             if (existing is not null)
             {
                 return new VoidSaleResponseDto(existing.Id, existing.Status, existing.VoidedAtUtc ?? _businessTime.UtcNow);
@@ -808,7 +815,7 @@ public sealed class PosSalesService : IPosSalesService
         if (!isManager)
         {
             var isOwnShift = sale.ShiftId.HasValue && await _db.PosShifts.AsNoTracking().AnyAsync(
-                x => x.Id == sale.ShiftId.Value && x.OpenedByUserId == userId,
+                x => x.Id == sale.ShiftId.Value && x.OpenedByUserId == userId && x.TenantId == tenantId,
                 ct).ConfigureAwait(false);
 
             if (!isOwnShift || _businessTime.ToBusinessDate(sale.OccurredAtUtc) != _businessTime.BusinessDate)
@@ -857,8 +864,9 @@ public sealed class PosSalesService : IPosSalesService
         var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
         var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
 
+        var tenantId = RequireTenantId();
         var sales = await _db.Sales.AsNoTracking()
-            .Where(x => x.StoreId == resolvedStoreId && x.OccurredAtUtc >= utcStart && x.OccurredAtUtc < utcEndExclusive)
+            .Where(x => x.StoreId == resolvedStoreId && x.TenantId == tenantId && x.OccurredAtUtc >= utcStart && x.OccurredAtUtc < utcEndExclusive)
             .Select(x => new SaleReportRow(
                 x.Id,
                 x.StoreId,
@@ -893,8 +901,10 @@ public sealed class PosSalesService : IPosSalesService
         var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
         var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
 
+        var tenantId = RequireTenantId();
         return await _db.Sales.AsNoTracking()
             .Where(x => x.StoreId == resolvedStoreId
+                        && x.TenantId == tenantId
                         && x.OccurredAtUtc >= utcStart
                         && x.OccurredAtUtc < utcEndExclusive
                         && (!cashierUserId.HasValue || x.CreatedByUserId == cashierUserId.Value)
@@ -998,12 +1008,23 @@ public sealed class PosSalesService : IPosSalesService
         return value;
     }
 
+    private Guid RequireTenantId()
+    {
+        if (!_tenantContext.TenantId.HasValue)
+        {
+            throw new ForbiddenException("Tenant context is required.");
+        }
+
+        return _tenantContext.TenantId.Value;
+    }
+
     private async Task<(Guid StoreId, TimeZoneInfo TimeZoneInfo)> ResolveStoreTimeZoneAsync(Guid? storeId, CancellationToken ct)
     {
         var (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
 
+        var tenantId = RequireTenantId();
         var timeZoneId = await _db.Stores.AsNoTracking()
-            .Where(x => x.Id == resolvedStoreId)
+            .Where(x => x.Id == resolvedStoreId && x.TenantId == tenantId)
             .Select(x => x.TimeZoneId)
             .FirstAsync(ct)
             .ConfigureAwait(false);

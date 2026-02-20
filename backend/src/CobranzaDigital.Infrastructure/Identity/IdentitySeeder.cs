@@ -7,7 +7,7 @@ namespace CobranzaDigital.Infrastructure.Identity;
 
 public static partial class IdentitySeeder
 {
-    private static readonly string[] DefaultRoles = ["Admin", "User", "Manager", "Collector", "Cashier"];
+    private static readonly string[] DefaultRoles = ["Admin", "User", "Manager", "Collector", "Cashier", "TenantAdmin", "SuperAdmin"];
 
     public static async Task SeedAsync(IServiceProvider serviceProvider, IConfiguration configuration)
     {

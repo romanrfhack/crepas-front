@@ -85,6 +85,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditLogger, AuditLogger>();
         services.AddScoped<IUserAdminService, UserAdminService>();
         services.AddScoped<ITokenService, JwtTokenService>();
+        services.AddScoped<ITenantContext, TenantContextService>();
         services.AddTransient<IDateTime, SystemDateTime>();
         services.AddSingleton<IBusinessTime, BusinessTime>();
         services.AddScoped<IPosCatalogService, PosCatalogService>();

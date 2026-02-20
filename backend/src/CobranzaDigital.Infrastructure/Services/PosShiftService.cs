@@ -24,14 +24,16 @@ public sealed class PosShiftService : IPosShiftService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IBusinessTime _businessTime;
     private readonly PosStoreContextService _storeContext;
+    private readonly ITenantContext _tenantContext;
 
-    public PosShiftService(CobranzaDigitalDbContext db, IAuditLogger auditLogger, IHttpContextAccessor httpContextAccessor, IBusinessTime businessTime, PosStoreContextService storeContext)
+    public PosShiftService(CobranzaDigitalDbContext db, IAuditLogger auditLogger, IHttpContextAccessor httpContextAccessor, IBusinessTime businessTime, PosStoreContextService storeContext, ITenantContext tenantContext)
     {
         _db = db;
         _auditLogger = auditLogger;
         _httpContextAccessor = httpContextAccessor;
         _businessTime = businessTime;
         _storeContext = storeContext;
+        _tenantContext = tenantContext;
     }
 
     public async Task<PosShiftDto?> GetCurrentShiftAsync(Guid? storeId, CancellationToken ct)
@@ -51,11 +53,12 @@ public sealed class PosShiftService : IPosShiftService
 
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
         var resolvedStoreId = (await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false)).StoreId;
+        var tenantId = RequireTenantId();
 
         if (request.ClientOperationId.HasValue)
         {
             var existingByOperation = await _db.PosShifts.AsNoTracking()
-                .Where(x => x.OpenOperationId == request.ClientOperationId && x.OpenedByUserId == userId && x.StoreId == resolvedStoreId)
+                .Where(x => x.OpenOperationId == request.ClientOperationId && x.OpenedByUserId == userId && x.StoreId == resolvedStoreId && x.TenantId == tenantId)
                 .FirstOrDefaultAsync(ct)
                 .ConfigureAwait(false);
 
@@ -80,7 +83,8 @@ public sealed class PosShiftService : IPosShiftService
             OpeningCashAmount = openingCashAmount,
             OpenNotes = request.Notes,
             OpenOperationId = request.ClientOperationId,
-            StoreId = resolvedStoreId
+            StoreId = resolvedStoreId,
+            TenantId = tenantId
         };
 
         _db.PosShifts.Add(shift);
@@ -125,13 +129,14 @@ public sealed class PosShiftService : IPosShiftService
         }
 
         var storeId = (await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false)).StoreId;
+        var tenantId = RequireTenantId();
         var openShift = await GetLatestOpenShiftForUpdateAsync(request.ShiftId, storeId, ct).ConfigureAwait(false);
         if (openShift is null)
         {
             if (request.ClientOperationId.HasValue)
             {
                 var existingClosed = await _db.PosShifts.AsNoTracking()
-                    .Where(x => x.CloseOperationId == request.ClientOperationId)
+                     .Where(x => x.CloseOperationId == request.ClientOperationId && x.StoreId == storeId && x.TenantId == tenantId)
                     .FirstOrDefaultAsync(ct)
                     .ConfigureAwait(false);
 
@@ -248,7 +253,8 @@ public sealed class PosShiftService : IPosShiftService
     private async Task<PosShift?> GetLatestOpenShiftAsync(Guid storeId, CancellationToken ct)
     {
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
-        var openShiftsQuery = _db.PosShifts.AsNoTracking().Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId);
+        var tenantId = RequireTenantId();
+        var openShiftsQuery = _db.PosShifts.AsNoTracking().Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId && x.TenantId == tenantId);
 
         return await openShiftsQuery.OrderByDescending(x => x.OpenedAtUtc).FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
@@ -256,7 +262,8 @@ public sealed class PosShiftService : IPosShiftService
     private async Task<PosShift?> GetLatestOpenShiftForUpdateAsync(Guid? shiftId, Guid storeId, CancellationToken ct)
     {
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
-        var openShiftsQuery = _db.PosShifts.Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId);
+        var tenantId = RequireTenantId();
+        var openShiftsQuery = _db.PosShifts.Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId && x.TenantId == tenantId);
         if (shiftId.HasValue)
         {
             openShiftsQuery = openShiftsQuery.Where(x => x.Id == shiftId.Value);
@@ -267,8 +274,9 @@ public sealed class PosShiftService : IPosShiftService
 
     private async Task<PaymentBreakdownDto> GetPaymentBreakdownAsync(Guid shiftId, DateTimeOffset openedAtUtc, DateTimeOffset untilUtc, CancellationToken ct)
     {
+        var tenantId = RequireTenantId();
         var sales = await _db.Sales.AsNoTracking()
-            .Where(x => x.ShiftId == shiftId)
+            .Where(x => x.ShiftId == shiftId && x.TenantId == tenantId)
             .Where(x => x.Status == SaleStatus.Completed)
             .Where(x => x.OccurredAtUtc >= openedAtUtc && x.OccurredAtUtc <= untilUtc)
             .Select(x => x.Id)
@@ -311,6 +319,16 @@ public sealed class PosShiftService : IPosShiftService
         {
             throw ValidationError("countedDenominations", "count must be greater than or equal to zero.");
         }
+    }
+
+    private Guid RequireTenantId()
+    {
+        if (!_tenantContext.TenantId.HasValue)
+        {
+            throw new ForbiddenException("Tenant context is required.");
+        }
+
+        return _tenantContext.TenantId.Value;
     }
 
     private static ValidationException ValidationError(string key, string message) =>

@@ -37,6 +37,8 @@ public sealed class CobranzaDigitalDbContext
     public DbSet<PosShift> PosShifts => Set<PosShift>();
     public DbSet<Store> Stores => Set<Store>();
     public DbSet<PosSettings> PosSettings => Set<PosSettings>();
+    public DbSet<Vertical> Verticals => Set<Vertical>();
+    public DbSet<Tenant> Tenants => Set<Tenant>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

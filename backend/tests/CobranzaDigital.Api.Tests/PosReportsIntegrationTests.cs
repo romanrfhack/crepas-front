@@ -149,7 +149,9 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
 
         var storeId = await db.PosSettings.AsNoTracking().Select(x => x.DefaultStoreId).SingleAsync();
-        var tzId = await db.Stores.AsNoTracking().Where(x => x.Id == storeId).Select(x => x.TimeZoneId).SingleAsync();
+        var storeSeed = await db.Stores.AsNoTracking().Where(x => x.Id == storeId).Select(x => new { x.TimeZoneId, x.TenantId }).SingleAsync();
+        var tzId = storeSeed.TimeZoneId;
+        var tenantId = storeSeed.TenantId;
         var timeZone = TZConvert.GetTimeZoneInfo(tzId);
 
         var cashierA = Guid.NewGuid();
@@ -194,6 +196,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
             {
                 Id = shift1,
                 StoreId = storeId,
+                TenantId = tenantId,
                 OpenedByUserId = cashierA,
                 OpenedAtUtc = ToUtc(timeZone, new DateTime(2026, 3, 1, 8, 0, 0)),
                 ClosedAtUtc = ToUtc(timeZone, new DateTime(2026, 3, 1, 20, 0, 0)),
@@ -206,6 +209,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
             {
                 Id = shift2,
                 StoreId = storeId,
+                TenantId = tenantId,
                 OpenedByUserId = cashierB,
                 OpenedAtUtc = ToUtc(timeZone, new DateTime(2026, 3, 2, 8, 0, 0)),
                 ClosedAtUtc = ToUtc(timeZone, new DateTime(2026, 3, 2, 20, 0, 0)),
@@ -217,10 +221,10 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         await db.SaveChangesAsync();
 
-        var sale1 = CreateSale(storeId, shift1, cashierA, ToUtc(timeZone, new DateTime(2026, 3, 1, 9, 15, 0)), 100m, SaleStatus.Completed);
-        var sale2 = CreateSale(storeId, shift1, cashierB, ToUtc(timeZone, new DateTime(2026, 3, 1, 10, 10, 0)), 60m, SaleStatus.Completed);
-        var sale3 = CreateSale(storeId, shift2, cashierA, ToUtc(timeZone, new DateTime(2026, 3, 2, 15, 35, 0)), 80m, SaleStatus.Completed);
-        var saleVoid = CreateSale(storeId, shift2, cashierB, ToUtc(timeZone, new DateTime(2026, 3, 2, 16, 5, 0)), 50m, SaleStatus.Void);
+        var sale1 = CreateSale(storeId, tenantId, shift1, cashierA, ToUtc(timeZone, new DateTime(2026, 3, 1, 9, 15, 0)), 100m, SaleStatus.Completed);
+        var sale2 = CreateSale(storeId, tenantId, shift1, cashierB, ToUtc(timeZone, new DateTime(2026, 3, 1, 10, 10, 0)), 60m, SaleStatus.Completed);
+        var sale3 = CreateSale(storeId, tenantId, shift2, cashierA, ToUtc(timeZone, new DateTime(2026, 3, 2, 15, 35, 0)), 80m, SaleStatus.Completed);
+        var saleVoid = CreateSale(storeId, tenantId, shift2, cashierB, ToUtc(timeZone, new DateTime(2026, 3, 2, 16, 5, 0)), 50m, SaleStatus.Void);
         saleVoid.VoidedAtUtc = ToUtc(timeZone, new DateTime(2026, 3, 2, 16, 20, 0));
         saleVoid.VoidReasonCode = "CashierError";
         saleVoid.VoidReasonText = "captura";
@@ -265,7 +269,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         };
     }
 
-    private static Sale CreateSale(Guid storeId, Guid shiftId, Guid cashierId, DateTimeOffset occurredAtUtc, decimal total, SaleStatus status)
+    private static Sale CreateSale(Guid storeId, Guid tenantId, Guid shiftId, Guid cashierId, DateTimeOffset occurredAtUtc, decimal total, SaleStatus status)
     {
         var id = Guid.NewGuid();
         return new Sale
@@ -273,6 +277,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
             Id = id,
             Folio = $"{Prefix}-{id:N}",
             StoreId = storeId,
+            TenantId = tenantId,
             ShiftId = shiftId,
             CreatedByUserId = cashierId,
             OccurredAtUtc = occurredAtUtc,

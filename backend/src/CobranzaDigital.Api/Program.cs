@@ -150,11 +150,15 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthorizationPolicies.AdminOnly, policy =>
         policy.RequireRole("Admin"));
     options.AddPolicy(AuthorizationPolicies.PosAdmin, policy =>
-        policy.RequireRole("Admin", "Manager"));
+        policy.RequireRole("Admin", "Manager", "TenantAdmin"));
     options.AddPolicy(AuthorizationPolicies.PosOperator, policy =>
-        policy.RequireRole("Admin", "Cashier", "Manager"));
+        policy.RequireRole("Admin", "Cashier", "Manager", "TenantAdmin"));
     options.AddPolicy(AuthorizationPolicies.PosReportViewer, policy =>
-        policy.RequireRole("Admin", "Manager"));
+        policy.RequireRole("Admin", "Manager", "TenantAdmin"));
+    options.AddPolicy(AuthorizationPolicies.PlatformOnly, policy =>
+        policy.RequireRole("SuperAdmin"));
+    options.AddPolicy(AuthorizationPolicies.TenantScoped, policy =>
+        policy.RequireAssertion(context => context.User.HasClaim(x => x.Type == "tenantId")));
     options.AddPolicy(AuthorizationPolicies.RequireScope, policy =>
         policy.RequireClaim("scope", AuthorizationPolicies.RequiredScopeValue));
 });
