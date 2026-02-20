@@ -8,7 +8,7 @@ import {
   untracked,
 } from '@angular/core';
 import { FormField, email, form, minLength, required } from '@angular/forms/signals';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
 
@@ -19,7 +19,7 @@ interface LoginModel {
 
 @Component({
   selector: 'app-login',
-  imports: [FormField, RouterLink],
+  imports: [FormField],
   template: `
     <main class="auth-container">
       <section class="auth-card" aria-labelledby="login-title">
@@ -74,10 +74,10 @@ interface LoginModel {
           </button>
         </form>
 
-        <footer class="auth-footer">
+        <!-- <footer class="auth-footer">
           <span>¿No tienes cuenta?</span>
           <a routerLink="/register">Crear cuenta</a>
-        </footer>
+        </footer> -->
       </section>
     </main>
   `,

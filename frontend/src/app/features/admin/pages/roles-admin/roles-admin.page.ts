@@ -118,7 +118,7 @@ import { RoleDto } from '../../models/admin.models';
 
     .admin-page {
       width: 100%;
-      max-width: 800px;
+      max-width: 100%;
       margin: 0 auto;
       display: flex;
       flex-direction: column;

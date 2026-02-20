@@ -8,7 +8,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { Color, NgxChartsModule, ScaleType } from '@swimlane/ngx-charts';
+import { Color, NgxChartsModule, ScaleType } from '@swimlane/ngx-charts'; // aún se usa para el scheme de colores, pero podemos quitarlo si no es necesario
 import {
   CashierSalesReportItemDto,
   KpisSummaryDto,
@@ -16,6 +16,33 @@ import {
 } from '../../../pos/models/pos-reports.models';
 import { PosReportsApiService } from '../../../pos/services/pos-reports-api.service';
 import { PosTimezoneService } from '../../../pos/services/pos-timezone.service';
+import { NgApexchartsModule } from 'ng-apexcharts';
+import {
+  ApexChart,
+  ApexNonAxisChartSeries,
+  ApexAxisChartSeries,
+  ApexXAxis,
+  ApexYAxis,
+  ApexPlotOptions,
+  ApexDataLabels,
+  ApexGrid,
+  ApexLegend,
+  ApexResponsive,
+} from 'ng-apexcharts';
+
+export type ChartOptions = {
+  series: ApexNonAxisChartSeries | ApexAxisChartSeries;
+  chart: ApexChart;
+  xaxis?: ApexXAxis;
+  yaxis?: ApexYAxis | ApexYAxis[];
+  plotOptions?: ApexPlotOptions;
+  dataLabels?: ApexDataLabels;
+  grid?: ApexGrid;
+  legend?: ApexLegend;
+  colors?: string[];
+  labels?: string[];
+  responsive?: ApexResponsive[];
+};
 
 interface ChartDataPoint {
   name: string;
@@ -31,7 +58,7 @@ type DashboardPeriod = 'today' | 'week' | 'month' | 'custom';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [CommonModule, NgxChartsModule],
+  imports: [CommonModule, NgApexchartsModule],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -41,141 +68,107 @@ export class DashboardComponent {
   private readonly reportsApi = inject(PosReportsApiService);
   private readonly timezoneService = inject(PosTimezoneService);
 
+  // Estados de carga
   readonly loadingPayments = signal(false);
   readonly loadingTopProducts = signal(false);
   readonly loadingHourlySales = signal(false);
   readonly loadingCashiers = signal(false);
   readonly loadingKpis = signal(false);
 
+  // Filtros
   readonly selectedPeriod = signal<DashboardPeriod>('week');
   readonly selectedCashierId = signal('');
   readonly customDateFrom = signal('');
   readonly customDateTo = signal('');
 
+  // Errores
   readonly paymentError = signal<string | null>(null);
   readonly topProductsError = signal<string | null>(null);
   readonly hourlySalesError = signal<string | null>(null);
   readonly cashierError = signal<string | null>(null);
   readonly kpisError = signal<string | null>(null);
 
+  // Datos
   readonly paymentMethodData = signal<ChartDataPoint[]>([]);
   readonly topProductsData = signal<ChartDataPoint[]>([]);
   readonly hourlySalesData = signal<ChartDataPoint[]>([]);
   readonly cashiers = signal<DashboardCashierOption[]>([]);
   readonly kpis = signal<KpisSummaryDto | null>(null);
 
+  // Flags para mostrar datos
   readonly hasPaymentData = computed(() => this.paymentMethodData().length > 0);
   readonly hasTopProductsData = computed(() => this.topProductsData().length > 0);
   readonly hasHourlySalesData = computed(() => this.hourlySalesData().length > 0);
   readonly isCustomPeriod = computed(() => this.selectedPeriod() === 'custom');
 
+  // Validación de fechas custom
   readonly customDateError = computed(() => {
-    if (!this.isCustomPeriod()) {
-      return null;
-    }
-
-    const dateFrom = this.customDateFrom();
-    const dateTo = this.customDateTo();
-
-    if (!dateFrom || !dateTo) {
-      return 'Selecciona un rango de fechas válido.';
-    }
-
-    if (dateFrom > dateTo) {
-      return 'La fecha "Desde" no puede ser mayor que "Hasta".';
-    }
-
+    if (!this.isCustomPeriod()) return null;
+    const from = this.customDateFrom();
+    const to = this.customDateTo();
+    if (!from || !to) return 'Selecciona un rango de fechas válido.';
+    if (from > to) return 'La fecha "Desde" no puede ser mayor que "Hasta".';
     return null;
   });
 
+  // Rango efectivo de fechas (según período seleccionado)
   readonly effectiveDateRange = computed<PosReportFilters | null>(() => {
-    const selectedPeriod = this.selectedPeriod();
+    const period = this.selectedPeriod();
     const today = this.timezoneService.todayIsoDate();
 
-    if (selectedPeriod === 'today') {
-      return { dateFrom: today, dateTo: today };
-    }
-
-    if (selectedPeriod === 'week') {
-      return { dateFrom: this.getWeekStart(today), dateTo: today };
-    }
-
-    if (selectedPeriod === 'month') {
+    if (period === 'today') return { dateFrom: today, dateTo: today };
+    if (period === 'week') return { dateFrom: this.getWeekStart(today), dateTo: today };
+    if (period === 'month')
       return { dateFrom: this.getMonthStart(today), dateTo: this.getMonthEnd(today) };
-    }
-
-    if (this.customDateError()) {
-      return null;
-    }
-
-    return {
-      dateFrom: this.customDateFrom(),
-      dateTo: this.customDateTo(),
-    };
+    if (this.customDateError()) return null;
+    return { dateFrom: this.customDateFrom(), dateTo: this.customDateTo() };
   });
 
-  readonly chartColorScheme = signal<Color>({
-    name: 'brand-dashboard',
-    selectable: true,
-    group: ScaleType.Ordinal,
-    domain: ['#e89aac', '#6b3f2a', '#f3b6c2', '#c98d6a', '#0f172a', '#475569'],
-  });
+  // Esquema de colores (desde variables CSS)
+  readonly chartColorScheme = signal<string[]>([]);
 
   constructor() {
+    // Inicializar fechas custom con últimos 7 días (por si se selecciona custom)
     const initialRange = this.buildLast7DaysFilters();
     this.customDateFrom.set(initialRange.dateFrom);
     this.customDateTo.set(initialRange.dateTo);
 
+    // Efecto que recarga datos cuando cambian los filtros
     effect(() => {
       const dateRange = this.effectiveDateRange();
-      const cashierUserId = this.selectedCashierId();
-      if (!dateRange) {
-        return;
-      }
-
+      const cashierId = this.selectedCashierId();
+      if (!dateRange) return;
       void this.loadDashboardData({
         ...dateRange,
-        cashierUserId: cashierUserId || undefined,
+        cashierUserId: cashierId || undefined,
       });
     });
 
     afterNextRender(() => {
-      this.chartColorScheme.set(this.buildColorSchemeFromCssVariables());
+      this.loadColorScheme();
       void this.loadCashiers();
     });
   }
 
-  onPeriodChange(period: DashboardPeriod): void {
-    this.selectedPeriod.set(period);
-  }
-
+  // Métodos de cambio de filtros (desde template)
   onPeriodSelectChange(event: Event): void {
-    const value = (event.target as HTMLSelectElement | null)?.value;
-    if (value === 'today' || value === 'week' || value === 'month' || value === 'custom') {
-      this.onPeriodChange(value);
-    }
+    const value = (event.target as HTMLSelectElement).value as DashboardPeriod;
+    this.selectedPeriod.set(value);
   }
 
   onCashierSelectChange(event: Event): void {
-    this.selectedCashierId.set((event.target as HTMLSelectElement | null)?.value ?? '');
-  }
-
-  onCustomDateFromChange(value: string): void {
-    this.customDateFrom.set(value);
+    this.selectedCashierId.set((event.target as HTMLSelectElement).value);
   }
 
   onCustomDateFromInput(event: Event): void {
-    this.onCustomDateFromChange((event.target as HTMLInputElement | null)?.value ?? '');
-  }
-
-  onCustomDateToChange(value: string): void {
-    this.customDateTo.set(value);
+    this.customDateFrom.set((event.target as HTMLInputElement).value);
   }
 
   onCustomDateToInput(event: Event): void {
-    this.onCustomDateToChange((event.target as HTMLInputElement | null)?.value ?? '');
+    this.customDateTo.set((event.target as HTMLInputElement).value);
   }
 
+  // Carga de todos los datos
   async loadDashboardData(filters: PosReportFilters): Promise<void> {
     await Promise.all([
       this.loadPaymentsByMethodChart(filters),
@@ -185,10 +178,10 @@ export class DashboardComponent {
     ]);
   }
 
+  // Carga de lista de cajeros
   async loadCashiers(): Promise<void> {
     this.loadingCashiers.set(true);
     this.cashierError.set(null);
-
     try {
       const today = this.timezoneService.todayIsoDate();
       const response = await this.reportsApi.getCashiers({
@@ -204,17 +197,12 @@ export class DashboardComponent {
     }
   }
 
-  async loadKpis(filters?: PosReportFilters): Promise<void> {
-    const resolvedFilters = filters ?? this.effectiveDateRange();
-    if (!resolvedFilters) {
-      return;
-    }
-
+  // KPIs
+  async loadKpis(filters: PosReportFilters): Promise<void> {
     this.loadingKpis.set(true);
     this.kpisError.set(null);
-
     try {
-      this.kpis.set(await this.reportsApi.getKpisSummary(resolvedFilters));
+      this.kpis.set(await this.reportsApi.getKpisSummary(filters));
     } catch {
       this.kpisError.set('No disponible temporalmente. Intenta nuevamente.');
       this.kpis.set(null);
@@ -223,17 +211,12 @@ export class DashboardComponent {
     }
   }
 
-  async loadPaymentsByMethodChart(filters?: PosReportFilters): Promise<void> {
-    const resolvedFilters = filters ?? this.effectiveDateRange();
-    if (!resolvedFilters) {
-      return;
-    }
-
+  // Métodos de pago (gráfico de dona)
+  async loadPaymentsByMethodChart(filters: PosReportFilters): Promise<void> {
     this.loadingPayments.set(true);
     this.paymentError.set(null);
-
     try {
-      const response = await this.reportsApi.getPaymentsByMethod(resolvedFilters);
+      const response = await this.reportsApi.getPaymentsByMethod(filters);
       this.paymentMethodData.set(this.toPaymentMethodChartData(response.totals));
     } catch {
       this.paymentError.set('No disponible temporalmente. Intenta nuevamente.');
@@ -243,22 +226,14 @@ export class DashboardComponent {
     }
   }
 
-  async loadTopProductsChart(filters?: PosReportFilters): Promise<void> {
-    const resolvedFilters = filters ?? this.effectiveDateRange();
-    if (!resolvedFilters) {
-      return;
-    }
-
+  // Top productos (barras horizontales)
+  async loadTopProductsChart(filters: PosReportFilters): Promise<void> {
     this.loadingTopProducts.set(true);
     this.topProductsError.set(null);
-
     try {
-      const response = await this.reportsApi.getTopProducts({
-        ...resolvedFilters,
-        top: 5,
-      });
+      const response = await this.reportsApi.getTopProducts({ ...filters, top: 5 });
       this.topProductsData.set(
-        response.map((item) => ({ name: item.productNameSnapshot, value: item.amount })),
+        response.map((item) => ({ name: item.productNameSnapshot, value: item.amount }))
       );
     } catch {
       this.topProductsError.set('No disponible temporalmente. Intenta nuevamente.');
@@ -268,22 +243,17 @@ export class DashboardComponent {
     }
   }
 
-  async loadHourlySalesChart(filters?: PosReportFilters): Promise<void> {
-    const resolvedFilters = filters ?? this.effectiveDateRange();
-    if (!resolvedFilters) {
-      return;
-    }
-
+  // Ventas por hora (barras verticales)
+  async loadHourlySalesChart(filters: PosReportFilters): Promise<void> {
     this.loadingHourlySales.set(true);
     this.hourlySalesError.set(null);
-
     try {
-      const response = await this.reportsApi.getHourlySales(resolvedFilters);
+      const response = await this.reportsApi.getHourlySales(filters);
       this.hourlySalesData.set(
         response.map((item) => ({
           name: `${item.hour.toString().padStart(2, '0')}:00`,
           value: item.totalSales,
-        })),
+        }))
       );
     } catch {
       this.hourlySalesError.set('No disponible temporalmente. Intenta nuevamente.');
@@ -293,46 +263,72 @@ export class DashboardComponent {
     }
   }
 
+  // Opciones de gráficas para ApexCharts
+  readonly paymentMethodChartOptions = computed<ChartOptions>(() => ({
+    series: this.paymentMethodData().map((d) => d.value),
+    chart: { type: 'donut', height: 280 },
+    labels: this.paymentMethodData().map((d) => d.name),
+    colors: this.chartColorScheme(),
+    legend: { position: 'bottom' },
+    plotOptions: { pie: { donut: { size: '65%' } } },
+    dataLabels: { enabled: true, formatter: (val: number) => val.toFixed(1) + '%' },
+    responsive: [{ breakpoint: 480, options: { chart: { height: 200 } } }],
+  }));
+
+  readonly topProductsChartOptions = computed<ChartOptions>(() => ({
+    series: [{ name: 'Monto', data: this.topProductsData().map((d) => d.value) }],
+    chart: { type: 'bar', height: 280 },
+    xaxis: { categories: this.topProductsData().map((d) => d.name) },
+    yaxis: { title: { text: 'Monto ($)' } },
+    plotOptions: { bar: { horizontal: true, barHeight: '50%' } },
+    dataLabels: { enabled: true, formatter: (val: number) => `$${val.toFixed(0)}` },
+    colors: this.chartColorScheme(),
+    grid: { show: true },
+  }));
+
+  readonly hourlySalesChartOptions = computed<ChartOptions>(() => ({
+    series: [{ name: 'Ventas', data: this.hourlySalesData().map((d) => d.value) }],
+    chart: { type: 'bar', height: 280 },
+    xaxis: { categories: this.hourlySalesData().map((d) => d.name) },
+    yaxis: { title: { text: 'Ventas ($)' } },
+    plotOptions: { bar: { horizontal: false, columnWidth: '60%' } },
+    dataLabels: { enabled: true, formatter: (val: number) => `$${val.toFixed(0)}` },
+    colors: this.chartColorScheme(),
+    grid: { show: true },
+  }));
+
+  // Utilidades
   private toPaymentMethodChartData(
-    items: Array<{ method: string; amount: number }>,
+    items: Array<{ method: string; amount: number }>
   ): ChartDataPoint[] {
     const sorted = [...items]
       .map((item) => ({ name: item.method, value: item.amount }))
-      .sort((left, right) => right.value - left.value);
+      .sort((a, b) => b.value - a.value);
 
-    if (sorted.length <= 5) {
-      return sorted;
-    }
-
+    if (sorted.length <= 5) return sorted;
     const primary = sorted.slice(0, 4);
     const othersTotal = sorted.slice(4).reduce((sum, item) => sum + item.value, 0);
-
     return othersTotal > 0 ? [...primary, { name: 'Otros', value: othersTotal }] : primary;
   }
 
   private toCashierOptions(items: CashierSalesReportItemDto[]): DashboardCashierOption[] {
-    const uniqueMap = new Map<string, DashboardCashierOption>();
-
+    const map = new Map<string, DashboardCashierOption>();
     for (const item of items) {
-      if (!uniqueMap.has(item.cashierUserId)) {
-        const cashierName = item.cashierUserName?.trim();
-        uniqueMap.set(item.cashierUserId, {
+      if (!map.has(item.cashierUserId)) {
+        const name = item.cashierUserName?.trim();
+        map.set(item.cashierUserId, {
           cashierUserId: item.cashierUserId,
-          userName: cashierName && cashierName.length > 0 ? cashierName : item.cashierUserId,
+          userName: name && name.length > 0 ? name : item.cashierUserId,
         });
       }
     }
-
-    return Array.from(uniqueMap.values()).sort((left, right) =>
-      left.userName.localeCompare(right.userName, 'es'),
-    );
+    return Array.from(map.values()).sort((a, b) => a.userName.localeCompare(b.userName, 'es'));
   }
 
   private buildLast7DaysFilters(): PosReportFilters {
     const today = this.timezoneService.todayIsoDate();
     const fromDate = new Date();
     fromDate.setUTCDate(fromDate.getUTCDate() - 6);
-
     return {
       dateFrom: this.timezoneService.getIsoDateInBusinessTimezone(fromDate),
       dateTo: today,
@@ -341,7 +337,7 @@ export class DashboardComponent {
 
   private getWeekStart(isoDate: string): string {
     const date = this.parseIsoDateAsUtc(isoDate);
-    const day = date.getUTCDay();
+    const day = date.getUTCDay(); // 0 = domingo
     const daysFromMonday = day === 0 ? 6 : day - 1;
     date.setUTCDate(date.getUTCDate() - daysFromMonday);
     return this.toIsoDate(date);
@@ -353,41 +349,32 @@ export class DashboardComponent {
   }
 
   private getMonthEnd(isoDate: string): string {
-    const [yearValue, monthValue] = isoDate.split('-').map((part) => Number(part));
-    const lastDay = new Date(Date.UTC(yearValue, monthValue, 0)).getUTCDate();
-    return `${yearValue.toString().padStart(4, '0')}-${monthValue
+    const [year, month] = isoDate.split('-').map(Number);
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return `${year.toString().padStart(4, '0')}-${month
       .toString()
       .padStart(2, '0')}-${lastDay.toString().padStart(2, '0')}`;
   }
 
   private parseIsoDateAsUtc(isoDate: string): Date {
-    const [year, month, day] = isoDate.split('-').map((part) => Number(part));
+    const [year, month, day] = isoDate.split('-').map(Number);
     return new Date(Date.UTC(year, month - 1, day));
   }
 
-  private toIsoDate(value: Date): string {
-    return value.toISOString().slice(0, 10);
+  private toIsoDate(date: Date): string {
+    return date.toISOString().slice(0, 10);
   }
 
-  private buildColorSchemeFromCssVariables(): Color {
-    const computedStyle = getComputedStyle(this.document.documentElement);
-    const resolveToken = (token: string, fallback: string) => {
-      const value = computedStyle.getPropertyValue(token).trim();
-      return value.length > 0 ? value : fallback;
-    };
-
-    return {
-      name: 'brand-dashboard',
-      selectable: true,
-      group: ScaleType.Ordinal,
-      domain: [
-        resolveToken('--brand-rose-strong', '#e89aac'),
-        resolveToken('--brand-cocoa', '#6b3f2a'),
-        resolveToken('--brand-rose', '#f3b6c2'),
-        '#c98d6a',
-        resolveToken('--brand-ink', '#0f172a'),
-        resolveToken('--brand-muted', '#475569'),
-      ],
-    };
+  private loadColorScheme(): void {
+    const style = getComputedStyle(this.document.documentElement);
+    const colors = [
+      style.getPropertyValue('--brand-rose-strong').trim() || '#e89aac',
+      style.getPropertyValue('--brand-cocoa').trim() || '#6b3f2a',
+      style.getPropertyValue('--brand-rose').trim() || '#f3b6c2',
+      '#c98d6a',
+      style.getPropertyValue('--brand-ink').trim() || '#0f172a',
+      style.getPropertyValue('--brand-muted').trim() || '#475569',
+    ];
+    this.chartColorScheme.set(colors);
   }
 }

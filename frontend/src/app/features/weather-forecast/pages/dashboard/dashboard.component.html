@@ -1,31 +1,19 @@
 <div class="dashboard-page">
+  <!-- HEADER -->
   <header class="page-header">
-    <h2>&#128202; Dashboard</h2>
+    <h2>📊 Dashboard</h2>
     <p class="page-subtitle">Bienvenido al panel de control</p>
     <div class="header-decoration"></div>
   </header>
 
-  <div class="section-card coming-soon-card">
-    <div class="coming-soon-content">
-      <span class="coming-soon-icon">🚧</span>
-      <h3>Próximamente</h3>
-      <p class="coming-soon-text">
-        Estamos trabajando para traerte un dashboard completo con métricas en tiempo real, gráficos
-        de ventas, rendimiento de cajeros y más.
-      </p>
-      <div class="coming-soon-badge">
-        <span class="badge-icon">⏳</span>
-        <span>Disponible en futura versión</span>
-      </div>
-    </div>
-  </div>
-
+  <!-- FILTROS -->
   <div class="section-card" data-testid="dashboard-filters-card">
     <div class="section-header">
       <span class="section-icon">🗓️</span>
-      <h3>Filtros de período</h3>
+      <h3>Filtros</h3>
     </div>
     <div class="filters-grid">
+      <!-- Período -->
       <label for="dashboard-period-select">
         Período
         <select
@@ -41,6 +29,7 @@
         </select>
       </label>
 
+      <!-- Cajero -->
       <label for="dashboard-cashier-select">
         Cajero
         <select
@@ -56,6 +45,7 @@
         </select>
       </label>
 
+      <!-- Fechas custom -->
       @if (isCustomPeriod()) {
         <label for="dashboard-date-from">
           Desde
@@ -81,72 +71,101 @@
       }
     </div>
 
+    <!-- Errores -->
     @if (cashierError()) {
       <p class="error" role="alert" data-testid="dashboard-cashier-error">{{ cashierError() }}</p>
     }
-
-    @if (customDateError()) {
-      <p class="error" role="alert" data-testid="dashboard-custom-date-error">
-        {{ customDateError() }}
-      </p>
+    @if (customDateError(); as error) {
+      <p class="error" role="alert" data-testid="dashboard-custom-date-error">{{ error }}</p>
     }
   </div>
 
+  <!-- INDICADOR DE CARGA GLOBAL (opcional) -->
+  @if (loadingKpis() || loadingPayments() || loadingTopProducts() || loadingHourlySales()) {
+    <div class="flex justify-center items-center py-10 text-gray-500">
+      <span class="material-icons animate-spin mr-2">refresh</span>
+      Cargando datos...
+    </div>
+  }
+
+  <!-- KPIS (nuevo estilo) -->
   <div class="section-card" data-testid="dashboard-kpis-card">
     <div class="section-header">
       <span class="section-icon">📊</span>
-      <h3>KPIs</h3>
+      <h3>Métricas clave</h3>
     </div>
 
-    @if (loadingKpis()) {
-      <p class="chart-status">Cargando KPIs...</p>
-    }
     @if (kpisError()) {
       <p class="error" role="alert" data-testid="dashboard-kpis-error">{{ kpisError() }}</p>
     }
 
-    @if (!loadingKpis() && !kpisError()) {
+    @if (!loadingKpis() && !kpisError() && kpis()) {
       <div class="kpi-grid">
+        <!-- Ventas totales -->
         <div class="kpi-card" data-testid="dashboard-kpi-gross-sales">
-          <div class="kpi-icon">💰</div>
+          <div class="kpi-header">
+            <h4>Ventas totales</h4>
+            <span class="kpi-header-icon">💰</span>
+          </div>
           <div class="kpi-content">
-            <span class="kpi-label">Ventas totales</span>
-            <span class="kpi-value">{{
-              kpis()?.grossSales ?? 0 | currency: 'MXN' : 'symbol' : '1.2-2'
-            }}</span>
+            <div class="kpi-icon-circle" style="background-color: #e89aac;">
+              💰
+            </div>
+            <div class="kpi-numbers">
+              <div class="kpi-main-value">{{ kpis()?.grossSales | currency:'MXN':'symbol':'1.2-2' }}</div>
+              <!-- Tendencia opcional (pendiente) -->
+            </div>
           </div>
         </div>
+
+        <!-- Tickets -->
         <div class="kpi-card" data-testid="dashboard-kpi-tickets">
-          <div class="kpi-icon">🧾</div>
+          <div class="kpi-header">
+            <h4>Tickets</h4>
+            <span class="kpi-header-icon">🧾</span>
+          </div>
           <div class="kpi-content">
-            <span class="kpi-label">Tickets</span>
-            <span class="kpi-value">{{ kpis()?.tickets ?? 0 }}</span>
+            <div class="kpi-icon-circle" style="background-color: #6b3f2a;">
+              🧾
+            </div>
+            <div class="kpi-numbers">
+              <div class="kpi-main-value">{{ kpis()?.tickets ?? 0 }}</div>
+            </div>
           </div>
         </div>
+
+        <!-- Ticket promedio -->
         <div class="kpi-card" data-testid="dashboard-kpi-avg-ticket">
-          <div class="kpi-icon">📈</div>
+          <div class="kpi-header">
+            <h4>Ticket promedio</h4>
+            <span class="kpi-header-icon">📈</span>
+          </div>
           <div class="kpi-content">
-            <span class="kpi-label">Ticket promedio</span>
-            <span class="kpi-value">{{
-              kpis()?.avgTicket ?? 0 | currency: 'MXN' : 'symbol' : '1.2-2'
-            }}</span>
+            <div class="kpi-icon-circle" style="background-color: #c98d6a;">
+              📈
+            </div>
+            <div class="kpi-numbers">
+              <div class="kpi-main-value">{{ kpis()?.avgTicket | currency:'MXN':'symbol':'1.2-2' }}</div>
+            </div>
           </div>
         </div>
       </div>
     }
   </div>
 
+  <!-- GRÁFICAS (con ApexCharts) -->
   <div class="section-card">
     <div class="section-header">
       <span class="section-icon">📉</span>
-      <h3>Reportes reales</h3>
+      <h3>Reportes</h3>
       @if (effectiveDateRange(); as range) {
         <span class="count-badge">{{ range.dateFrom }} → {{ range.dateTo }}</span>
       }
     </div>
 
     <div class="charts-grid">
-      <article class="chart-card" data-testid="dashboard-payments-chart-card">
+      <!-- Métodos de pago (dona) -->
+      <div class="chart-card" data-testid="dashboard-payments-chart-card">
         <h4>Métodos de pago</h4>
         @if (loadingPayments()) {
           <p class="chart-status">Cargando gráfico...</p>
@@ -157,20 +176,23 @@
           </p>
         }
         @if (!loadingPayments() && !paymentError() && hasPaymentData()) {
-          <div class="chart-container" aria-label="Distribución de métodos de pago">
-            <ngx-charts-pie-chart
-              [results]="paymentMethodData()"
-              [scheme]="chartColorScheme()"
-              [legend]="true"
-              [doughnut]="true"
-              [labels]="true"
-              [animations]="true"
-            />
+          <div class="chart-container">
+            <apx-chart
+              [series]="paymentMethodChartOptions().series"
+              [chart]="paymentMethodChartOptions().chart"
+              [labels]="paymentMethodChartOptions().labels!"
+              [colors]="paymentMethodChartOptions().colors!"
+              [legend]="paymentMethodChartOptions().legend!"
+              [plotOptions]="paymentMethodChartOptions().plotOptions!"
+              [dataLabels]="paymentMethodChartOptions().dataLabels!"
+              [responsive]="paymentMethodChartOptions().responsive!"
+            ></apx-chart>
           </div>
         }
-      </article>
+      </div>
 
-      <article class="chart-card" data-testid="dashboard-top-products-chart-card">
+      <!-- Top 5 productos (barras horizontales) -->
+      <div class="chart-card" data-testid="dashboard-top-products-chart-card">
         <h4>Top 5 productos</h4>
         @if (loadingTopProducts()) {
           <p class="chart-status">Cargando gráfico...</p>
@@ -181,23 +203,23 @@
           </p>
         }
         @if (!loadingTopProducts() && !topProductsError() && hasTopProductsData()) {
-          <div class="chart-container" aria-label="Top 5 productos por venta total">
-            <ngx-charts-bar-horizontal
-              [results]="topProductsData()"
-              [scheme]="chartColorScheme()"
-              [xAxis]="true"
-              [yAxis]="true"
-              [showDataLabel]="true"
-              [showGridLines]="true"
-              [animations]="true"
-              [xAxisLabel]="'Monto ($)'"
-              [yAxisLabel]="'Producto'"
-            />
+          <div class="chart-container">
+            <apx-chart
+              [series]="topProductsChartOptions().series"
+              [chart]="topProductsChartOptions().chart"
+              [xaxis]="topProductsChartOptions().xaxis!"
+              [yaxis]="topProductsChartOptions().yaxis!"
+              [plotOptions]="topProductsChartOptions().plotOptions!"
+              [dataLabels]="topProductsChartOptions().dataLabels!"
+              [grid]="topProductsChartOptions().grid!"
+              [colors]="topProductsChartOptions().colors!"
+            ></apx-chart>
           </div>
         }
-      </article>
+      </div>
 
-      <article class="chart-card" data-testid="dashboard-hourly-sales-chart-card">
+      <!-- Ventas por hora (barras verticales) -->
+      <div class="chart-card" data-testid="dashboard-hourly-sales-chart-card">
         <h4>Ventas por hora</h4>
         @if (loadingHourlySales()) {
           <p class="chart-status">Cargando gráfico...</p>
@@ -208,26 +230,24 @@
           </p>
         }
         @if (!loadingHourlySales() && !hourlySalesError() && hasHourlySalesData()) {
-          <div class="chart-container" aria-label="Ventas por hora en el rango de 7 días">
-            <ngx-charts-bar-vertical
-              [results]="hourlySalesData()"
-              [scheme]="chartColorScheme()"
-              [xAxis]="true"
-              [yAxis]="true"
-              [showDataLabel]="true"
-              [showGridLines]="true"
-              [animations]="true"
-              [roundDomains]="true"
-              [barPadding]="14"
-              [xAxisLabel]="'Hora'"
-              [yAxisLabel]="'Ventas($)'"
-            />
+          <div class="chart-container">
+            <apx-chart
+              [series]="hourlySalesChartOptions().series"
+              [chart]="hourlySalesChartOptions().chart"
+              [xaxis]="hourlySalesChartOptions().xaxis!"
+              [yaxis]="hourlySalesChartOptions().yaxis!"
+              [plotOptions]="hourlySalesChartOptions().plotOptions!"
+              [dataLabels]="hourlySalesChartOptions().dataLabels!"
+              [grid]="hourlySalesChartOptions().grid!"
+              [colors]="hourlySalesChartOptions().colors!"
+            ></apx-chart>
           </div>
         }
-      </article>
+      </div>
     </div>
   </div>
 
+  <!-- ACCIONES RÁPIDAS (demo) -->
   <div class="section-card">
     <div class="section-header">
       <span class="section-icon">⚡</span>
