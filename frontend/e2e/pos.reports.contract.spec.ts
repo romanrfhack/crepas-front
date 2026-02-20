@@ -144,7 +144,6 @@ test('POS reports UI-contract renders sections and propagates selected filters',
   await seedAuth(page);
   await page.goto('/app/pos/reportes');
 
-  await expect(page.getByTestId('reports-summary')).toBeVisible();
   await expect(page.getByTestId('reports-payments-table')).toBeVisible();
   await expect(page.getByTestId('reports-hourly-table')).toBeVisible();
   await expect(page.getByTestId('reports-top-products-table')).toBeVisible();

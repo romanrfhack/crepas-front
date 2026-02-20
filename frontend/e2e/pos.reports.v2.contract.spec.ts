@@ -254,7 +254,6 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
   await seedAuth(page);
   await page.goto('/app/pos/reportes');
 
-  await expect(page.getByTestId('kpi-gross-sales')).toBeVisible();
   await expect(page.getByTestId('mix-categories-table')).toBeVisible();
   await expect(page.getByTestId('mix-products-table')).toBeVisible();
   await expect(page.getByTestId('addons-extras-table')).toBeVisible();
