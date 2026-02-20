@@ -41,6 +41,7 @@ export interface HourlySalesReportItemDto {
 
 export interface CashierSalesReportItemDto {
   cashierUserId: string;
+  cashierUserName?: string;
   tickets: number;
   totalSales: number;
   avgTicket: number;

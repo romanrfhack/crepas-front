@@ -9,13 +9,22 @@ import {
   signal,
 } from '@angular/core';
 import { Color, NgxChartsModule, ScaleType } from '@swimlane/ngx-charts';
-import { PosReportFilters } from '../../../pos/models/pos-reports.models';
+import {
+  CashierSalesReportItemDto,
+  KpisSummaryDto,
+  PosReportFilters,
+} from '../../../pos/models/pos-reports.models';
 import { PosReportsApiService } from '../../../pos/services/pos-reports-api.service';
 import { PosTimezoneService } from '../../../pos/services/pos-timezone.service';
 
 interface ChartDataPoint {
   name: string;
   value: number;
+}
+
+interface DashboardCashierOption {
+  cashierUserId: string;
+  userName: string;
 }
 
 type DashboardPeriod = 'today' | 'week' | 'month' | 'custom';
@@ -35,18 +44,25 @@ export class DashboardComponent {
   readonly loadingPayments = signal(false);
   readonly loadingTopProducts = signal(false);
   readonly loadingHourlySales = signal(false);
+  readonly loadingCashiers = signal(false);
+  readonly loadingKpis = signal(false);
 
   readonly selectedPeriod = signal<DashboardPeriod>('week');
+  readonly selectedCashierId = signal('');
   readonly customDateFrom = signal('');
   readonly customDateTo = signal('');
 
   readonly paymentError = signal<string | null>(null);
   readonly topProductsError = signal<string | null>(null);
   readonly hourlySalesError = signal<string | null>(null);
+  readonly cashierError = signal<string | null>(null);
+  readonly kpisError = signal<string | null>(null);
 
   readonly paymentMethodData = signal<ChartDataPoint[]>([]);
   readonly topProductsData = signal<ChartDataPoint[]>([]);
   readonly hourlySalesData = signal<ChartDataPoint[]>([]);
+  readonly cashiers = signal<DashboardCashierOption[]>([]);
+  readonly kpis = signal<KpisSummaryDto | null>(null);
 
   readonly hasPaymentData = computed(() => this.paymentMethodData().length > 0);
   readonly hasTopProductsData = computed(() => this.topProductsData().length > 0);
@@ -112,15 +128,20 @@ export class DashboardComponent {
 
     effect(() => {
       const dateRange = this.effectiveDateRange();
+      const cashierUserId = this.selectedCashierId();
       if (!dateRange) {
         return;
       }
 
-      void this.loadAllCharts(dateRange);
+      void this.loadDashboardData({
+        ...dateRange,
+        cashierUserId: cashierUserId || undefined,
+      });
     });
 
     afterNextRender(() => {
       this.chartColorScheme.set(this.buildColorSchemeFromCssVariables());
+      void this.loadCashiers();
     });
   }
 
@@ -133,6 +154,10 @@ export class DashboardComponent {
     if (value === 'today' || value === 'week' || value === 'month' || value === 'custom') {
       this.onPeriodChange(value);
     }
+  }
+
+  onCashierSelectChange(event: Event): void {
+    this.selectedCashierId.set((event.target as HTMLSelectElement | null)?.value ?? '');
   }
 
   onCustomDateFromChange(value: string): void {
@@ -151,12 +176,51 @@ export class DashboardComponent {
     this.onCustomDateToChange((event.target as HTMLInputElement | null)?.value ?? '');
   }
 
-  async loadAllCharts(filters: PosReportFilters): Promise<void> {
+  async loadDashboardData(filters: PosReportFilters): Promise<void> {
     await Promise.all([
       this.loadPaymentsByMethodChart(filters),
       this.loadTopProductsChart(filters),
       this.loadHourlySalesChart(filters),
+      this.loadKpis(filters),
     ]);
+  }
+
+  async loadCashiers(): Promise<void> {
+    this.loadingCashiers.set(true);
+    this.cashierError.set(null);
+
+    try {
+      const today = this.timezoneService.todayIsoDate();
+      const response = await this.reportsApi.getCashiers({
+        dateFrom: this.getMonthStart(today),
+        dateTo: this.getMonthEnd(today),
+      });
+      this.cashiers.set(this.toCashierOptions(response));
+    } catch {
+      this.cashierError.set('No disponible temporalmente. Intenta nuevamente.');
+      this.cashiers.set([]);
+    } finally {
+      this.loadingCashiers.set(false);
+    }
+  }
+
+  async loadKpis(filters?: PosReportFilters): Promise<void> {
+    const resolvedFilters = filters ?? this.effectiveDateRange();
+    if (!resolvedFilters) {
+      return;
+    }
+
+    this.loadingKpis.set(true);
+    this.kpisError.set(null);
+
+    try {
+      this.kpis.set(await this.reportsApi.getKpisSummary(resolvedFilters));
+    } catch {
+      this.kpisError.set('No disponible temporalmente. Intenta nuevamente.');
+      this.kpis.set(null);
+    } finally {
+      this.loadingKpis.set(false);
+    }
   }
 
   async loadPaymentsByMethodChart(filters?: PosReportFilters): Promise<void> {
@@ -244,6 +308,24 @@ export class DashboardComponent {
     const othersTotal = sorted.slice(4).reduce((sum, item) => sum + item.value, 0);
 
     return othersTotal > 0 ? [...primary, { name: 'Otros', value: othersTotal }] : primary;
+  }
+
+  private toCashierOptions(items: CashierSalesReportItemDto[]): DashboardCashierOption[] {
+    const uniqueMap = new Map<string, DashboardCashierOption>();
+
+    for (const item of items) {
+      if (!uniqueMap.has(item.cashierUserId)) {
+        const cashierName = item.cashierUserName?.trim();
+        uniqueMap.set(item.cashierUserId, {
+          cashierUserId: item.cashierUserId,
+          userName: cashierName && cashierName.length > 0 ? cashierName : item.cashierUserId,
+        });
+      }
+    }
+
+    return Array.from(uniqueMap.values()).sort((left, right) =>
+      left.userName.localeCompare(right.userName, 'es'),
+    );
   }
 
   private buildLast7DaysFilters(): PosReportFilters {

@@ -14,7 +14,6 @@ import {
   CashDifferencesShiftItemDto,
   DailySalesReportItemDto,
   HourlySalesReportItemDto,
-  KpisSummaryDto,
   PaymentsByMethodSummaryDto,
   PosReportFilters,
   SalesMixByCategoryItemDto,
@@ -34,7 +33,6 @@ type ReportSectionKey =
   | 'hourly'
   | 'topProducts'
   | 'voidReasons'
-  | 'kpis'
   | 'mixCategories'
   | 'mixProducts'
   | 'addonsExtras'
@@ -67,7 +65,6 @@ export class PosReportesPage implements OnInit {
     hourly: false,
     topProducts: false,
     voidReasons: false,
-    kpis: false,
     mixCategories: false,
     mixProducts: false,
     addonsExtras: false,
@@ -84,30 +81,11 @@ export class PosReportesPage implements OnInit {
   readonly topProducts = signal<TopProductReportItemDto[]>([]);
   readonly voidReasons = signal<VoidReasonReportItemDto[]>([]);
 
-  readonly kpis = signal<KpisSummaryDto | null>(null);
   readonly mixCategories = signal<SalesMixByCategoryItemDto[]>([]);
   readonly mixProducts = signal<SalesMixByProductItemDto[]>([]);
   readonly addonsExtras = signal<AddonsExtraUsageItemDto[]>([]);
   readonly addonsOptions = signal<AddonsOptionUsageItemDto[]>([]);
   readonly cashDifferenceShifts = signal<CashDifferencesShiftItemDto[]>([]);
-
-  readonly summary = computed(() => {
-    const totals = this.dailySales().reduce(
-      (accumulator, current) => {
-        accumulator.totalSales += current.totalSales;
-        accumulator.tickets += current.tickets;
-        return accumulator;
-      },
-      { totalSales: 0, tickets: 0 },
-    );
-
-    const avgTicket = totals.tickets > 0 ? totals.totalSales / totals.tickets : 0;
-    return {
-      totalSales: totals.totalSales,
-      tickets: totals.tickets,
-      avgTicket,
-    };
-  });
 
   readonly paymentRows = computed(() => {
     const rows = this.paymentSummary()?.totals ?? [];
@@ -195,9 +173,6 @@ export class PosReportesPage implements OnInit {
       }),
       this.loadSection('voidReasons', async () => {
         this.voidReasons.set(await this.reportsApi.getVoidReasons(detailFilters));
-      }),
-      this.loadSection('kpis', async () => {
-        this.kpis.set(await this.reportsApi.getKpisSummary(detailFilters));
       }),
       this.loadSection('mixCategories', async () => {
         const response = await this.reportsApi.getSalesMixByCategories(detailFilters);
