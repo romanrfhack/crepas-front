@@ -157,7 +157,9 @@ describe('DashboardComponent', () => {
     await fixture.whenStable();
     apiMock.getPaymentsByMethod.mockClear();
 
-    fixture.componentInstance.onPeriodChange('today');
+    fixture.componentInstance.onPeriodSelectChange({
+      target: { value: 'today' },
+    } as unknown as Event);
     await fixture.whenStable();
 
     expect(apiMock.getPaymentsByMethod).toHaveBeenCalledWith({
@@ -172,9 +174,15 @@ describe('DashboardComponent', () => {
     await fixture.whenStable();
     apiMock.getPaymentsByMethod.mockClear();
 
-    fixture.componentInstance.onPeriodChange('custom');
-    fixture.componentInstance.onCustomDateFromChange('2026-03-12');
-    fixture.componentInstance.onCustomDateToChange('2026-03-10');
+    fixture.componentInstance.onPeriodSelectChange({
+      target: { value: 'custom' },
+    } as unknown as Event);
+    fixture.componentInstance.onCustomDateFromInput({
+      target: { value: '2026-03-12' },
+    } as unknown as Event);
+    fixture.componentInstance.onCustomDateToInput({
+      target: { value: '2026-03-10' },
+    } as unknown as Event);
     await fixture.whenStable();
 
     expect(fixture.componentInstance.customDateError()).toBe(
