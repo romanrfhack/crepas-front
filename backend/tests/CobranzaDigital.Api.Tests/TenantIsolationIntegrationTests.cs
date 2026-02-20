@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
 using CobranzaDigital.Domain.Entities;
-using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
