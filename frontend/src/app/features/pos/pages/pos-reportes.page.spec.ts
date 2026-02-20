@@ -13,7 +13,6 @@ describe('PosReportesPage', () => {
     getHourlySales: ReturnType<typeof vi.fn>;
     getTopProducts: ReturnType<typeof vi.fn>;
     getVoidReasons: ReturnType<typeof vi.fn>;
-    getKpisSummary: ReturnType<typeof vi.fn>;
     getSalesMixByCategories: ReturnType<typeof vi.fn>;
     getSalesMixByProducts: ReturnType<typeof vi.fn>;
     getAddonsExtrasUsage: ReturnType<typeof vi.fn>;
@@ -57,15 +56,6 @@ describe('PosReportesPage', () => {
         .mockResolvedValue([
           { reasonCode: 'CashierError', reasonText: 'captura', count: 1, amount: 50 },
         ]),
-      getKpisSummary: vi.fn().mockResolvedValue({
-        tickets: 12,
-        totalItems: 30,
-        grossSales: 1000,
-        avgTicket: 83.3,
-        avgItemsPerTicket: 2.5,
-        voidCount: 1,
-        voidRate: 0.08,
-      }),
       getSalesMixByCategories: vi.fn().mockResolvedValue({
         items: [
           {
@@ -164,12 +154,6 @@ describe('PosReportesPage', () => {
 
     await fixture.componentInstance.loadReports();
 
-    expect(apiMock.getKpisSummary).toHaveBeenLastCalledWith({
-      dateFrom: '2026-03-01',
-      dateTo: '2026-03-07',
-      cashierUserId: 'cashier-1',
-      shiftId: 'shift-1',
-    });
     expect(apiMock.getSalesMixByProducts).toHaveBeenLastCalledWith({
       dateFrom: '2026-03-01',
       dateTo: '2026-03-07',
@@ -196,7 +180,17 @@ describe('PosReportesPage', () => {
     const error = compiled.querySelector('[data-testid="report-error-mixCategories"]');
 
     expect(error).not.toBeNull();
-    expect(apiMock.getKpisSummary).toHaveBeenCalled();
+    expect(apiMock.getSalesMixByProducts).toHaveBeenCalled();
+  });
+
+  it('removes KPI and summary sections from template', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('[data-testid="report-error-kpis"]')).toBeNull();
+    expect(compiled.querySelector('[data-testid="reports-summary"]')).toBeNull();
   });
 
   it('hides shift column and prefers cashier user name in cash differences table', async () => {
@@ -215,5 +209,4 @@ describe('PosReportesPage', () => {
     const firstRowCells = compiled.querySelectorAll('[data-testid="cash-diff-row-0"] td');
     expect(firstRowCells.item(0).textContent).toContain('Cajero Demo');
   });
-
 });

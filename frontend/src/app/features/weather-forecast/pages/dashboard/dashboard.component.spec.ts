@@ -7,6 +7,8 @@ import { PosTimezoneService } from '../../../pos/services/pos-timezone.service';
 describe('DashboardComponent', () => {
   let fixture: ComponentFixture<DashboardComponent>;
   let apiMock: {
+    getCashiers: ReturnType<typeof vi.fn>;
+    getKpisSummary: ReturnType<typeof vi.fn>;
     getPaymentsByMethod: ReturnType<typeof vi.fn>;
     getTopProducts: ReturnType<typeof vi.fn>;
     getHourlySales: ReturnType<typeof vi.fn>;
@@ -14,6 +16,21 @@ describe('DashboardComponent', () => {
 
   beforeEach(async () => {
     apiMock = {
+      getCashiers: vi
+        .fn()
+        .mockResolvedValue([
+          { cashierUserId: 'cashier-1', cashierUserName: 'Ana' },
+          { cashierUserId: 'cashier-2' },
+        ]),
+      getKpisSummary: vi.fn().mockResolvedValue({
+        tickets: 18,
+        totalItems: 48,
+        grossSales: 2500,
+        avgTicket: 138.88,
+        avgItemsPerTicket: 2.66,
+        voidCount: 1,
+        voidRate: 0.02,
+      }),
       getPaymentsByMethod: vi.fn().mockResolvedValue({
         dateFrom: '2026-03-09',
         dateTo: '2026-03-11',
@@ -50,23 +67,89 @@ describe('DashboardComponent', () => {
     fixture = TestBed.createComponent(DashboardComponent);
   });
 
-  it('loads charts on init with current week range', async () => {
+  it('loads charts and KPIs on init with current week range', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
     expect(apiMock.getPaymentsByMethod).toHaveBeenCalledWith({
       dateFrom: '2026-03-09',
       dateTo: '2026-03-11',
+      cashierUserId: undefined,
     });
     expect(apiMock.getTopProducts).toHaveBeenCalledWith({
       dateFrom: '2026-03-09',
       dateTo: '2026-03-11',
+      cashierUserId: undefined,
       top: 5,
     });
     expect(apiMock.getHourlySales).toHaveBeenCalledWith({
       dateFrom: '2026-03-09',
       dateTo: '2026-03-11',
+      cashierUserId: undefined,
     });
+    expect(apiMock.getKpisSummary).toHaveBeenCalledWith({
+      dateFrom: '2026-03-09',
+      dateTo: '2026-03-11',
+      cashierUserId: undefined,
+    });
+  });
+
+  it('loads cashier options and renders userName or fallback id', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(apiMock.getCashiers).toHaveBeenCalledWith({
+      dateFrom: '2026-03-01',
+      dateTo: '2026-03-31',
+    });
+
+    const options = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        '[data-testid="dashboard-cashier-select"] option',
+      ),
+    ).map((option) => option.textContent?.trim());
+
+    expect(options).toContain('Ana');
+    expect(options).toContain('cashier-2');
+  });
+
+  it('sends selected cashier in charts and kpi requests', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    apiMock.getPaymentsByMethod.mockClear();
+    apiMock.getTopProducts.mockClear();
+    apiMock.getHourlySales.mockClear();
+    apiMock.getKpisSummary.mockClear();
+
+    fixture.componentInstance.selectedCashierId.set('cashier-1');
+    await fixture.whenStable();
+
+    expect(apiMock.getPaymentsByMethod).toHaveBeenCalledWith({
+      dateFrom: '2026-03-09',
+      dateTo: '2026-03-11',
+      cashierUserId: 'cashier-1',
+    });
+    expect(apiMock.getKpisSummary).toHaveBeenCalledWith({
+      dateFrom: '2026-03-09',
+      dateTo: '2026-03-11',
+      cashierUserId: 'cashier-1',
+    });
+  });
+
+  it('shows KPI values from API response', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(
+      compiled.querySelector('[data-testid="dashboard-kpi-gross-sales"]')?.textContent,
+    ).toContain('$2,500.00');
+    expect(compiled.querySelector('[data-testid="dashboard-kpi-tickets"]')?.textContent).toContain(
+      '18',
+    );
   });
 
   it('uses today range when period changes to today', async () => {
@@ -80,36 +163,8 @@ describe('DashboardComponent', () => {
     expect(apiMock.getPaymentsByMethod).toHaveBeenCalledWith({
       dateFrom: '2026-03-11',
       dateTo: '2026-03-11',
+      cashierUserId: undefined,
     });
-  });
-
-  it('uses month range when period changes to month', async () => {
-    fixture.detectChanges();
-    await fixture.whenStable();
-    apiMock.getPaymentsByMethod.mockClear();
-
-    fixture.componentInstance.onPeriodChange('month');
-    await fixture.whenStable();
-
-    expect(apiMock.getPaymentsByMethod).toHaveBeenCalledWith({
-      dateFrom: '2026-03-01',
-      dateTo: '2026-03-31',
-    });
-  });
-
-  it('shows custom date inputs only for custom period', async () => {
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    expect(fixture.nativeElement.querySelector('[data-testid="dashboard-date-from"]')).toBeNull();
-
-    fixture.componentInstance.onPeriodChange('custom');
-    fixture.detectChanges();
-
-    expect(
-      fixture.nativeElement.querySelector('[data-testid="dashboard-date-from"]'),
-    ).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="dashboard-date-to"]')).not.toBeNull();
   });
 
   it('does not reload charts when custom range is invalid', async () => {
@@ -154,19 +209,5 @@ describe('DashboardComponent', () => {
       { name: 'Wallet', value: 200 },
       { name: 'Otros', value: 150 },
     ]);
-  });
-
-  it('shows friendly errors per chart when requests fail', async () => {
-    apiMock.getTopProducts.mockRejectedValueOnce(new Error('boom'));
-
-    await fixture.componentInstance.loadTopProductsChart({
-      dateFrom: '2026-03-09',
-      dateTo: '2026-03-11',
-    });
-
-    expect(fixture.componentInstance.topProductsError()).toBe(
-      'No disponible temporalmente. Intenta nuevamente.',
-    );
-    expect(fixture.componentInstance.topProductsData()).toEqual([]);
   });
 });

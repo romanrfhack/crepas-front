@@ -71,60 +71,6 @@
     </div>
   </section>
 
-  <section class="card kpi-section">
-    <h3>KPIs</h3>
-    @if (getSectionError('kpis')) {
-      <p class="error" role="alert" data-testid="report-error-kpis">
-        {{ getSectionError('kpis') }}
-      </p>
-    }
-    <div class="kpi-grid">
-      <article data-testid="kpi-gross-sales">
-        <span>Venta bruta</span>
-        <strong>{{ kpis()?.grossSales ?? 0 | currency: 'MXN' : 'symbol' : '1.2-2' }}</strong>
-      </article>
-      <article data-testid="kpi-tickets">
-        <span>Tickets</span>
-        <strong>{{ kpis()?.tickets ?? '—' }}</strong>
-      </article>
-      <article data-testid="kpi-avg-ticket">
-        <span>Ticket promedio</span>
-        <strong>{{ kpis()?.avgTicket ?? 0 | currency: 'MXN' : 'symbol' : '1.2-2' }}</strong>
-      </article>
-      <article data-testid="kpi-avg-items-per-ticket">
-        <span>Ítems por ticket</span>
-        <strong>{{ kpis()?.avgItemsPerTicket ?? '—' }}</strong>
-      </article>
-      <article data-testid="kpi-void-rate">
-        <span>Tasa de voids</span>
-        <strong>{{ ((kpis()?.voidRate ?? 0) * 100 | number: '1.0-2') + '%' }}</strong>
-      </article>
-    </div>
-  </section>
-
-  <section class="card summary" data-testid="reports-summary">
-    <h3>Resumen</h3>
-    @if (getSectionError('dailySales')) {
-      <p class="error" role="alert" data-testid="report-error-dailySales">
-        {{ getSectionError('dailySales') }}
-      </p>
-    }
-    <div class="summary-grid">
-      <article>
-        <span>Total ventas</span>
-        <strong>{{ summary().totalSales | currency: 'MXN' : 'symbol' : '1.2-2' }}</strong>
-      </article>
-      <article>
-        <span>Tickets</span>
-        <strong>{{ summary().tickets }}</strong>
-      </article>
-      <article>
-        <span>Ticket promedio</span>
-        <strong>{{ summary().avgTicket | currency: 'MXN' : 'symbol' : '1.2-2' }}</strong>
-      </article>
-    </div>
-  </section>
-
   <section class="card">
     <h3>Mix por categorías</h3>
     @if (getSectionError('mixCategories')) {
