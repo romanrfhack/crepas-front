@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DashboardComponent } from './dashboard.component';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { PosReportsApiService } from '../../../pos/services/pos-reports-api.service';
 import { PosTimezoneService } from '../../../pos/services/pos-timezone.service';
 
@@ -14,8 +15,8 @@ describe('DashboardComponent', () => {
   beforeEach(async () => {
     apiMock = {
       getPaymentsByMethod: vi.fn().mockResolvedValue({
-        dateFrom: '2026-03-01',
-        dateTo: '2026-03-07',
+        dateFrom: '2026-03-09',
+        dateTo: '2026-03-11',
         totals: [
           { method: 'Cash', count: 12, amount: 1200 },
           { method: 'Card', count: 8, amount: 800 },
@@ -34,12 +35,13 @@ describe('DashboardComponent', () => {
     await TestBed.configureTestingModule({
       imports: [DashboardComponent],
       providers: [
+        provideNoopAnimations(),
         { provide: PosReportsApiService, useValue: apiMock },
         {
           provide: PosTimezoneService,
           useValue: {
-            todayIsoDate: () => '2026-03-07',
-            getIsoDateInBusinessTimezone: () => '2026-03-01',
+            todayIsoDate: () => '2026-03-11',
+            getIsoDateInBusinessTimezone: () => '2026-03-05',
           },
         },
       ],
@@ -48,38 +50,88 @@ describe('DashboardComponent', () => {
     fixture = TestBed.createComponent(DashboardComponent);
   });
 
-  it('loads payment/top/hourly charts on init with the last-7-day range', async () => {
+  it('loads charts on init with current week range', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
     expect(apiMock.getPaymentsByMethod).toHaveBeenCalledWith({
-      dateFrom: '2026-03-01',
-      dateTo: '2026-03-07',
+      dateFrom: '2026-03-09',
+      dateTo: '2026-03-11',
     });
     expect(apiMock.getTopProducts).toHaveBeenCalledWith({
-      dateFrom: '2026-03-01',
-      dateTo: '2026-03-07',
+      dateFrom: '2026-03-09',
+      dateTo: '2026-03-11',
       top: 5,
     });
     expect(apiMock.getHourlySales).toHaveBeenCalledWith({
-      dateFrom: '2026-03-01',
-      dateTo: '2026-03-07',
+      dateFrom: '2026-03-09',
+      dateTo: '2026-03-11',
     });
+  });
 
-    expect(fixture.componentInstance.paymentMethodData()).toEqual([
-      { name: 'Cash', value: 1200 },
-      { name: 'Card', value: 800 },
-    ]);
-    expect(fixture.componentInstance.hourlySalesData()).toEqual([
-      { name: '08:00', value: 250 },
-      { name: '10:00', value: 410 },
-    ]);
+  it('uses today range when period changes to today', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    apiMock.getPaymentsByMethod.mockClear();
+
+    fixture.componentInstance.onPeriodChange('today');
+    await fixture.whenStable();
+
+    expect(apiMock.getPaymentsByMethod).toHaveBeenCalledWith({
+      dateFrom: '2026-03-11',
+      dateTo: '2026-03-11',
+    });
+  });
+
+  it('uses month range when period changes to month', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    apiMock.getPaymentsByMethod.mockClear();
+
+    fixture.componentInstance.onPeriodChange('month');
+    await fixture.whenStable();
+
+    expect(apiMock.getPaymentsByMethod).toHaveBeenCalledWith({
+      dateFrom: '2026-03-01',
+      dateTo: '2026-03-31',
+    });
+  });
+
+  it('shows custom date inputs only for custom period', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="dashboard-date-from"]')).toBeNull();
+
+    fixture.componentInstance.onPeriodChange('custom');
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="dashboard-date-from"]'),
+    ).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="dashboard-date-to"]')).not.toBeNull();
+  });
+
+  it('does not reload charts when custom range is invalid', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    apiMock.getPaymentsByMethod.mockClear();
+
+    fixture.componentInstance.onPeriodChange('custom');
+    fixture.componentInstance.onCustomDateFromChange('2026-03-12');
+    fixture.componentInstance.onCustomDateToChange('2026-03-10');
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.customDateError()).toBe(
+      'La fecha "Desde" no puede ser mayor que "Hasta".',
+    );
+    expect(apiMock.getPaymentsByMethod).not.toHaveBeenCalled();
   });
 
   it('groups minor payment methods into "Otros" when there are more than 5 methods', async () => {
     apiMock.getPaymentsByMethod.mockResolvedValueOnce({
-      dateFrom: '2026-03-01',
-      dateTo: '2026-03-07',
+      dateFrom: '2026-03-09',
+      dateTo: '2026-03-11',
       totals: [
         { method: 'Cash', count: 5, amount: 500 },
         { method: 'Card', count: 4, amount: 400 },
@@ -90,7 +142,10 @@ describe('DashboardComponent', () => {
       ],
     });
 
-    await fixture.componentInstance.loadPaymentsByMethodChart();
+    await fixture.componentInstance.loadPaymentsByMethodChart({
+      dateFrom: '2026-03-09',
+      dateTo: '2026-03-11',
+    });
 
     expect(fixture.componentInstance.paymentMethodData()).toEqual([
       { name: 'Cash', value: 500 },
@@ -104,7 +159,10 @@ describe('DashboardComponent', () => {
   it('shows friendly errors per chart when requests fail', async () => {
     apiMock.getTopProducts.mockRejectedValueOnce(new Error('boom'));
 
-    await fixture.componentInstance.loadTopProductsChart();
+    await fixture.componentInstance.loadTopProductsChart({
+      dateFrom: '2026-03-09',
+      dateTo: '2026-03-11',
+    });
 
     expect(fixture.componentInstance.topProductsError()).toBe(
       'No disponible temporalmente. Intenta nuevamente.',
