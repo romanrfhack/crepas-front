@@ -53,7 +53,7 @@ public sealed class PosShiftService : IPosShiftService
 
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
         var resolvedStoreId = (await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false)).StoreId;
-        var tenantId = RequireTenantId();
+        var tenantId = RequireEffectiveTenantId();
 
         if (request.ClientOperationId.HasValue)
         {
@@ -129,7 +129,7 @@ public sealed class PosShiftService : IPosShiftService
         }
 
         var storeId = (await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false)).StoreId;
-        var tenantId = RequireTenantId();
+        var tenantId = RequireEffectiveTenantId();
         var openShift = await GetLatestOpenShiftForUpdateAsync(request.ShiftId, storeId, ct).ConfigureAwait(false);
         if (openShift is null)
         {
@@ -253,7 +253,7 @@ public sealed class PosShiftService : IPosShiftService
     private async Task<PosShift?> GetLatestOpenShiftAsync(Guid storeId, CancellationToken ct)
     {
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
-        var tenantId = RequireTenantId();
+        var tenantId = RequireEffectiveTenantId();
         var openShiftsQuery = _db.PosShifts.AsNoTracking().Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId && x.TenantId == tenantId);
 
         return await openShiftsQuery.OrderByDescending(x => x.OpenedAtUtc).FirstOrDefaultAsync(ct).ConfigureAwait(false);
@@ -262,7 +262,7 @@ public sealed class PosShiftService : IPosShiftService
     private async Task<PosShift?> GetLatestOpenShiftForUpdateAsync(Guid? shiftId, Guid storeId, CancellationToken ct)
     {
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
-        var tenantId = RequireTenantId();
+        var tenantId = RequireEffectiveTenantId();
         var openShiftsQuery = _db.PosShifts.Where(x => x.ClosedAtUtc == null && x.OpenedByUserId == userId && x.StoreId == storeId && x.TenantId == tenantId);
         if (shiftId.HasValue)
         {
@@ -274,7 +274,7 @@ public sealed class PosShiftService : IPosShiftService
 
     private async Task<PaymentBreakdownDto> GetPaymentBreakdownAsync(Guid shiftId, DateTimeOffset openedAtUtc, DateTimeOffset untilUtc, CancellationToken ct)
     {
-        var tenantId = RequireTenantId();
+        var tenantId = RequireEffectiveTenantId();
         var sales = await _db.Sales.AsNoTracking()
             .Where(x => x.ShiftId == shiftId && x.TenantId == tenantId)
             .Where(x => x.Status == SaleStatus.Completed)
@@ -321,14 +321,14 @@ public sealed class PosShiftService : IPosShiftService
         }
     }
 
-    private Guid RequireTenantId()
+    private Guid RequireEffectiveTenantId()
     {
-        if (!_tenantContext.TenantId.HasValue)
+        if (!_tenantContext.EffectiveTenantId.HasValue)
         {
             throw new ForbiddenException("Tenant context is required.");
         }
 
-        return _tenantContext.TenantId.Value;
+        return _tenantContext.EffectiveTenantId.Value;
     }
 
     private static ValidationException ValidationError(string key, string message) =>

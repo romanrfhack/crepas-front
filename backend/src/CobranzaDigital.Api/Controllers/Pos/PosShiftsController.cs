@@ -1,6 +1,7 @@
 using Asp.Versioning;
 
 using CobranzaDigital.Application.Contracts.PosSales;
+using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Interfaces.PosSales;
 
 using Microsoft.AspNetCore.Authorization;
@@ -11,20 +12,28 @@ namespace CobranzaDigital.Api.Controllers.Pos;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/pos/shifts")]
-[Authorize(Policy = AuthorizationPolicies.TenantScoped)]
+[Authorize(Policy = AuthorizationPolicies.TenantOrPlatform)]
 [Authorize(Policy = AuthorizationPolicies.PosOperator)]
 public sealed class PosShiftsController : ControllerBase
 {
     private readonly IPosShiftService _service;
+    private readonly ITenantContext _tenantContext;
 
-    public PosShiftsController(IPosShiftService service)
+    public PosShiftsController(IPosShiftService service, ITenantContext tenantContext)
     {
         _service = service;
+        _tenantContext = tenantContext;
     }
 
     [HttpGet("current")]
     public async Task<ActionResult<PosShiftDto>> GetCurrent([FromQuery] Guid? storeId, CancellationToken ct)
     {
+        var validation = PosTenantGuard.EnsureTenantSelectedForOperation(this, _tenantContext);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
         var shift = await _service.GetCurrentShiftAsync(storeId, ct);
         return shift is null ? NoContent() : Ok(shift);
     }
@@ -32,19 +41,49 @@ public sealed class PosShiftsController : ControllerBase
     [HttpPost("open")]
     public async Task<ActionResult<PosShiftDto>> Open([FromBody] OpenPosShiftRequestDto request, CancellationToken ct)
     {
+        var validation = PosTenantGuard.EnsureTenantSelectedForOperation(this, _tenantContext);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
         var shift = await _service.OpenShiftAsync(request, ct);
         return Ok(shift);
     }
 
     [HttpGet("close-preview")]
-    public Task<ShiftClosePreviewDto> GetClosePreview([FromQuery] Guid? shiftId, [FromQuery] Guid? storeId, CancellationToken ct) =>
-        _service.GetClosePreviewAsync(new ShiftClosePreviewRequestDto(shiftId, null, storeId), ct);
+    public async Task<ActionResult<ShiftClosePreviewDto>> GetClosePreview([FromQuery] Guid? shiftId, [FromQuery] Guid? storeId, CancellationToken ct)
+    {
+        var validation = PosTenantGuard.EnsureTenantSelectedForOperation(this, _tenantContext);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        return await _service.GetClosePreviewAsync(new ShiftClosePreviewRequestDto(shiftId, null, storeId), ct);
+    }
 
     [HttpPost("close-preview")]
-    public Task<ShiftClosePreviewDto> GetClosePreviewV2([FromBody] ShiftClosePreviewRequestDto request, CancellationToken ct) =>
-        _service.GetClosePreviewAsync(request, ct);
+    public async Task<ActionResult<ShiftClosePreviewDto>> GetClosePreviewV2([FromBody] ShiftClosePreviewRequestDto request, CancellationToken ct)
+    {
+        var validation = PosTenantGuard.EnsureTenantSelectedForOperation(this, _tenantContext);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        return await _service.GetClosePreviewAsync(request, ct);
+    }
 
     [HttpPost("close")]
-    public Task<ClosePosShiftResultDto> Close([FromBody] ClosePosShiftRequestDto request, CancellationToken ct) =>
-        _service.CloseShiftAsync(request, ct);
+    public async Task<ActionResult<ClosePosShiftResultDto>> Close([FromBody] ClosePosShiftRequestDto request, CancellationToken ct)
+    {
+        var validation = PosTenantGuard.EnsureTenantSelectedForOperation(this, _tenantContext);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        return await _service.CloseShiftAsync(request, ct);
+    }
 }

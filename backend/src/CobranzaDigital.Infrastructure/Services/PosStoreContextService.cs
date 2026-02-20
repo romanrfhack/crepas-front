@@ -23,7 +23,7 @@ public sealed class PosStoreContextService
         var settings = await _db.PosSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct).ConfigureAwait(false)
             ?? throw new ConflictException("POS settings are not configured.");
 
-        var tenantId = _tenantContext.TenantId;
+        var tenantId = _tenantContext.EffectiveTenantId;
         if (!tenantId.HasValue)
         {
             throw new ForbiddenException("Tenant context is required.");

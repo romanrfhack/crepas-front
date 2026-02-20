@@ -2,9 +2,11 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
+using CobranzaDigital.Application.Contracts.PosSales;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
 
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,6 +24,42 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     }
 
     [Fact]
+    public async Task SuperAdmin_CanReadGlobalAndTenantScopedKpisReports()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var superAdminToken = await LoginAndGetAccessTokenAsync(setup.SuperAdminEmail, setup.Password);
+
+        using var globalRequest = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/reports/kpis/summary?dateFrom=2026-03-01&dateTo=2026-03-01", superAdminToken);
+        using var globalResponse = await _client.SendAsync(globalRequest);
+        var globalKpis = await globalResponse.Content.ReadFromJsonAsync<PosKpisSummaryDto>();
+
+        Assert.Equal(HttpStatusCode.OK, globalResponse.StatusCode);
+        Assert.NotNull(globalKpis);
+        Assert.Equal(2, globalKpis.Tickets);
+        Assert.Equal(30m, globalKpis.GrossSales);
+
+        using var tenantARequest = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/reports/kpis/summary?dateFrom=2026-03-01&dateTo=2026-03-01", superAdminToken);
+        tenantARequest.Headers.Add("X-Tenant-Id", setup.TenantAId.ToString("D"));
+        using var tenantAResponse = await _client.SendAsync(tenantARequest);
+        var tenantAKpis = await tenantAResponse.Content.ReadFromJsonAsync<PosKpisSummaryDto>();
+
+        Assert.Equal(HttpStatusCode.OK, tenantAResponse.StatusCode);
+        Assert.NotNull(tenantAKpis);
+        Assert.Equal(1, tenantAKpis.Tickets);
+        Assert.Equal(10m, tenantAKpis.GrossSales);
+
+        using var tenantBRequest = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/reports/kpis/summary?dateFrom=2026-03-01&dateTo=2026-03-01", superAdminToken);
+        tenantBRequest.Headers.Add("X-Tenant-Id", setup.TenantBId.ToString("D"));
+        using var tenantBResponse = await _client.SendAsync(tenantBRequest);
+        var tenantBKpis = await tenantBResponse.Content.ReadFromJsonAsync<PosKpisSummaryDto>();
+
+        Assert.Equal(HttpStatusCode.OK, tenantBResponse.StatusCode);
+        Assert.NotNull(tenantBKpis);
+        Assert.Equal(1, tenantBKpis.Tickets);
+        Assert.Equal(20m, tenantBKpis.GrossSales);
+    }
+
+    [Fact]
     public async Task Manager_CannotReadReports_FromAnotherTenantStore()
     {
         var setup = await SeedIsolationDataAsync();
@@ -31,6 +69,47 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         using var response = await _client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Manager_CannotOverrideTenantHeader()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var managerAToken = await LoginAndGetAccessTokenAsync(setup.ManagerAEmail, setup.Password);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/reports/kpis/summary?dateFrom=2026-03-01&dateTo=2026-03-01", managerAToken);
+        request.Headers.Add("X-Tenant-Id", setup.TenantBId.ToString("D"));
+
+        using var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SuperAdmin_OperationalEndpoints_RequireTenantSelectionInPlatformMode()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var superAdminToken = await LoginAndGetAccessTokenAsync(setup.SuperAdminEmail, setup.Password);
+
+        using var snapshotWithoutTenant = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", superAdminToken);
+        using var snapshotWithoutTenantResponse = await _client.SendAsync(snapshotWithoutTenant);
+        var snapshotProblem = await snapshotWithoutTenantResponse.Content.ReadFromJsonAsync<ProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, snapshotWithoutTenantResponse.StatusCode);
+        Assert.Equal("tenantId required for this endpoint in platform mode", snapshotProblem?.Title);
+
+        using var adminWithoutTenant = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/admin/categories", superAdminToken);
+        using var adminWithoutTenantResponse = await _client.SendAsync(adminWithoutTenant);
+        var adminProblem = await adminWithoutTenantResponse.Content.ReadFromJsonAsync<ProblemDetails>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, adminWithoutTenantResponse.StatusCode);
+        Assert.Equal("tenantId required for this endpoint in platform mode", adminProblem?.Title);
+
+        using var adminWithTenant = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/admin/categories", superAdminToken);
+        adminWithTenant.Headers.Add("X-Tenant-Id", setup.TenantAId.ToString("D"));
+        using var adminWithTenantResponse = await _client.SendAsync(adminWithTenant);
+
+        Assert.Equal(HttpStatusCode.OK, adminWithTenantResponse.StatusCode);
     }
 
     [Fact]
@@ -112,13 +191,14 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
             new PosShift { Id = Guid.NewGuid(), StoreId = storeA.Id, TenantId = tenantA.Id, OpenedByUserId = Guid.NewGuid(), OpenedAtUtc = DateTimeOffset.UtcNow, ClosedAtUtc = DateTimeOffset.UtcNow },
             new PosShift { Id = Guid.NewGuid(), StoreId = storeB.Id, TenantId = tenantB.Id, OpenedByUserId = Guid.NewGuid(), OpenedAtUtc = DateTimeOffset.UtcNow, ClosedAtUtc = DateTimeOffset.UtcNow });
 
+        var salesDay = new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
         db.Sales.AddRange(
-            new Sale { Id = Guid.NewGuid(), Folio = $"A-{Guid.NewGuid():N}", StoreId = storeA.Id, TenantId = tenantA.Id, CreatedByUserId = Guid.NewGuid(), OccurredAtUtc = DateTimeOffset.UtcNow, Subtotal = 10m, Total = 10m },
-            new Sale { Id = Guid.NewGuid(), Folio = $"B-{Guid.NewGuid():N}", StoreId = storeB.Id, TenantId = tenantB.Id, CreatedByUserId = Guid.NewGuid(), OccurredAtUtc = DateTimeOffset.UtcNow, Subtotal = 20m, Total = 20m });
+            new Sale { Id = Guid.NewGuid(), Folio = $"A-{Guid.NewGuid():N}", StoreId = storeA.Id, TenantId = tenantA.Id, CreatedByUserId = Guid.NewGuid(), OccurredAtUtc = salesDay, Subtotal = 10m, Total = 10m, Status = SaleStatus.Completed },
+            new Sale { Id = Guid.NewGuid(), Folio = $"B-{Guid.NewGuid():N}", StoreId = storeB.Id, TenantId = tenantB.Id, CreatedByUserId = Guid.NewGuid(), OccurredAtUtc = salesDay, Subtotal = 20m, Total = 20m, Status = SaleStatus.Completed });
 
         await db.SaveChangesAsync();
 
-        return new SeedResult(managerAEmail, managerBEmail, cashierAEmail, superAdminEmail, password, storeA.Id, storeB.Id);
+        return new SeedResult(managerAEmail, managerBEmail, cashierAEmail, superAdminEmail, password, tenantA.Id, tenantB.Id, storeA.Id, storeB.Id);
     }
 
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
@@ -156,7 +236,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         return request;
     }
 
-    private sealed record SeedResult(string ManagerAEmail, string ManagerBEmail, string CashierAEmail, string SuperAdminEmail, string Password, Guid StoreAId, Guid StoreBId);
+    private sealed record SeedResult(string ManagerAEmail, string ManagerBEmail, string CashierAEmail, string SuperAdminEmail, string Password, Guid TenantAId, Guid TenantBId, Guid StoreAId, Guid StoreBId);
 
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
 }

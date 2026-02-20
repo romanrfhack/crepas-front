@@ -67,7 +67,7 @@ public sealed class PosSalesService : IPosSalesService
         {
             var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
             var correlationId = GetCorrelationId();
-            var tenantId = RequireTenantId();
+            var tenantId = RequireEffectiveTenantId();
             var (storeId, _) = await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false);
 
             Guid? openShiftId = null;
@@ -378,7 +378,7 @@ public sealed class PosSalesService : IPosSalesService
 
         ValidateDateRange(dateFrom, dateTo);
 
-        var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
+        var (resolvedStoreId, timeZoneInfo) = await ResolveReportScopeAsync(storeId, ct).ConfigureAwait(false);
         var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
 
         var filteredSaleIds = await _db.Sales.AsNoTracking()
@@ -510,11 +510,11 @@ public sealed class PosSalesService : IPosSalesService
         var saleIds = sales.Select(x => x.Id).ToHashSet();
         var paymentsBySaleId = payments.Where(x => saleIds.Contains(x.SaleId)).GroupBy(x => x.SaleId).ToDictionary(x => x.Key, x => x.ToList());
 
-        var (resolvedStoreId, _) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
-        var tenantId = RequireTenantId();
+        var (resolvedStoreId, _) = await ResolveReportScopeAsync(storeId, ct).ConfigureAwait(false);
+        var tenantId = RequireEffectiveTenantId();
         var shiftIds = saleGroupsByShift.Keys.ToArray();
         var shifts = await _db.PosShifts.AsNoTracking()
-            .Where(x => x.StoreId == resolvedStoreId && x.TenantId == tenantId &&
+            .Where(x => x.StoreId == resolvedStoreId!.Value && x.TenantId == tenantId &&
                         (!cashierUserId.HasValue || x.OpenedByUserId == cashierUserId.Value) &&
                         shiftIds.Contains(x.Id))
             .Select(x => new
@@ -699,11 +699,13 @@ public sealed class PosSalesService : IPosSalesService
     {
         ValidateDateRange(dateFrom, dateTo);
 
-        var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
+        var (resolvedStoreId, timeZoneInfo) = await ResolveReportScopeAsync(storeId, ct).ConfigureAwait(false);
         var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
+        var tenantId = GetReportTenantIdOrThrow();
 
         var shiftsData = await _db.PosShifts.AsNoTracking()
-            .Where(x => x.StoreId == resolvedStoreId
+            .Where(x => (!resolvedStoreId.HasValue || x.StoreId == resolvedStoreId.Value)
+                        && (!tenantId.HasValue || x.TenantId == tenantId.Value)
                         && (!cashierUserId.HasValue || x.OpenedByUserId == cashierUserId.Value)
                         && x.OpenedAtUtc < utcEndExclusive
                         && (x.ClosedAtUtc == null || x.ClosedAtUtc >= utcStart))
@@ -781,7 +783,7 @@ public sealed class PosSalesService : IPosSalesService
             throw ValidationError("reasonCode", "reasonCode is required.");
         }
 
-        var tenantId = RequireTenantId();
+        var tenantId = RequireEffectiveTenantId();
         var sale = await _db.Sales.FirstOrDefaultAsync(x => x.Id == saleId && x.TenantId == tenantId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException("Sale not found.");
 
@@ -861,12 +863,15 @@ public sealed class PosSalesService : IPosSalesService
     {
         ValidateDateRange(dateFrom, dateTo);
 
-        var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
+        var (resolvedStoreId, timeZoneInfo) = await ResolveReportScopeAsync(storeId, ct).ConfigureAwait(false);
         var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
 
-        var tenantId = RequireTenantId();
+        var tenantId = GetReportTenantIdOrThrow();
         var sales = await _db.Sales.AsNoTracking()
-            .Where(x => x.StoreId == resolvedStoreId && x.TenantId == tenantId && x.OccurredAtUtc >= utcStart && x.OccurredAtUtc < utcEndExclusive)
+            .Where(x => (!resolvedStoreId.HasValue || x.StoreId == resolvedStoreId.Value)
+                        && (!tenantId.HasValue || x.TenantId == tenantId.Value)
+                        && x.OccurredAtUtc >= utcStart
+                        && x.OccurredAtUtc < utcEndExclusive)
             .Select(x => new SaleReportRow(
                 x.Id,
                 x.StoreId,
@@ -898,13 +903,13 @@ public sealed class PosSalesService : IPosSalesService
     {
         ValidateDateRange(dateFrom, dateTo);
 
-        var (resolvedStoreId, timeZoneInfo) = await ResolveStoreTimeZoneAsync(storeId, ct).ConfigureAwait(false);
+        var (resolvedStoreId, timeZoneInfo) = await ResolveReportScopeAsync(storeId, ct).ConfigureAwait(false);
         var (utcStart, utcEndExclusive) = ToUtcRange(dateFrom, dateTo, timeZoneInfo);
 
-        var tenantId = RequireTenantId();
+        var tenantId = GetReportTenantIdOrThrow();
         return await _db.Sales.AsNoTracking()
-            .Where(x => x.StoreId == resolvedStoreId
-                        && x.TenantId == tenantId
+            .Where(x => (!resolvedStoreId.HasValue || x.StoreId == resolvedStoreId.Value)
+                        && (!tenantId.HasValue || x.TenantId == tenantId.Value)
                         && x.OccurredAtUtc >= utcStart
                         && x.OccurredAtUtc < utcEndExclusive
                         && (!cashierUserId.HasValue || x.CreatedByUserId == cashierUserId.Value)
@@ -1008,35 +1013,73 @@ public sealed class PosSalesService : IPosSalesService
         return value;
     }
 
-    private Guid RequireTenantId()
+    private Guid RequireEffectiveTenantId()
     {
-        if (!_tenantContext.TenantId.HasValue)
+        if (!_tenantContext.EffectiveTenantId.HasValue)
         {
             throw new ForbiddenException("Tenant context is required.");
         }
 
-        return _tenantContext.TenantId.Value;
+        return _tenantContext.EffectiveTenantId.Value;
     }
 
-    private async Task<(Guid StoreId, TimeZoneInfo TimeZoneInfo)> ResolveStoreTimeZoneAsync(Guid? storeId, CancellationToken ct)
+    private async Task<(Guid? StoreId, TimeZoneInfo TimeZoneInfo)> ResolveReportScopeAsync(Guid? storeId, CancellationToken ct)
     {
-        var (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
+        Guid? resolvedStoreId = storeId;
+        if (!resolvedStoreId.HasValue && _tenantContext.EffectiveTenantId.HasValue)
+        {
+            (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
+        }
+        else if (resolvedStoreId.HasValue && _tenantContext.EffectiveTenantId.HasValue)
+        {
+            (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(resolvedStoreId, ct).ConfigureAwait(false);
+        }
 
-        var tenantId = RequireTenantId();
-        var timeZoneId = await _db.Stores.AsNoTracking()
-            .Where(x => x.Id == resolvedStoreId && x.TenantId == tenantId)
+        if (!resolvedStoreId.HasValue)
+        {
+            if (_tenantContext.IsPlatformAdmin)
+            {
+                return (null, TimeZoneInfo.Utc);
+            }
+
+            throw new ForbiddenException("Tenant context is required.");
+        }
+
+        var storesQuery = _db.Stores.AsNoTracking().Where(x => x.Id == resolvedStoreId.Value && x.IsActive);
+        if (_tenantContext.EffectiveTenantId.HasValue)
+        {
+            storesQuery = storesQuery.Where(x => x.TenantId == _tenantContext.EffectiveTenantId.Value);
+        }
+
+        var timeZoneId = await storesQuery
             .Select(x => x.TimeZoneId)
-            .FirstAsync(ct)
-            .ConfigureAwait(false);
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false)
+            ?? throw new NotFoundException("Store was not found for current tenant.");
 
         try
         {
-            return (resolvedStoreId, TZConvert.GetTimeZoneInfo(timeZoneId));
+            return (resolvedStoreId.Value, TZConvert.GetTimeZoneInfo(timeZoneId));
         }
         catch (TimeZoneNotFoundException)
         {
-            return (resolvedStoreId, TimeZoneInfo.Utc);
+            return (resolvedStoreId.Value, TimeZoneInfo.Utc);
         }
+    }
+
+    private Guid? GetReportTenantIdOrThrow()
+    {
+        if (_tenantContext.EffectiveTenantId.HasValue)
+        {
+            return _tenantContext.EffectiveTenantId.Value;
+        }
+
+        if (_tenantContext.IsPlatformAdmin)
+        {
+            return null;
+        }
+
+        throw new ForbiddenException("Tenant context is required.");
     }
 
     private static (DateTimeOffset UtcStart, DateTimeOffset UtcEndExclusive) ToUtcRange(DateOnly dateFrom, DateOnly dateTo, TimeZoneInfo timeZoneInfo)

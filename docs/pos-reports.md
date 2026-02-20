@@ -4,6 +4,17 @@ Base path: `GET /api/v1/pos/reports/*`
 
 ## Reglas generales
 
+## SuperAdmin cross-tenant / tenant override
+
+- `SuperAdmin` puede consultar reportes agregados cross-tenant sin enviar `X-Tenant-Id`.
+- Para fijar un tenant específico en reportes, usar header `X-Tenant-Id: <guid>` (también se acepta `tenantId` por query para compatibilidad).
+- Endpoints con modo global permitido (sin tenant efectivo):
+  - `GET /api/v1/pos/reports/kpis/summary`
+  - `GET /api/v1/pos/reports/sales/daily`
+  - `GET /api/v1/pos/reports/payments/methods`
+  - `GET /api/v1/pos/reports/control/cash-differences`
+- Endpoints operativos y reportes no listados requieren tenant efectivo; en modo plataforma devuelven `400 tenantId required for this endpoint in platform mode`.
+
 - Acceso: roles `Admin` y `Manager`.
 - Si `storeId` se omite, el backend resuelve `DefaultStoreId` desde configuración POS.
 - Rango `dateFrom/dateTo` se interpreta en **fecha local del store** (`Store.TimeZoneId`), se convierte a UTC para filtrar por `Sales.OccurredAtUtc` con rango `[utcStart, utcEndExclusive)`.

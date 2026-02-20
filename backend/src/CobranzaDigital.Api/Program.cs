@@ -159,6 +159,10 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("SuperAdmin"));
     options.AddPolicy(AuthorizationPolicies.TenantScoped, policy =>
         policy.RequireAssertion(context => context.User.HasClaim(x => x.Type == "tenantId")));
+    options.AddPolicy(AuthorizationPolicies.TenantOrPlatform, policy =>
+        policy.RequireAssertion(context =>
+            context.User.HasClaim(x => x.Type == "tenantId") ||
+            context.User.IsInRole("SuperAdmin")));
     options.AddPolicy(AuthorizationPolicies.RequireScope, policy =>
         policy.RequireClaim("scope", AuthorizationPolicies.RequiredScopeValue));
 });

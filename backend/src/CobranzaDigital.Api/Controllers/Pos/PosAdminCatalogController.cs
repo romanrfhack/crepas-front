@@ -11,7 +11,8 @@ namespace CobranzaDigital.Api.Controllers.Pos;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/pos/admin")]
-[Authorize(Policy = AuthorizationPolicies.TenantScoped)]
+[Authorize(Policy = AuthorizationPolicies.TenantOrPlatform)]
+[RequireTenantSelectionForOperation]
 [Authorize(Policy = AuthorizationPolicies.PosAdmin)]
 public sealed class PosAdminCatalogController : ControllerBase
 {

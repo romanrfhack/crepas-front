@@ -1,6 +1,7 @@
 using Asp.Versioning;
 
 using CobranzaDigital.Application.Contracts.PosSales;
+using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Interfaces.PosSales;
 
 using Microsoft.AspNetCore.Authorization;
@@ -11,26 +12,40 @@ namespace CobranzaDigital.Api.Controllers.Pos;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/pos/sales")]
-[Authorize(Policy = AuthorizationPolicies.TenantScoped)]
+[Authorize(Policy = AuthorizationPolicies.TenantOrPlatform)]
 [Authorize(Policy = AuthorizationPolicies.PosOperator)]
 public sealed class PosSalesController : ControllerBase
 {
     private readonly IPosSalesService _service;
+    private readonly ITenantContext _tenantContext;
 
-    public PosSalesController(IPosSalesService service)
+    public PosSalesController(IPosSalesService service, ITenantContext tenantContext)
     {
         _service = service;
+        _tenantContext = tenantContext;
     }
 
     [HttpPost]
-    public Task<CreateSaleResponseDto> Create([FromBody] CreateSaleRequestDto request, CancellationToken ct)
+    public async Task<ActionResult<CreateSaleResponseDto>> Create([FromBody] CreateSaleRequestDto request, CancellationToken ct)
     {
-        return _service.CreateSaleAsync(request, ct);
+        var validation = PosTenantGuard.EnsureTenantSelectedForOperation(this, _tenantContext);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        return await _service.CreateSaleAsync(request, ct);
     }
 
     [HttpPost("{saleId:guid}/void")]
-    public Task<VoidSaleResponseDto> VoidSale(Guid saleId, [FromBody] VoidSaleRequestDto request, CancellationToken ct)
+    public async Task<ActionResult<VoidSaleResponseDto>> VoidSale(Guid saleId, [FromBody] VoidSaleRequestDto request, CancellationToken ct)
     {
-        return _service.VoidSaleAsync(saleId, request, ct);
+        var validation = PosTenantGuard.EnsureTenantSelectedForOperation(this, _tenantContext);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        return await _service.VoidSaleAsync(saleId, request, ct);
     }
 }
