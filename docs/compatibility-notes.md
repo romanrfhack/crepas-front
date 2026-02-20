@@ -35,3 +35,8 @@ Este documento registra compatibilidades temporales agregadas para evitar romper
 - Endpoints admin de catálogo mantienen contratos existentes y agregan campo opcional/backward-compatible `isAvailable` en DTOs de `Product`, `Extra` y `OptionItem`.
 - Endpoint `GET /api/v1/pos/catalog/snapshot` agrega metadatos (`storeId`, `timeZoneId`, `generatedAtUtc`, `catalogVersion`, `etagSeed`) manteniendo secciones previas.
 - Caching HTTP incorporado con `ETag` + `If-None-Match` (`304`) sin romper clientes que no usen cache condicional.
+
+## 2026-02-20 — Multi-tenant Release A
+- Se agregó claim JWT `tenantId` para usuarios con `AspNetUsers.TenantId` configurado.
+- Compatibilidad: usuarios legacy sin claim siguen resolviendo tenant por lookup en base de datos.
+- Datos existentes se conservan mediante backfill a `Default Tenant` durante migración.

@@ -1,0 +1,163 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+
+using CobranzaDigital.Domain.Entities;
+using CobranzaDigital.Infrastructure.Identity;
+using CobranzaDigital.Infrastructure.Persistence;
+
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace CobranzaDigital.Api.Tests;
+
+public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigitalApiFactory>
+{
+    private readonly CobranzaDigitalApiFactory _factory;
+    private readonly HttpClient _client;
+
+    public TenantIsolationIntegrationTests(CobranzaDigitalApiFactory factory)
+    {
+        _factory = factory;
+        _client = factory.CreateClient();
+    }
+
+    [Fact]
+    public async Task Manager_CannotReadReports_FromAnotherTenantStore()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var managerAToken = await LoginAndGetAccessTokenAsync(setup.ManagerAEmail, setup.Password);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/daily?dateFrom=2026-03-01&dateTo=2026-03-01&storeId={setup.StoreBId:D}", managerAToken);
+        using var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PlatformEndpoints_AccessControl_WorksByRole()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var cashierToken = await LoginAndGetAccessTokenAsync(setup.CashierAEmail, setup.Password);
+        var managerToken = await LoginAndGetAccessTokenAsync(setup.ManagerAEmail, setup.Password);
+        var superAdminToken = await LoginAndGetAccessTokenAsync(setup.SuperAdminEmail, setup.Password);
+
+        using var cashierReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/platform/tenants", cashierToken);
+        using var cashierResp = await _client.SendAsync(cashierReq);
+        Assert.Equal(HttpStatusCode.Forbidden, cashierResp.StatusCode);
+
+        using var managerReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/platform/tenants", managerToken);
+        using var managerResp = await _client.SendAsync(managerReq);
+        Assert.Equal(HttpStatusCode.Forbidden, managerResp.StatusCode);
+
+        using var superReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/platform/tenants", superAdminToken);
+        using var superResp = await _client.SendAsync(superReq);
+        Assert.Equal(HttpStatusCode.OK, superResp.StatusCode);
+    }
+
+    private async Task<SeedResult> SeedIsolationDataAsync()
+    {
+        var password = "User1234!";
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+
+        var vertical = new Vertical { Id = Guid.NewGuid(), Name = $"Vertical-{Guid.NewGuid():N}", IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
+        var tenantA = new Tenant { Id = Guid.NewGuid(), VerticalId = vertical.Id, Name = "Tenant A", Slug = $"tenant-a-{Guid.NewGuid():N}", IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
+        var tenantB = new Tenant { Id = Guid.NewGuid(), VerticalId = vertical.Id, Name = "Tenant B", Slug = $"tenant-b-{Guid.NewGuid():N}", IsActive = true, CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
+        var storeA = new Store { Id = Guid.NewGuid(), TenantId = tenantA.Id, Name = $"Store A-{Guid.NewGuid():N}", IsActive = true, TimeZoneId = "America/Mexico_City", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
+        var storeB = new Store { Id = Guid.NewGuid(), TenantId = tenantB.Id, Name = $"Store B-{Guid.NewGuid():N}", IsActive = true, TimeZoneId = "America/Mexico_City", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
+
+        tenantA.DefaultStoreId = storeA.Id;
+        tenantB.DefaultStoreId = storeB.Id;
+
+        db.Verticals.Add(vertical);
+        db.Tenants.AddRange(tenantA, tenantB);
+        db.Stores.AddRange(storeA, storeB);
+        await db.SaveChangesAsync();
+
+        var managerAEmail = $"manager.a+{Guid.NewGuid():N}@test.local";
+        var managerBEmail = $"manager.b+{Guid.NewGuid():N}@test.local";
+        var cashierAEmail = $"cashier.a+{Guid.NewGuid():N}@test.local";
+        var superAdminEmail = $"super+{Guid.NewGuid():N}@test.local";
+
+        _ = await RegisterAndGetAccessTokenAsync(managerAEmail, password);
+        _ = await RegisterAndGetAccessTokenAsync(managerBEmail, password);
+        _ = await RegisterAndGetAccessTokenAsync(cashierAEmail, password);
+        _ = await RegisterAndGetAccessTokenAsync(superAdminEmail, password);
+
+        await SetUserRolesAsync(adminToken, managerAEmail, ["Manager"]);
+        await SetUserRolesAsync(adminToken, managerBEmail, ["Manager"]);
+        await SetUserRolesAsync(adminToken, cashierAEmail, ["Cashier"]);
+        await SetUserRolesAsync(adminToken, superAdminEmail, ["SuperAdmin"]);
+
+        var users = await db.Users.Where(x => x.Email == managerAEmail || x.Email == managerBEmail || x.Email == cashierAEmail || x.Email == superAdminEmail).ToListAsync();
+        foreach (var user in users)
+        {
+            if (user.Email == managerAEmail || user.Email == cashierAEmail)
+            {
+                user.TenantId = tenantA.Id;
+            }
+            else if (user.Email == managerBEmail)
+            {
+                user.TenantId = tenantB.Id;
+            }
+            else
+            {
+                user.TenantId = null;
+            }
+        }
+
+        db.PosShifts.AddRange(
+            new PosShift { Id = Guid.NewGuid(), StoreId = storeA.Id, TenantId = tenantA.Id, OpenedByUserId = Guid.NewGuid(), OpenedAtUtc = DateTimeOffset.UtcNow, ClosedAtUtc = DateTimeOffset.UtcNow },
+            new PosShift { Id = Guid.NewGuid(), StoreId = storeB.Id, TenantId = tenantB.Id, OpenedByUserId = Guid.NewGuid(), OpenedAtUtc = DateTimeOffset.UtcNow, ClosedAtUtc = DateTimeOffset.UtcNow });
+
+        db.Sales.AddRange(
+            new Sale { Id = Guid.NewGuid(), Folio = $"A-{Guid.NewGuid():N}", StoreId = storeA.Id, TenantId = tenantA.Id, CreatedByUserId = Guid.NewGuid(), OccurredAtUtc = DateTimeOffset.UtcNow, Subtotal = 10m, Total = 10m },
+            new Sale { Id = Guid.NewGuid(), Folio = $"B-{Guid.NewGuid():N}", StoreId = storeB.Id, TenantId = tenantB.Id, CreatedByUserId = Guid.NewGuid(), OccurredAtUtc = DateTimeOffset.UtcNow, Subtotal = 20m, Total = 20m });
+
+        await db.SaveChangesAsync();
+
+        return new SeedResult(managerAEmail, managerBEmail, cashierAEmail, superAdminEmail, password, storeA.Id, storeB.Id);
+    }
+
+    private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
+    {
+        using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
+        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return payload!.AccessToken;
+    }
+
+    private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
+    {
+        using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
+        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return payload!.AccessToken;
+    }
+
+    private async Task SetUserRolesAsync(string adminToken, string email, string[] roles)
+    {
+        using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/admin/users/roles", adminToken, new { email, roles });
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string accessToken, object? payload = null)
+    {
+        var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        if (payload is not null)
+        {
+            request.Content = JsonContent.Create(payload);
+        }
+
+        return request;
+    }
+
+    private sealed record SeedResult(string ManagerAEmail, string ManagerBEmail, string CashierAEmail, string SuperAdminEmail, string Password, Guid StoreAId, Guid StoreBId);
+
+    private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
+}

@@ -24,9 +24,11 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.HasIndex(x => x.ClientSaleId).IsUnique();
         builder.HasIndex(x => x.ClientVoidId).IsUnique();
         builder.HasIndex(x => x.StoreId);
+        builder.HasIndex(x => x.TenantId);
         builder.HasIndex(x => x.ShiftId);
         builder.HasOne<PosShift>().WithMany().HasForeignKey(x => x.ShiftId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -47,11 +49,13 @@ public sealed class PosShiftConfiguration : IEntityTypeConfiguration<PosShift>
         builder.Property(x => x.DenominationsJson).HasMaxLength(4000);
         builder.Property(x => x.CloseReason).HasMaxLength(500);
         builder.HasIndex(x => x.StoreId);
+        builder.HasIndex(x => x.TenantId);
         builder.HasIndex(x => x.OpenOperationId).IsUnique();
         builder.HasIndex(x => x.CloseOperationId).IsUnique();
         builder.HasIndex(x => new { x.OpenedByUserId, x.StoreId, x.ClosedAtUtc }).IsUnique();
         builder.HasIndex(x => x.ClosedAtUtc);
         builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -125,7 +129,34 @@ public sealed class StoreConfiguration : IEntityTypeConfiguration<Store>
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.TimeZoneId).HasMaxLength(100).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class VerticalConfiguration : IEntityTypeConfiguration<Vertical>
+{
+    public void Configure(EntityTypeBuilder<Vertical> builder)
+    {
+        builder.ToTable("Verticals");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Description).HasMaxLength(500);
         builder.HasIndex(x => x.Name).IsUnique();
+    }
+}
+
+public sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
+{
+    public void Configure(EntityTypeBuilder<Tenant> builder)
+    {
+        builder.ToTable("Tenants");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Slug).HasMaxLength(100).IsRequired();
+        builder.HasIndex(x => x.Slug).IsUnique();
+        builder.HasOne<Vertical>().WithMany().HasForeignKey(x => x.VerticalId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.DefaultStoreId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

@@ -30,6 +30,7 @@ public sealed class Sale : Entity
     public Guid? ClientSaleId { get; set; }
     public Guid? ShiftId { get; set; }
     public Guid StoreId { get; set; }
+    public Guid TenantId { get; set; }
     public SaleStatus Status { get; set; } = SaleStatus.Completed;
     public DateTimeOffset? VoidedAtUtc { get; set; }
     public Guid? VoidedByUserId { get; set; }
@@ -59,14 +60,36 @@ public sealed class PosShift : Entity
     public Guid? OpenOperationId { get; set; }
     public Guid? CloseOperationId { get; set; }
     public Guid StoreId { get; set; }
+    public Guid TenantId { get; set; }
     public string? CloseReason { get; set; }
 }
 
 public sealed class Store : Entity
 {
+    public Guid TenantId { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public string TimeZoneId { get; set; } = "America/Mexico_City";
+    public DateTimeOffset CreatedAtUtc { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+}
+
+public sealed class Vertical : Entity
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset CreatedAtUtc { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+}
+
+public sealed class Tenant : Entity
+{
+    public Guid VerticalId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public bool IsActive { get; set; } = true;
+    public Guid? DefaultStoreId { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
 }

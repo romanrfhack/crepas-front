@@ -122,6 +122,7 @@ public sealed class JwtTokenService : ITokenService
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.SigningKey));
         var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
         var roles = await ResolveRolesAsync(user, cancellationToken).ConfigureAwait(false);
+        var tenantId = await ResolveTenantIdAsync(user).ConfigureAwait(false);
 
         var claims = new List<Claim>
         {
@@ -135,6 +136,11 @@ public sealed class JwtTokenService : ITokenService
         if (roles.Any(role => string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)))
         {
             claims.Add(new Claim("scope", "cobranza.read"));
+        }
+
+        if (tenantId.HasValue)
+        {
+            claims.Add(new Claim("tenantId", tenantId.Value.ToString("D")));
         }
 
         var token = new JwtSecurityToken(
@@ -167,6 +173,18 @@ public sealed class JwtTokenService : ITokenService
 
         var roles = await _userManager.GetRolesAsync(applicationUser).ConfigureAwait(false);
         return (IReadOnlyCollection<string>)roles;
+    }
+
+
+    private async Task<Guid?> ResolveTenantIdAsync(IdentityUserInfo user)
+    {
+        if (!Guid.TryParse(user.UserId, out var parsedUserId))
+        {
+            return null;
+        }
+
+        var applicationUser = await _userManager.FindByIdAsync(parsedUserId.ToString()).ConfigureAwait(false);
+        return applicationUser?.TenantId;
     }
 
     private static string GenerateRefreshToken()
