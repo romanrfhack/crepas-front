@@ -40,3 +40,8 @@ Este documento registra compatibilidades temporales agregadas para evitar romper
 - Se agregó claim JWT `tenantId` para usuarios con `AspNetUsers.TenantId` configurado.
 - Compatibilidad: usuarios legacy sin claim siguen resolviendo tenant por lookup en base de datos.
 - Datos existentes se conservan mediante backfill a `Default Tenant` durante migración.
+
+## 2026-02-21 — POS catálogo Release B
+
+- `GET /api/v1/pos/catalog/snapshot` agrega campos no rompientes: `tenantId`, `verticalId`, `catalogTemplateId`.
+- `409` de disponibilidad en `POST /api/v1/pos/sales` conserva `itemType/itemId/itemName` y agrega `reason` (`DisabledByTenant` o `UnavailableInStore`).

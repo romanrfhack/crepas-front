@@ -369,13 +369,20 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         await EnsureOpenShiftAsync(token, "admin@test.local");
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"prod-unavail-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
-        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "No Latte", categoryId = category.Id, basePrice = 70m, isActive = true, isAvailable = false });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "No Latte", categoryId = category.Id, basePrice = 70m, isActive = true, isAvailable = true });
+
+        using (var disableReq = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/overrides", token))
+        {
+            disableReq.Content = JsonContent.Create(new { itemType = "Product", itemId = product.Id, isEnabled = false });
+            using var disableResp = await _client.SendAsync(disableReq);
+            Assert.Equal(HttpStatusCode.OK, disableResp.StatusCode);
+        }
 
         using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
         request.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 70m } });
         using var response = await _client.SendAsync(request);
 
-        await AssertItemUnavailableResponseAsync(response, "Product", product.Id, product.Name);
+        await AssertItemUnavailableResponseAsync(response, "Product", product.Id, product.Name, "DisabledByTenant");
     }
 
     [Fact]
@@ -466,7 +473,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
 
-    private static async Task AssertItemUnavailableResponseAsync(HttpResponseMessage response, string expectedItemType, Guid expectedItemId, string expectedItemName)
+    private static async Task AssertItemUnavailableResponseAsync(HttpResponseMessage response, string expectedItemType, Guid expectedItemId, string expectedItemName, string expectedReason = "UnavailableInStore")
     {
         var payload = await response.Content.ReadFromJsonAsync<JsonObject>();
 
@@ -476,6 +483,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Assert.Equal(expectedItemType, payload["itemType"]!.GetValue<string>());
         Assert.Equal(expectedItemId.ToString("D"), payload["itemId"]!.GetValue<string>());
         Assert.Equal(expectedItemName, payload["itemName"]!.GetValue<string>());
+        Assert.Equal(expectedReason, payload["reason"]!.GetValue<string>());
     }
 
     private async Task<T> PostAsync<T>(string url, string token, object body)

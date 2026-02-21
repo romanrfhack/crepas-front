@@ -20,6 +20,10 @@ public sealed class CobranzaDigitalDbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     public DbSet<Category> Categories => Set<Category>();
+    public DbSet<CatalogTemplate> CatalogTemplates => Set<CatalogTemplate>();
+    public DbSet<TenantCatalogTemplate> TenantCatalogTemplates => Set<TenantCatalogTemplate>();
+    public DbSet<TenantCatalogOverride> TenantCatalogOverrides => Set<TenantCatalogOverride>();
+    public DbSet<StoreCatalogAvailability> StoreCatalogAvailabilities => Set<StoreCatalogAvailability>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<OptionSet> OptionSets => Set<OptionSet>();
     public DbSet<OptionItem> OptionItems => Set<OptionItem>();
@@ -88,6 +92,18 @@ public sealed class CobranzaDigitalDbContext
                         break;
                     case Extra extra:
                         extra.UpdatedAtUtc = utcNow;
+                        break;
+                    case CatalogTemplate template:
+                        template.UpdatedAtUtc = utcNow;
+                        break;
+                    case TenantCatalogTemplate tenantTemplate:
+                        tenantTemplate.UpdatedAtUtc = utcNow;
+                        break;
+                    case TenantCatalogOverride tenantOverride:
+                        tenantOverride.UpdatedAtUtc = utcNow;
+                        break;
+                    case StoreCatalogAvailability storeAvailability:
+                        storeAvailability.UpdatedAtUtc = utcNow;
                         break;
                 }
             }

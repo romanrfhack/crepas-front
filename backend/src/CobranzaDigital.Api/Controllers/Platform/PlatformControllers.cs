@@ -1,5 +1,6 @@
 using Asp.Versioning;
 
+using CobranzaDigital.Application.Contracts.PosCatalog;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
 
@@ -104,6 +105,22 @@ public sealed class PlatformTenantsController : ControllerBase
 
         tenant.DefaultStoreId = store.Id;
         tenant.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        var templateId = await _db.CatalogTemplates.AsNoTracking()
+            .Where(x => x.VerticalId == tenant.VerticalId && x.IsActive)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (templateId.HasValue)
+        {
+            _db.TenantCatalogTemplates.Add(new TenantCatalogTemplate
+            {
+                TenantId = tenant.Id,
+                CatalogTemplateId = templateId.Value,
+                UpdatedAtUtc = DateTimeOffset.UtcNow
+            });
+        }
+
         await _db.SaveChangesAsync(ct);
 
         return tenant;
@@ -137,3 +154,82 @@ public sealed class PlatformTenantsController : ControllerBase
 public sealed record UpsertVerticalRequest(string Name, string? Description);
 public sealed record CreateTenantRequest(Guid VerticalId, string Name, string Slug, string TimeZoneId = "America/Mexico_City");
 public sealed record UpdateTenantRequest(Guid VerticalId, string Name, string Slug);
+
+[ApiController]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/platform/catalog-templates")]
+[Authorize(Policy = AuthorizationPolicies.PlatformOnly)]
+public sealed class PlatformCatalogTemplatesController : ControllerBase
+{
+    private readonly CobranzaDigitalDbContext _db;
+
+    public PlatformCatalogTemplatesController(CobranzaDigitalDbContext db) => _db = db;
+
+    [HttpGet]
+    public async Task<IReadOnlyList<CatalogTemplate>> List([FromQuery] Guid? verticalId, CancellationToken ct)
+    {
+        var query = _db.CatalogTemplates.AsNoTracking();
+        if (verticalId.HasValue)
+        {
+            query = query.Where(x => x.VerticalId == verticalId.Value);
+        }
+
+        return await query.OrderBy(x => x.Name).ToListAsync(ct);
+    }
+
+    [HttpPost]
+    public async Task<CatalogTemplate> Create([FromBody] UpsertCatalogTemplateRequest request, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var item = new CatalogTemplate
+        {
+            Id = Guid.NewGuid(),
+            VerticalId = request.VerticalId,
+            Name = request.Name,
+            Version = request.Version,
+            IsActive = request.IsActive,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+        _db.CatalogTemplates.Add(item);
+        await _db.SaveChangesAsync(ct);
+        return item;
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<CatalogTemplate>> Update(Guid id, [FromBody] UpsertCatalogTemplateRequest request, CancellationToken ct)
+    {
+        var item = await _db.CatalogTemplates.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (item is null) return NotFound();
+        item.VerticalId = request.VerticalId;
+        item.Name = request.Name;
+        item.Version = request.Version;
+        item.IsActive = request.IsActive;
+        item.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return item;
+    }
+
+    [HttpPut("tenants/{tenantId:guid}")]
+    public async Task<IActionResult> AssignTemplate(Guid tenantId, [FromBody] AssignTenantCatalogTemplateRequest request, CancellationToken ct)
+    {
+        var mapping = await _db.TenantCatalogTemplates.FirstOrDefaultAsync(x => x.TenantId == tenantId, ct);
+        if (mapping is null)
+        {
+            _db.TenantCatalogTemplates.Add(new TenantCatalogTemplate
+            {
+                TenantId = tenantId,
+                CatalogTemplateId = request.CatalogTemplateId,
+                UpdatedAtUtc = DateTimeOffset.UtcNow
+            });
+        }
+        else
+        {
+            mapping.CatalogTemplateId = request.CatalogTemplateId;
+            mapping.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+}

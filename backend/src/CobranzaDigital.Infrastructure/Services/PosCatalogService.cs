@@ -4,6 +4,7 @@ using System.Text;
 using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Common.Exceptions;
 using CobranzaDigital.Application.Contracts.PosCatalog;
+using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Interfaces.PosCatalog;
 using CobranzaDigital.Application.Validators.PosCatalog;
 using CobranzaDigital.Domain.Entities;
@@ -29,6 +30,7 @@ public sealed class PosCatalogService : IPosCatalogService
     private readonly IValidator<ReplaceIncludedItemsRequest> _includedValidator;
     private readonly IValidator<OverrideUpsertRequest> _overrideValidator;
     private readonly PosStoreContextService _storeContext;
+    private readonly ITenantContext _tenantContext;
 
     public PosCatalogService(CobranzaDigitalDbContext db, IAuditLogger auditLogger, ILogger<PosCatalogService> logger,
         IValidator<UpsertSelectionGroupRequest> groupValidator,
@@ -36,8 +38,9 @@ public sealed class PosCatalogService : IPosCatalogService
         IValidator<UpsertExtraRequest> extraValidator,
         IValidator<ReplaceIncludedItemsRequest> includedValidator,
         IValidator<OverrideUpsertRequest> overrideValidator,
-        PosStoreContextService storeContext)
-    { _db = db; _auditLogger = auditLogger; _logger = logger; _groupValidator = groupValidator; _productValidator = productValidator; _extraValidator = extraValidator; _includedValidator = includedValidator; _overrideValidator = overrideValidator; _storeContext = storeContext; }
+        PosStoreContextService storeContext,
+        ITenantContext tenantContext)
+    { _db = db; _auditLogger = auditLogger; _logger = logger; _groupValidator = groupValidator; _productValidator = productValidator; _extraValidator = extraValidator; _includedValidator = includedValidator; _overrideValidator = overrideValidator; _storeContext = storeContext; _tenantContext = tenantContext; }
 
     public async Task<IReadOnlyList<CategoryDto>> GetCategoriesAsync(bool includeInactive, CancellationToken ct) =>
         await _db.Categories.AsNoTracking().Where(x => includeInactive || x.IsActive).OrderBy(x => x.SortOrder).Select(x => new CategoryDto(x.Id, x.Name, x.SortOrder, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
@@ -113,108 +116,110 @@ public sealed class PosCatalogService : IPosCatalogService
         return after;
     }
 
-    public async Task<CatalogSnapshotDto> GetSnapshotAsync(Guid? storeId, CancellationToken ct)
+    public async Task<IReadOnlyList<CatalogItemOverrideDto>> GetTenantOverridesAsync(string? itemType, CancellationToken ct)
     {
-        var categories = await GetCategoriesAsync(false, ct).ConfigureAwait(false);
-        var products = await GetProductsAsync(false, null, ct).ConfigureAwait(false);
-        var optionSets = await GetOptionSetsAsync(false, ct).ConfigureAwait(false);
-        var optionItems = await _db.OptionItems.AsNoTracking().Where(x => x.IsActive).Select(x => new OptionItemDto(x.Id, x.OptionSetId, x.Name, x.IsActive, x.IsAvailable, x.SortOrder)).ToListAsync(ct).ConfigureAwait(false);
-        var schemas = await GetSchemasAsync(false, ct).ConfigureAwait(false);
-        var groups = await _db.SelectionGroups.AsNoTracking().Where(x => x.IsActive).Select(x => Map(x)).ToListAsync(ct).ConfigureAwait(false);
-        var extras = await GetExtrasAsync(false, ct).ConfigureAwait(false);
-        var included = await _db.IncludedItems.AsNoTracking()
-            .Join(_db.Products.AsNoTracking().Where(x => x.IsActive), i => i.ProductId, p => p.Id, (i, p) => i)
-            .Join(_db.Extras.AsNoTracking().Where(x => x.IsActive), i => i.ExtraId, e => e.Id, (i, e) => new IncludedItemDto(i.Id, i.ProductId, i.ExtraId, i.Quantity))
+        var tenantId = RequireTenantId();
+        var query = _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId);
+        if (!string.IsNullOrWhiteSpace(itemType) && Enum.TryParse<CatalogItemType>(itemType, true, out var parsedType))
+        {
+            query = query.Where(x => x.ItemType == parsedType);
+        }
+
+        return await query.OrderBy(x => x.ItemType).ThenBy(x => x.ItemId)
+            .Select(x => new CatalogItemOverrideDto(x.ItemType.ToString(), x.ItemId, x.IsEnabled, x.UpdatedAtUtc))
             .ToListAsync(ct).ConfigureAwait(false);
-        var overrides = await _db.ProductGroupOverrides.AsNoTracking().Where(x => x.IsActive).ToListAsync(ct).ConfigureAwait(false);
-        var allowed = await _db.ProductGroupOverrideAllowedItems.AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
-        var overrideDtos = overrides.Select(o => new ProductOverrideDto(o.Id, o.ProductId, o.GroupKey, o.IsActive, allowed.Where(a => a.ProductGroupOverrideId == o.Id).Select(a => a.OptionItemId).ToList())).ToList();
-
-        var stamp = ComputeVersionStamp(categories, products, optionSets, optionItems, schemas, groups, extras, included, overrideDtos);
-        var etagSeed = await ComputeCatalogEtagAsync(ct).ConfigureAwait(false);
-        var (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
-        var timeZoneId = await _db.Stores.AsNoTracking()
-            .Where(x => x.Id == resolvedStoreId)
-            .Select(x => x.TimeZoneId)
-            .SingleAsync(ct)
-            .ConfigureAwait(false);
-
-        return new(resolvedStoreId, timeZoneId, DateTimeOffset.UtcNow, stamp, etagSeed, categories, products, optionSets, optionItems, schemas, groups, extras, included, overrideDtos, stamp);
     }
 
-    public async Task<string> ComputeCatalogEtagAsync(CancellationToken ct)
+    public async Task<CatalogItemOverrideDto> UpsertTenantOverrideAsync(UpsertCatalogItemOverrideRequest request, CancellationToken ct)
     {
-        var categories = await _db.Categories.AsNoTracking()
-            .OrderBy(x => x.Id)
-            .Select(x => $"{x.Id:N}|{x.Name}|{x.SortOrder}|{x.IsActive}")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var tenantId = RequireTenantId();
+        if (!Enum.TryParse<CatalogItemType>(request.ItemType, true, out var itemType))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["itemType is invalid."] });
+        }
 
-        var products = await _db.Products.AsNoTracking()
-            .OrderBy(x => x.Id)
-            .Select(x => $"{x.Id:N}|{x.ExternalCode}|{x.Name}|{x.CategoryId:N}|{x.SubcategoryName}|{x.BasePrice}|{x.IsActive}|{x.IsAvailable}|{x.CustomizationSchemaId}")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var row = await _db.TenantCatalogOverrides.FindAsync([tenantId, itemType, request.ItemId], ct).ConfigureAwait(false);
+        if (row is null)
+        {
+            row = new TenantCatalogOverride { TenantId = tenantId, ItemType = itemType, ItemId = request.ItemId, IsEnabled = request.IsEnabled, UpdatedAtUtc = DateTimeOffset.UtcNow };
+            _db.TenantCatalogOverrides.Add(row);
+        }
+        else
+        {
+            row.IsEnabled = request.IsEnabled;
+            row.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
 
-        var optionSets = await _db.OptionSets.AsNoTracking()
-            .OrderBy(x => x.Id)
-            .Select(x => $"{x.Id:N}|{x.Name}|{x.IsActive}")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new CatalogItemOverrideDto(row.ItemType.ToString(), row.ItemId, row.IsEnabled, row.UpdatedAtUtc);
+    }
 
-        var optionItems = await _db.OptionItems.AsNoTracking()
-            .OrderBy(x => x.Id)
-            .Select(x => $"{x.Id:N}|{x.OptionSetId:N}|{x.Name}|{x.IsActive}|{x.IsAvailable}|{x.SortOrder}")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+    public async Task<CatalogStoreAvailabilityDto> UpsertStoreAvailabilityAsync(UpsertCatalogStoreAvailabilityRequest request, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        var storeBelongs = await _db.Stores.AsNoTracking().AnyAsync(x => x.Id == request.StoreId && x.TenantId == tenantId, ct).ConfigureAwait(false);
+        if (!storeBelongs)
+        {
+            throw new ForbiddenException("Store does not belong to tenant.");
+        }
 
-        var schemas = await _db.CustomizationSchemas.AsNoTracking()
-            .OrderBy(x => x.Id)
-            .Select(x => $"{x.Id:N}|{x.Name}|{x.IsActive}")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        if (!Enum.TryParse<CatalogItemType>(request.ItemType, true, out var itemType))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["itemType is invalid."] });
+        }
 
-        var groups = await _db.SelectionGroups.AsNoTracking()
-            .OrderBy(x => x.Id)
-            .Select(x => $"{x.Id:N}|{x.SchemaId:N}|{x.Key}|{x.Label}|{x.SelectionMode}|{x.MinSelections}|{x.MaxSelections}|{x.OptionSetId:N}|{x.IsActive}|{x.SortOrder}")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var row = await _db.StoreCatalogAvailabilities.FindAsync([request.StoreId, itemType, request.ItemId], ct).ConfigureAwait(false);
+        if (row is null)
+        {
+            row = new StoreCatalogAvailability { StoreId = request.StoreId, ItemType = itemType, ItemId = request.ItemId, IsAvailable = request.IsAvailable, UpdatedAtUtc = DateTimeOffset.UtcNow };
+            _db.StoreCatalogAvailabilities.Add(row);
+        }
+        else
+        {
+            row.IsAvailable = request.IsAvailable;
+            row.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
 
-        var extras = await _db.Extras.AsNoTracking()
-            .OrderBy(x => x.Id)
-            .Select(x => $"{x.Id:N}|{x.Name}|{x.Price}|{x.IsActive}|{x.IsAvailable}")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new CatalogStoreAvailabilityDto(row.StoreId, row.ItemType.ToString(), row.ItemId, row.IsAvailable, row.UpdatedAtUtc);
+    }
 
-        var included = await _db.IncludedItems.AsNoTracking()
-            .OrderBy(x => x.Id)
-            .Select(x => $"{x.Id:N}|{x.ProductId:N}|{x.ExtraId:N}|{x.Quantity}")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+    public async Task<CatalogSnapshotDto> GetSnapshotAsync(Guid? storeId, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        var (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
+        var tenant = await _db.Tenants.AsNoTracking().SingleAsync(x => x.Id == tenantId, ct).ConfigureAwait(false);
+        var mapping = await _db.TenantCatalogTemplates.AsNoTracking().SingleAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
 
-        var overrides = await _db.ProductGroupOverrides.AsNoTracking()
-            .OrderBy(x => x.Id)
-            .Select(x => $"{x.Id:N}|{x.ProductId:N}|{x.GroupKey}|{x.IsActive}")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var disabledProducts = await _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Product && !x.IsEnabled).Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
+        var disabledExtras = await _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Extra && !x.IsEnabled).Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
+        var disabledOptionItems = await _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.OptionItem && !x.IsEnabled).Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
 
-        var overrideAllowed = await _db.ProductGroupOverrideAllowedItems.AsNoTracking()
-            .OrderBy(x => x.ProductGroupOverrideId)
-            .ThenBy(x => x.OptionItemId)
-            .Select(x => $"{x.ProductGroupOverrideId:N}|{x.OptionItemId:N}")
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var availability = await _db.StoreCatalogAvailabilities.AsNoTracking().Where(x => x.StoreId == resolvedStoreId)
+            .ToDictionaryAsync(x => (x.ItemType, x.ItemId), x => x.IsAvailable, ct).ConfigureAwait(false);
 
-        var sections = categories
-            .Concat(products)
-            .Concat(optionSets)
-            .Concat(optionItems)
-            .Concat(schemas)
-            .Concat(groups)
-            .Concat(extras)
-            .Concat(included)
-            .Concat(overrides)
-            .Concat(overrideAllowed);
+        var categories = await _db.Categories.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).OrderBy(x => x.SortOrder).Select(x => new CategoryDto(x.Id, x.Name, x.SortOrder, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
+        var products = await _db.Products.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledProducts.Contains(x.Id)).Select(x => new ProductDto(x.Id, x.ExternalCode, x.Name, x.CategoryId, x.SubcategoryName, x.BasePrice, x.IsActive, availability.TryGetValue((CatalogItemType.Product, x.Id), out var a) ? a : x.IsAvailable, x.CustomizationSchemaId)).ToListAsync(ct).ConfigureAwait(false);
+        var optionSets = await _db.OptionSets.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).Select(x => new OptionSetDto(x.Id, x.Name, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
+        var optionItems = await _db.OptionItems.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledOptionItems.Contains(x.Id)).Select(x => new OptionItemDto(x.Id, x.OptionSetId, x.Name, x.IsActive, availability.TryGetValue((CatalogItemType.OptionItem, x.Id), out var a) ? a : x.IsAvailable, x.SortOrder)).ToListAsync(ct).ConfigureAwait(false);
+        var schemas = await _db.CustomizationSchemas.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).Select(x => new SchemaDto(x.Id, x.Name, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
+        var groups = await _db.SelectionGroups.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).Select(x => Map(x)).ToListAsync(ct).ConfigureAwait(false);
+        var extras = await _db.Extras.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledExtras.Contains(x.Id)).Select(x => new ExtraDto(x.Id, x.Name, x.Price, x.IsActive, availability.TryGetValue((CatalogItemType.Extra, x.Id), out var a) ? a : x.IsAvailable)).ToListAsync(ct).ConfigureAwait(false);
+        var included = await _db.IncludedItems.AsNoTracking().Where(x => products.Select(p => p.Id).Contains(x.ProductId) && extras.Select(e => e.Id).Contains(x.ExtraId)).Select(x => new IncludedItemDto(x.Id, x.ProductId, x.ExtraId, x.Quantity)).ToListAsync(ct).ConfigureAwait(false);
+        var pgOverrides = await _db.ProductGroupOverrides.AsNoTracking().Where(x => x.IsActive).ToListAsync(ct).ConfigureAwait(false);
+        var allowed = await _db.ProductGroupOverrideAllowedItems.AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
+        var overrideDtos = pgOverrides.Select(o => new ProductOverrideDto(o.Id, o.ProductId, o.GroupKey, o.IsActive, allowed.Where(a => a.ProductGroupOverrideId == o.Id).Select(a => a.OptionItemId).ToList())).ToList();
+
+        var stamp = ComputeVersionStamp(categories.Count, products.Count, optionItems.Count, extras.Count);
+        var etagSeed = ComputeWeakEtag(stamp, tenantId, mapping.CatalogTemplateId, resolvedStoreId);
+        var timeZoneId = await _db.Stores.AsNoTracking().Where(x => x.Id == resolvedStoreId).Select(x => x.TimeZoneId).SingleAsync(ct).ConfigureAwait(false);
+        return new(tenantId, tenant.VerticalId, mapping.CatalogTemplateId, resolvedStoreId, timeZoneId, DateTimeOffset.UtcNow, stamp, etagSeed, categories, products, optionSets, optionItems, schemas, groups, extras, included, overrideDtos, stamp);
+    }
+
+    public async Task<string> ComputeCatalogEtagAsync(Guid? storeId, CancellationToken ct)
+    {
+        var snapshot = await GetSnapshotAsync(storeId, ct).ConfigureAwait(false);
+        var sections = new[] { snapshot.VersionStamp, snapshot.StoreId.ToString("N"), snapshot.CatalogTemplateId.ToString("N") };
         var etagSeed = string.Join('\n', sections);
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(etagSeed));
         return $"W/\"{Convert.ToHexString(bytes)}\"";
@@ -227,6 +232,14 @@ public sealed class PosCatalogService : IPosCatalogService
     private async Task EnsureUniqueGroupKey(Guid schemaId, string key, Guid? ignoreId, CancellationToken ct) { var exists = await _db.SelectionGroups.AnyAsync(x => x.SchemaId == schemaId && x.Key == key && (!ignoreId.HasValue || x.Id != ignoreId.Value), ct).ConfigureAwait(false); if (exists) throw new ConflictException("SelectionGroup key already exists."); }
     private async Task<ProductOverrideDto> BuildOverrideDto(ProductGroupOverride o, CancellationToken ct) { var ids = await _db.ProductGroupOverrideAllowedItems.AsNoTracking().Where(x => x.ProductGroupOverrideId == o.Id).Select(x => x.OptionItemId).ToListAsync(ct).ConfigureAwait(false); return new(o.Id, o.ProductId, o.GroupKey, o.IsActive, ids); }
     private async Task AuditAsync(string entity, string action, Guid entityId, object? before, object? after, CancellationToken ct) { await _auditLogger.LogAsync(new AuditEntry(action, null, null, entity, entityId.ToString(), before, after, "Api", null, DateTime.UtcNow), ct).ConfigureAwait(false); PosCatalogLog.AuditWritten(_logger, action, entity, entityId); }
+    private Guid RequireTenantId() => _tenantContext.EffectiveTenantId ?? throw new ForbiddenException("Tenant context is required.");
+
+    private static string ComputeWeakEtag(string stamp, Guid tenantId, Guid templateId, Guid storeId)
+    {
+        var input = $"{stamp}|{tenantId:N}|{templateId:N}|{storeId:N}";
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return $"W/\"{Convert.ToHexString(bytes)}\"";
+    }
 
     private static string ComputeVersionStamp(params object[] sections)
     {
