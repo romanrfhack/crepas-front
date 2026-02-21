@@ -398,7 +398,7 @@ public sealed class PosSalesService : IPosSalesService
         }).ConfigureAwait(false);
     }
 
-    private async Task DecrementInventoryStrictAsync(Guid storeId, IReadOnlyList<CreateSaleItemRequestDto> items, IReadOnlyDictionary<Guid, Product> products, Guid userId, CancellationToken ct)
+    private async Task DecrementInventoryStrictAsync(Guid storeId, IReadOnlyList<CreateSaleItemRequestDto> items, Dictionary<Guid, Product> products, Guid userId, CancellationToken ct)
     {
         var grouped = items.GroupBy(x => x.ProductId).Select(x => new { ProductId = x.Key, Quantity = x.Sum(v => v.Quantity) });
         foreach (var row in grouped)

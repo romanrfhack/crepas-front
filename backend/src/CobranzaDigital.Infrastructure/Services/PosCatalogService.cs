@@ -120,6 +120,12 @@ public sealed class PosCatalogService : IPosCatalogService
     {
         var tenantId = RequireTenantId();
         var mapping = await _db.TenantCatalogTemplates.AsNoTracking().SingleAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
+        
+        if (!mapping.CatalogTemplateId.HasValue)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["catalogTemplateId"] = ["Tenant catalog template is not configured."] });
+        }
+        
         var query = _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId);
         if (!string.IsNullOrWhiteSpace(itemType) && Enum.TryParse<CatalogItemType>(itemType, true, out var parsedType))
         {
@@ -127,7 +133,7 @@ public sealed class PosCatalogService : IPosCatalogService
         }
 
         var rows = await query.OrderBy(x => x.ItemType).ThenBy(x => x.ItemId).ToListAsync(ct).ConfigureAwait(false);
-        return await MapOverrideRowsAsync(rows, mapping.CatalogTemplateId, ct).ConfigureAwait(false);
+        return await MapOverrideRowsAsync(rows, mapping.CatalogTemplateId.Value, ct).ConfigureAwait(false);
     }
 
     public async Task<CatalogItemOverrideDto> UpsertTenantOverrideAsync(UpsertCatalogItemOverrideRequest request, CancellationToken ct)
@@ -171,7 +177,11 @@ public sealed class PosCatalogService : IPosCatalogService
         }
 
         var rows = await query.OrderBy(x => x.ItemType).ThenBy(x => x.ItemId).ToListAsync(ct).ConfigureAwait(false);
-        var itemDetails = await BuildTemplateItemLookupAsync(mapping.CatalogTemplateId, ct).ConfigureAwait(false);
+        if (!mapping.CatalogTemplateId.HasValue)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["catalogTemplateId"] = ["Tenant catalog template is not configured."] });
+        }
+        var itemDetails = await BuildTemplateItemLookupAsync(mapping.CatalogTemplateId.Value, ct).ConfigureAwait(false);
         return rows.Select(x =>
         {
             itemDetails.TryGetValue((x.ItemType, x.ItemId), out var detail);
@@ -316,33 +326,164 @@ public sealed class PosCatalogService : IPosCatalogService
         var tenant = await _db.Tenants.AsNoTracking().SingleAsync(x => x.Id == tenantId, ct).ConfigureAwait(false);
         var mapping = await _db.TenantCatalogTemplates.AsNoTracking().SingleAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
 
-        var disabledProducts = await _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Product && !x.IsEnabled).Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
-        var disabledExtras = await _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Extra && !x.IsEnabled).Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
-        var disabledOptionItems = await _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.OptionItem && !x.IsEnabled).Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
+        if (!mapping.CatalogTemplateId.HasValue)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["catalogTemplateId"] = ["Tenant catalog template is not configured."] });
+        }
 
-        var availability = await _db.StoreCatalogAvailabilities.AsNoTracking().Where(x => x.StoreId == resolvedStoreId)
-            .ToDictionaryAsync(x => (x.ItemType, x.ItemId), x => x.IsAvailable, ct).ConfigureAwait(false);
+        var disabledProducts = await _db.TenantCatalogOverrides.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Product && !x.IsEnabled)
+            .Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
+        var disabledExtras = await _db.TenantCatalogOverrides.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Extra && !x.IsEnabled)
+            .Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
+        var disabledOptionItems = await _db.TenantCatalogOverrides.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.OptionItem && !x.IsEnabled)
+            .Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
 
-        var categories = await _db.Categories.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).OrderBy(x => x.SortOrder).Select(x => new CategoryDto(x.Id, x.Name, x.SortOrder, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
-        var productCandidates = await _db.Products.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledProducts.Contains(x.Id)).Select(x => new ProductDto(x.Id, x.ExternalCode, x.Name, x.CategoryId, x.SubcategoryName, x.BasePrice, x.IsActive, availability.TryGetValue((CatalogItemType.Product, x.Id), out var a) ? a : x.IsAvailable, x.CustomizationSchemaId)).ToListAsync(ct).ConfigureAwait(false);
-        var stockByProduct = await _db.StoreInventories.AsNoTracking().Where(x => x.StoreId == resolvedStoreId).ToDictionaryAsync(x => x.ProductId, x => x.OnHand, ct).ConfigureAwait(false);
+        var availability = await _db.StoreCatalogAvailabilities.AsNoTracking()
+            .Where(x => x.StoreId == resolvedStoreId)
+            .ToDictionaryAsync(x => (x.ItemType, x.ItemId), x => x.IsAvailable, ct)
+            .ConfigureAwait(false);
+
+        var categories = await _db.Categories.AsNoTracking()
+            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId)
+            .OrderBy(x => x.SortOrder)
+            .Select(x => new CategoryDto(x.Id, x.Name, x.SortOrder, x.IsActive))
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        // --- Productos: primero traemos los datos necesarios desde la BD ---
+        var productEntities = await _db.Products.AsNoTracking()
+            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledProducts.Contains(x.Id))
+            .Select(x => new
+            {
+                x.Id,
+                x.ExternalCode,
+                x.Name,
+                x.CategoryId,
+                x.SubcategoryName,
+                x.BasePrice,
+                x.IsActive,
+                x.IsAvailable,      // disponibilidad por defecto
+                x.CustomizationSchemaId
+            })
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        // Mapeamos a DTO usando el diccionario de disponibilidad (en memoria)
+        var productCandidates = productEntities.Select(x => new ProductDto(
+            x.Id,
+            x.ExternalCode,
+            x.Name,
+            x.CategoryId,
+            x.SubcategoryName,
+            x.BasePrice,
+            x.IsActive,
+            availability.TryGetValue((CatalogItemType.Product, x.Id), out var available) ? available : x.IsAvailable,
+            x.CustomizationSchemaId
+        )).ToList();
+
+        // Stock por producto (se mantiene igual)
+        var stockByProduct = await _db.StoreInventories.AsNoTracking()
+            .Where(x => x.StoreId == resolvedStoreId)
+            .ToDictionaryAsync(x => x.ProductId, x => x.OnHand, ct)
+            .ConfigureAwait(false);
+
+        // Filtro por stock según configuración
         var products = settings.ShowOnlyInStock
             ? productCandidates.Where(x => x.IsAvailable && stockByProduct.GetValueOrDefault(x.Id, 0m) > 0m).ToList()
             : productCandidates;
-        var optionSets = await _db.OptionSets.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).Select(x => new OptionSetDto(x.Id, x.Name, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
-        var optionItems = await _db.OptionItems.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledOptionItems.Contains(x.Id)).Select(x => new OptionItemDto(x.Id, x.OptionSetId, x.Name, x.IsActive, availability.TryGetValue((CatalogItemType.OptionItem, x.Id), out var a) ? a : x.IsAvailable, x.SortOrder)).ToListAsync(ct).ConfigureAwait(false);
-        var schemas = await _db.CustomizationSchemas.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).Select(x => new SchemaDto(x.Id, x.Name, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
-        var groups = await _db.SelectionGroups.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).Select(x => Map(x)).ToListAsync(ct).ConfigureAwait(false);
-        var extras = await _db.Extras.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledExtras.Contains(x.Id)).Select(x => new ExtraDto(x.Id, x.Name, x.Price, x.IsActive, availability.TryGetValue((CatalogItemType.Extra, x.Id), out var a) ? a : x.IsAvailable)).ToListAsync(ct).ConfigureAwait(false);
-        var included = await _db.IncludedItems.AsNoTracking().Where(x => products.Select(p => p.Id).Contains(x.ProductId) && extras.Select(e => e.Id).Contains(x.ExtraId)).Select(x => new IncludedItemDto(x.Id, x.ProductId, x.ExtraId, x.Quantity)).ToListAsync(ct).ConfigureAwait(false);
-        var pgOverrides = await _db.ProductGroupOverrides.AsNoTracking().Where(x => x.IsActive).ToListAsync(ct).ConfigureAwait(false);
-        var allowed = await _db.ProductGroupOverrideAllowedItems.AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
-        var overrideDtos = pgOverrides.Select(o => new ProductOverrideDto(o.Id, o.ProductId, o.GroupKey, o.IsActive, allowed.Where(a => a.ProductGroupOverrideId == o.Id).Select(a => a.OptionItemId).ToList())).ToList();
+
+        // --- OptionSets (no dependen de availability, se mantiene igual) ---
+        var optionSets = await _db.OptionSets.AsNoTracking()
+            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId)
+            .Select(x => new OptionSetDto(x.Id, x.Name, x.IsActive))
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        // --- OptionItems ---
+        var optionItemEntities = await _db.OptionItems.AsNoTracking()
+            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledOptionItems.Contains(x.Id))
+            .Select(x => new
+            {
+                x.Id,
+                x.OptionSetId,
+                x.Name,
+                x.IsActive,
+                x.IsAvailable,
+                x.SortOrder
+            })
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        var optionItems = optionItemEntities.Select(x => new OptionItemDto(
+            x.Id,
+            x.OptionSetId,
+            x.Name,
+            x.IsActive,
+            availability.TryGetValue((CatalogItemType.OptionItem, x.Id), out var avail) ? avail : x.IsAvailable,
+            x.SortOrder
+        )).ToList();
+
+        // --- Schemas (sin cambios) ---
+        var schemas = await _db.CustomizationSchemas.AsNoTracking()
+            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId)
+            .Select(x => new SchemaDto(x.Id, x.Name, x.IsActive))
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        // --- Groups (sin cambios) ---
+        var groups = await _db.SelectionGroups.AsNoTracking()
+            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId)
+            .Select(x => Map(x))
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        // --- Extras ---
+        var extraEntities = await _db.Extras.AsNoTracking()
+            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledExtras.Contains(x.Id))
+            .Select(x => new
+            {
+                x.Id,
+                x.Name,
+                x.Price,
+                x.IsActive,
+                x.IsAvailable
+            })
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        var extras = extraEntities.Select(x => new ExtraDto(
+            x.Id,
+            x.Name,
+            x.Price,
+            x.IsActive,
+            availability.TryGetValue((CatalogItemType.Extra, x.Id), out var avail) ? avail : x.IsAvailable
+        )).ToList();
+
+        // --- IncludedItems (depende de las listas ya en memoria, pero EF puede traducir el Contains a SQL) ---
+        var included = await _db.IncludedItems.AsNoTracking()
+            .Where(x => products.Select(p => p.Id).Contains(x.ProductId) && extras.Select(e => e.Id).Contains(x.ExtraId))
+            .Select(x => new IncludedItemDto(x.Id, x.ProductId, x.ExtraId, x.Quantity))
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        // --- Overrides (sin cambios) ---
+        var pgOverrides = await _db.ProductGroupOverrides.AsNoTracking()
+            .Where(x => x.IsActive)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var allowed = await _db.ProductGroupOverrideAllowedItems.AsNoTracking()
+            .ToListAsync(ct).ConfigureAwait(false);
+        var overrideDtos = pgOverrides.Select(o => new ProductOverrideDto(
+            o.Id, o.ProductId, o.GroupKey, o.IsActive,
+            allowed.Where(a => a.ProductGroupOverrideId == o.Id).Select(a => a.OptionItemId).ToList()
+        )).ToList();
 
         var stamp = ComputeVersionStamp(categories.Count, products.Count, optionItems.Count, extras.Count);
-        var etagSeed = ComputeWeakEtag(stamp, tenantId, mapping.CatalogTemplateId, resolvedStoreId);
-        var timeZoneId = await _db.Stores.AsNoTracking().Where(x => x.Id == resolvedStoreId).Select(x => x.TimeZoneId).SingleAsync(ct).ConfigureAwait(false);
-        return new(tenantId, tenant.VerticalId, mapping.CatalogTemplateId, resolvedStoreId, timeZoneId, DateTimeOffset.UtcNow, stamp, etagSeed, categories, products, optionSets, optionItems, schemas, groups, extras, included, overrideDtos, stamp);
+        var etagSeed = ComputeWeakEtag(stamp, tenantId, mapping.CatalogTemplateId.Value, resolvedStoreId);
+        var timeZoneId = await _db.Stores.AsNoTracking()
+            .Where(x => x.Id == resolvedStoreId)
+            .Select(x => x.TimeZoneId)
+            .SingleAsync(ct).ConfigureAwait(false);
+
+        return new CatalogSnapshotDto(
+            tenantId, tenant.VerticalId, mapping.CatalogTemplateId.Value, resolvedStoreId, timeZoneId,
+            DateTimeOffset.UtcNow, stamp, etagSeed,
+            categories, products, optionSets, optionItems, schemas, groups, extras, included, overrideDtos, stamp
+        );
     }
 
     public async Task<string> ComputeCatalogEtagAsync(Guid? storeId, CancellationToken ct)

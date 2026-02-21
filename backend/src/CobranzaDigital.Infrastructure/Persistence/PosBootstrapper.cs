@@ -111,13 +111,13 @@ public static class PosBootstrapper
 
         await db.SaveChangesAsync().ConfigureAwait(false);
 
-        await db.Categories.Where(x => x.CatalogTemplateId == null).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
-        await db.Products.Where(x => x.CatalogTemplateId == null).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
-        await db.OptionSets.Where(x => x.CatalogTemplateId == null).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
-        await db.OptionItems.Where(x => x.CatalogTemplateId == null).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
-        await db.CustomizationSchemas.Where(x => x.CatalogTemplateId == null).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
-        await db.SelectionGroups.Where(x => x.CatalogTemplateId == null).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
-        await db.Extras.Where(x => x.CatalogTemplateId == null).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
+        await db.Categories.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
+        await db.Products.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
+        await db.OptionSets.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
+        await db.OptionItems.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
+        await db.CustomizationSchemas.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
+        await db.SelectionGroups.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
+        await db.Extras.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
 
         var settings = await db.PosSettings.OrderBy(x => x.Id).FirstOrDefaultAsync().ConfigureAwait(false);
         if (settings is null)

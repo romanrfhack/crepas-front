@@ -88,6 +88,7 @@ public sealed class PosCatalogValidationTests
             new UpsertExtraRequestValidator(),
             new ReplaceIncludedItemsRequestValidator(),
             new OverrideUpsertRequestValidator(),
+            null!,
             null!);
     }
 
