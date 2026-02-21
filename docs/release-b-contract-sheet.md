@@ -52,6 +52,8 @@ Base de ruta:
   isActive: boolean;
   createdAtUtc: string; // DateTimeOffset
   updatedAtUtc: string; // DateTimeOffset
+  itemName?: string; // opcional, string vacío cuando no hay match
+  itemSku?: string | null; // opcional (Product.ExternalCode)
 }
 ```
 
@@ -80,9 +82,10 @@ Base de ruta controller:
 
 | Método | Ruta | Auth / policy | Headers / query | Request DTO | Response DTO |
 |---|---|---|---|---|---|
+| GET | `/api/v1/pos/admin/catalog/availability` | `Bearer` + `TenantOrPlatform` + `PosAdmin` | Query: `storeId: Guid` (requerido), `type: string` (opcional) | N/A | `200 OK` → `CatalogStoreAvailabilityDto[]` |
 | PUT | `/api/v1/pos/admin/catalog/availability` | `Bearer` + `TenantOrPlatform` + `PosAdmin` | Tenant requerido para operación (ver condicional SuperAdmin) | `UpsertCatalogStoreAvailabilityRequest` | `200 OK` → `CatalogStoreAvailabilityDto` |
 
-**GET/PATCH en availability:** no existen endpoints `GET` ni `PATCH` en controller actual.
+**PATCH en availability:** no existe endpoint `PATCH` en controller actual.
 
 ### 2.3 Tipos (DTO) usados por POS Admin
 
@@ -105,6 +108,8 @@ Base de ruta controller:
   itemId: string; // Guid
   isEnabled: boolean;
   updatedAtUtc: string; // DateTimeOffset
+  itemName?: string; // opcional, string vacío cuando no hay match
+  itemSku?: string | null; // opcional (Product.ExternalCode)
 }
 ```
 
@@ -126,6 +131,8 @@ Base de ruta controller:
   itemId: string; // Guid
   isAvailable: boolean;
   updatedAtUtc: string; // DateTimeOffset
+  itemName?: string; // opcional, string vacío cuando no hay match
+  itemSku?: string | null; // opcional (Product.ExternalCode)
 }
 ```
 
@@ -140,8 +147,10 @@ Base de ruta controller:
   - si `type` no parsea a enum, backend **no falla**; simplemente no aplica filtro por tipo.
 - `PUT /catalog/overrides` y `PUT /catalog/availability`:
   - si `itemType` inválido => `ValidationException` (`itemType is invalid.`).
-- `PUT /catalog/availability`:
-  - valida que `storeId` pertenezca al tenant efectivo; si no, `Forbidden` (`Store does not belong to tenant.`).
+- `GET /catalog/availability` y `PUT /catalog/availability`:
+  - validan que `storeId` pertenezca al tenant efectivo; si no, `Forbidden` (`Store does not belong to tenant.`).
+- `GET /catalog/availability?type=`:
+  - si `type` no parsea a enum, backend **no falla**; simplemente no aplica filtro por tipo.
 
 ---
 

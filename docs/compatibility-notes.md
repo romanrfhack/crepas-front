@@ -45,3 +45,9 @@ Este documento registra compatibilidades temporales agregadas para evitar romper
 
 - `GET /api/v1/pos/catalog/snapshot` agrega campos no rompientes: `tenantId`, `verticalId`, `catalogTemplateId`.
 - `409` de disponibilidad en `POST /api/v1/pos/sales` conserva `itemType/itemId/itemName` y agrega `reason` (`DisabledByTenant` o `UnavailableInStore`).
+
+## 2026-02-21 — POS catálogo Release B (UI unblock)
+
+- `GET /api/v1/pos/admin/catalog/overrides` mantiene campos existentes y agrega campos opcionales: `itemName`, `itemSku`, `catalogTemplateId`.
+- `CatalogStoreAvailabilityDto` agrega campos opcionales: `itemName`, `itemSku` (sin romper contratos actuales).
+- Se agrega endpoint nuevo `GET /api/v1/pos/admin/catalog/availability` para consultar overrides por tienda sin depender de snapshot.
