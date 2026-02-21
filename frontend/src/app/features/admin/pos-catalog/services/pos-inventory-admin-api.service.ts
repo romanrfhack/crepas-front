@@ -12,10 +12,14 @@ export class PosInventoryAdminApiService {
   private readonly apiClient = inject(ApiClient);
   private readonly path = '/v1/pos/admin/inventory';
 
-  listInventory(storeId: string, search?: string) {
+  listInventory(storeId: string, search?: string, onlyWithStock?: boolean) {
     const query = new URLSearchParams({ storeId });
     if (search?.trim()) {
       query.set('search', search.trim());
+    }
+
+    if (onlyWithStock) {
+      query.set('onlyWithStock', 'true');
     }
 
     return firstValueFrom(this.apiClient.get<StoreInventoryItemDto[]>(`${this.path}?${query.toString()}`));

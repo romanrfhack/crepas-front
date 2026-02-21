@@ -24,11 +24,13 @@ describe('PosInventoryAdminApiService', () => {
     const service = TestBed.inject(PosInventoryAdminApiService);
     await service.listInventory('store-1');
     await service.listInventory('store-1', 'latte');
+    await service.listInventory('store-1', 'latte', true);
     await service.upsertInventory({ storeId: 'store-1', productId: 'product-1', onHand: 9 });
     await service.updateInventorySettings({ showOnlyInStock: true });
 
     expect(calls).toContainEqual({ method: 'get', path: '/v1/pos/admin/inventory?storeId=store-1' });
     expect(calls).toContainEqual({ method: 'get', path: '/v1/pos/admin/inventory?storeId=store-1&search=latte' });
+    expect(calls).toContainEqual({ method: 'get', path: '/v1/pos/admin/inventory?storeId=store-1&search=latte&onlyWithStock=true' });
     expect(calls).toContainEqual({
       method: 'put',
       path: '/v1/pos/admin/inventory',

@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
   }, buildJwt(['SuperAdmin', 'Admin', 'Manager', 'TenantAdmin', 'Cashier']));
 });
 
-test('inventory page updates onHand and settings payloads', async ({ page }) => {
+test('inventory page updates onHand/settings payloads and local stock filter is deterministic', async ({ page }) => {
   const inventoryPuts: unknown[] = [];
   const settingsPuts: unknown[] = [];
 
@@ -33,18 +33,27 @@ test('inventory page updates onHand and settings payloads', async ({ page }) => 
             productId: 'product-1',
             productName: 'Latte',
             productSku: 'LAT-1',
-            onHand: 3,
+            onHand: 0,
             reserved: 0,
-            updatedAtUtc: '2026-01-01T00:00:00Z',
+            updatedAtUtc: null,
           },
           {
             storeId: 'store-e2e',
             productId: 'product-2',
             productName: 'Mocha',
             productSku: 'MOC-1',
-            onHand: 1,
+            onHand: 2,
             reserved: 0,
             updatedAtUtc: '2026-01-01T00:00:00Z',
+          },
+          {
+            storeId: 'store-e2e',
+            productId: 'product-3',
+            productName: 'Americano',
+            productSku: 'AME-1',
+            onHand: 0,
+            reserved: 0,
+            updatedAtUtc: null,
           },
         ]),
       });
@@ -74,12 +83,20 @@ test('inventory page updates onHand and settings payloads', async ({ page }) => 
 
   await page.goto('/app/admin/pos/inventory');
   await expect(page.getByTestId('inventory-page')).toBeVisible();
-  await page.getByTestId('inventory-onhand-product-1').fill('7');
-  await page.getByTestId('inventory-save-product-1').click();
+  await expect(page.getByTestId('inventory-row-product-1')).toBeVisible();
+  await expect(page.getByTestId('inventory-row-product-2')).toBeVisible();
+  await expect(page.getByTestId('inventory-row-product-3')).toBeVisible();
+  await page.getByTestId('inventory-filter-only-stock').check();
+  await expect(page.getByTestId('inventory-row-product-2')).toBeVisible();
+  await expect(page.getByTestId('inventory-row-product-1')).toHaveCount(0);
+  await expect(page.getByTestId('inventory-row-product-3')).toHaveCount(0);
+
+  await page.getByTestId('inventory-onhand-product-2').fill('7');
+  await page.getByTestId('inventory-save-product-2').click();
   await page.getByTestId('inventory-settings-showOnlyInStock').check();
   await page.getByTestId('inventory-settings-save').click();
 
-  expect(inventoryPuts[0]).toEqual({ storeId: 'store-e2e', productId: 'product-1', onHand: 7 });
+  expect(inventoryPuts[0]).toEqual({ storeId: 'store-e2e', productId: 'product-2', onHand: 7 });
   expect(settingsPuts[0]).toEqual({ showOnlyInStock: true });
 });
 

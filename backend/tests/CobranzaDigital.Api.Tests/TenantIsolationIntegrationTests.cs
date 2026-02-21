@@ -153,6 +153,25 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     }
 
     [Fact]
+    public async Task Inventory_Get_Enforces_TenantOwnership_And_Allows_SuperAdmin_With_TenantHeader()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var managerAToken = await LoginAndGetAccessTokenAsync(setup.ManagerAEmail, setup.Password);
+        var superAdminToken = await LoginAndGetAccessTokenAsync(setup.SuperAdminEmail, setup.Password);
+
+        using (var forbiddenRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/admin/inventory?storeId={setup.StoreBId:D}", managerAToken))
+        {
+            using var forbiddenResponse = await _client.SendAsync(forbiddenRequest);
+            Assert.Equal(HttpStatusCode.Forbidden, forbiddenResponse.StatusCode);
+        }
+
+        using var superRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/admin/inventory?storeId={setup.StoreBId:D}", superAdminToken);
+        superRequest.Headers.Add("X-Tenant-Id", setup.TenantBId.ToString("D"));
+        using var superResponse = await _client.SendAsync(superRequest);
+        Assert.Equal(HttpStatusCode.OK, superResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task PlatformEndpoints_AccessControl_WorksByRole()
     {
         var setup = await SeedIsolationDataAsync();

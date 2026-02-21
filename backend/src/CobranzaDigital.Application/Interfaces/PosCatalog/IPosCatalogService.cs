@@ -47,7 +47,7 @@ public interface IPosCatalogService
     Task<CatalogItemOverrideDto> UpsertTenantOverrideAsync(UpsertCatalogItemOverrideRequest request, CancellationToken ct);
     Task<IReadOnlyList<CatalogStoreAvailabilityDto>> GetStoreAvailabilityOverridesAsync(Guid storeId, string? itemType, CancellationToken ct);
     Task<CatalogStoreAvailabilityDto> UpsertStoreAvailabilityAsync(UpsertCatalogStoreAvailabilityRequest request, CancellationToken ct);
-    Task<IReadOnlyList<StoreInventoryItemDto>> GetInventoryAsync(Guid storeId, string? search, CancellationToken ct);
+    Task<IReadOnlyList<StoreInventoryItemDto>> GetInventoryAsync(Guid storeId, string? search, bool onlyWithStock, CancellationToken ct);
     Task<StoreInventoryItemDto> UpsertInventoryAsync(UpsertStoreInventoryRequest request, CancellationToken ct);
     Task<PosInventorySettingsDto> UpdateInventorySettingsAsync(UpdatePosInventorySettingsRequest request, CancellationToken ct);
     Task<CatalogSnapshotDto> GetSnapshotAsync(Guid? storeId, CancellationToken ct);
