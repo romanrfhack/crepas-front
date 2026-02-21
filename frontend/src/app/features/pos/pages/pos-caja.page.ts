@@ -79,6 +79,8 @@ export class PosCajaPage implements OnDestroy {
   readonly errorMessage = signal<string | null>(null);
   readonly canRefreshCatalogAfterUnavailable = signal(false);
   readonly unavailableItemName = signal<string | null>(null);
+  readonly outOfStockItemName = signal<string | null>(null);
+  readonly outOfStockAvailableQty = signal<number | null>(null);
   readonly saleSuccess = signal<SaleResponseDto | null>(null);
   readonly currentShift = signal<PosShiftDto | null>(null);
   readonly showOpenShiftModal = signal(false);
@@ -228,6 +230,8 @@ export class PosCajaPage implements OnDestroy {
       this.errorMessage.set(null);
       this.canRefreshCatalogAfterUnavailable.set(false);
       this.unavailableItemName.set(null);
+    this.outOfStockItemName.set(null);
+    this.outOfStockAvailableQty.set(null);
     }
     try {
       const data = await firstValueFrom(this.snapshotService.getSnapshot({ forceRefresh }));
@@ -443,6 +447,8 @@ export class PosCajaPage implements OnDestroy {
     this.errorMessage.set(null);
     this.canRefreshCatalogAfterUnavailable.set(false);
     this.unavailableItemName.set(null);
+    this.outOfStockItemName.set(null);
+    this.outOfStockAvailableQty.set(null);
     this.saleSuccess.set(null);
     this.loading.set(true);
 
@@ -745,6 +751,16 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
+    if (status === 409 && this.isOutOfStockError(payload)) {
+      const outOfStock = this.getOutOfStockData(payload);
+      this.outOfStockItemName.set(outOfStock.itemName);
+      this.outOfStockAvailableQty.set(outOfStock.availableQty);
+      this.errorMessage.set('Sin existencias. Ajusta inventario para continuar.');
+      this.showPayment.set(false);
+      this.inProgressClientSaleId.set(null);
+      return;
+    }
+
     if (status === 409) {
       console.log('[handleSaleError] Entered generic 409 branch');
       const unavailable = this.getUnavailableItemData(payload);
@@ -791,6 +807,10 @@ export class PosCajaPage implements OnDestroy {
   }
 
   private isItemUnavailableError(payload: unknown) {
+    if (this.isOutOfStockError(payload)) {
+      return false;
+    }
+
     const unavailableData = this.getUnavailableItemData(payload);
     if (unavailableData.isItemUnavailable) {
       return true;
@@ -810,6 +830,42 @@ export class PosCajaPage implements OnDestroy {
       title.includes('itemunavailable') ||
       detail.includes('no disponible')
     );
+  }
+
+  private isOutOfStockError(payload: unknown) {
+    const data = this.getOutOfStockData(payload);
+    return data.isOutOfStock;
+  }
+
+  private getOutOfStockData(payload: unknown) {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        isOutOfStock: false,
+        itemName: null,
+        availableQty: null,
+      };
+    }
+
+    const data = payload as Record<string, unknown>;
+    const extensions =
+      typeof data['extensions'] === 'object' && data['extensions']
+        ? (data['extensions'] as Record<string, unknown>)
+        : null;
+    const reason = this.getStringValue(data, extensions, 'reason')?.toLowerCase() ?? '';
+    const itemName = this.getStringValue(data, extensions, 'itemName');
+    const availableQtyRaw = data['availableQty'] ?? extensions?.['availableQty'];
+    const availableQty =
+      typeof availableQtyRaw === 'number' && Number.isFinite(availableQtyRaw)
+        ? availableQtyRaw
+        : typeof availableQtyRaw === 'string' && availableQtyRaw.trim().length > 0
+          ? Number(availableQtyRaw)
+          : null;
+
+    return {
+      isOutOfStock: reason === 'outofstock',
+      itemName,
+      availableQty: availableQty != null && Number.isFinite(availableQty) ? availableQty : null,
+    };
   }
 
   private isDuplicateSaleError(payload: unknown) {

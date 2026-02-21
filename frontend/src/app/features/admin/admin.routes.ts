@@ -2,6 +2,15 @@ import { Routes } from '@angular/router';
 import { roleGuard } from '../../core/guards/role.guard';
 
 export const adminRoutes: Routes = [
+
+  {
+    path: 'pos/inventory',
+    canMatch: [roleGuard(['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'])],
+    canActivate: [roleGuard(['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'])],
+    data: { roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+    loadComponent: () =>
+      import('./pos-catalog/pages/inventory/inventory.page').then((m) => m.InventoryPage),
+  },
   {
     path: 'pos/catalog',
     canMatch: [roleGuard(['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'])],

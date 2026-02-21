@@ -311,6 +311,41 @@ describe('PosCajaPage', () => {
     ).toBe(false);
   });
 
+
+  it('shows out-of-stock alert with available qty when sale returns 409 OutOfStock', async () => {
+    const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
+      createSale: (payload: CreateSaleRequestDto, correlationId: string) => Promise<unknown>;
+    };
+    salesApi.createSale = async () => {
+      throw new HttpErrorResponse({
+        status: 409,
+        error: {
+          title: 'Conflict',
+          extensions: {
+            reason: 'OutOfStock',
+            itemName: 'Latte',
+            availableQty: 2,
+            itemType: 'Product',
+            itemId: 'product-1',
+          },
+        },
+      });
+    };
+
+    await fixture.componentInstance.confirmPayment({
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="outofstock-alert"]')).toBeTruthy();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="outofstock-item-name"]')?.textContent,
+    ).toContain('Latte');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="outofstock-available-qty"]')?.textContent,
+    ).toContain('2');
+  });
+
   it('shows unavailable alert state and refresh CTA when create sale returns 409 item unavailable', async () => {
     const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
       createSale: (payload: CreateSaleRequestDto, correlationId: string) => Promise<unknown>;

@@ -103,6 +103,18 @@
     </section>
   }
 
+
+  @if (outOfStockItemName()) {
+    <section class="error" role="alert" data-testid="outofstock-alert">
+      <p>
+        Sin existencias: <strong data-testid="outofstock-item-name">{{ outOfStockItemName() }}</strong>
+        @if (outOfStockAvailableQty() !== null) {
+          · Disponible: <strong data-testid="outofstock-available-qty">{{ outOfStockAvailableQty() }}</strong>
+        }
+      </p>
+    </section>
+  }
+
   @if (saleSuccess(); as sale) {
     <p class="success" role="status">
       Venta registrada: {{ sale.folio }} · Total final: ${{ sale.total.toFixed(2) }}

@@ -138,3 +138,23 @@ export interface ProductOverrideDto {
 export interface OverrideUpsertRequest {
   allowedOptionItemIds: string[];
 }
+
+export interface StoreInventoryItemDto {
+  storeId: string;
+  productId: string;
+  productName: string;
+  productSku?: string | null;
+  onHand: number;
+  reserved: number;
+  updatedAtUtc: string;
+}
+
+export interface UpsertStoreInventoryRequest {
+  storeId: string;
+  productId: string;
+  onHand: number;
+}
+
+export interface PosInventorySettingsDto {
+  showOnlyInStock: boolean;
+}

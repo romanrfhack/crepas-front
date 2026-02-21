@@ -9,7 +9,7 @@ describe('adminRoutes', () => {
     const route = adminRoutes.find((item) => item.path === 'pos/catalog');
     expect(route).toBeDefined();
     expect(route?.loadChildren).toBeDefined();
-    expect(route?.data?.['roles']).toEqual(['Admin', 'Manager']);
+    expect(route?.data?.['roles']).toEqual(['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin']);
     expect(route?.canMatch?.length).toBeGreaterThan(0);
     expect(route?.canActivate?.length).toBeGreaterThan(0);
   });
@@ -29,7 +29,7 @@ describe('adminRoutes', () => {
     });
 
     const router = TestBed.inject(Router);
-    const route = { path: 'pos/catalog', data: { roles: ['Admin', 'Manager'] } };
+    const route = { path: 'pos/catalog', data: { roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] } };
     const segments: UrlSegment[] = [];
 
     const result = TestBed.runInInjectionContext(() => roleGuard([])(route, segments));
