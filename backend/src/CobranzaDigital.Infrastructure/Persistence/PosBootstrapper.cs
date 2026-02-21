@@ -75,6 +75,13 @@ public static class PosBootstrapper
             await db.SaveChangesAsync().ConfigureAwait(false);
         }
 
+        var seededAdmin = await db.Users.FirstOrDefaultAsync(x => x.Email == "admin@test.local").ConfigureAwait(false);
+        if (seededAdmin is not null && !seededAdmin.TenantId.HasValue)
+        {
+            seededAdmin.TenantId = defaultTenant.Id;
+            await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+
 
         var defaultTemplate = await db.CatalogTemplates.OrderBy(x => x.Name).FirstOrDefaultAsync().ConfigureAwait(false);
         if (defaultTemplate is null)
