@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace CobranzaDigital.Api.Tests;
@@ -183,6 +184,26 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         Assert.Contains(inventory, x => x.ProductId == productWithRow.Id && x.OnHand == 4m && x.HasInventoryRow == true && x.UpdatedAtUtc != null);
         Assert.Contains(inventory, x => x.ProductId == productWithoutRow.Id && x.OnHand == 0m && x.Reserved == 0m && x.HasInventoryRow == false && x.UpdatedAtUtc == null);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/admin/inventory?storeId={snapshot.StoreId:D}", token);
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Array, payload.ValueKind);
+
+        var withRowJson = payload.EnumerateArray().Single(x => x.GetProperty("productId").GetGuid() == productWithRow.Id);
+        var withoutRowJson = payload.EnumerateArray().Single(x => x.GetProperty("productId").GetGuid() == productWithoutRow.Id);
+
+        Assert.True(withRowJson.TryGetProperty("hasInventoryRow", out var withRowFlag));
+        Assert.True(withRowFlag.GetBoolean());
+        Assert.True(withRowJson.TryGetProperty("updatedAtUtc", out var withRowUpdatedAt));
+        Assert.Equal(JsonValueKind.String, withRowUpdatedAt.ValueKind);
+
+        Assert.True(withoutRowJson.TryGetProperty("hasInventoryRow", out var withoutRowFlag));
+        Assert.False(withoutRowFlag.GetBoolean());
+        Assert.True(withoutRowJson.TryGetProperty("updatedAtUtc", out var withoutRowUpdatedAt));
+        Assert.Equal(JsonValueKind.Null, withoutRowUpdatedAt.ValueKind);
     }
 
     [Fact]
@@ -506,7 +527,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive, bool IsAvailable);
     private sealed record CatalogItemOverrideResponse(string ItemType, Guid ItemId, bool IsEnabled, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku, Guid? CatalogTemplateId);
     private sealed record CatalogStoreAvailabilityResponse(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku);
-    private sealed record StoreInventoryItemResponse(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset? UpdatedAtUtc, bool? HasInventoryRow);
+    private sealed record StoreInventoryItemResponse(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset? UpdatedAtUtc, bool HasInventoryRow);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
     private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record PagedResponse(List<UserListItem> Items);

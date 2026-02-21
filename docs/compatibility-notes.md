@@ -51,3 +51,7 @@ Este documento registra compatibilidades temporales agregadas para evitar romper
 - `GET /api/v1/pos/admin/catalog/overrides` mantiene campos existentes y agrega campos opcionales: `itemName`, `itemSku`, `catalogTemplateId`.
 - `CatalogStoreAvailabilityDto` agrega campos opcionales: `itemName`, `itemSku` (sin romper contratos actuales).
 - Se agrega endpoint nuevo `GET /api/v1/pos/admin/catalog/availability` para consultar overrides por tienda sin depender de snapshot.
+
+## 2026-02-21 — POS inventory DTO normalization
+
+- Se agregó `hasInventoryRow` (`bool`) en `StoreInventoryItemDto`; `updatedAtUtc` ahora puede ser `null`.

@@ -35,6 +35,7 @@ describe('InventoryPage', () => {
                   onHand: 4,
                   reserved: 0,
                   updatedAtUtc: '2026-01-01T00:00:00Z',
+                  hasInventoryRow: true,
                 },
                 {
                   storeId,
@@ -44,12 +45,20 @@ describe('InventoryPage', () => {
                   onHand: 0,
                   reserved: 0,
                   updatedAtUtc: null,
+                  hasInventoryRow: false,
                 },
               ];
             },
             upsertInventory: async (payload: { storeId: string; productId: string; onHand: number }) => {
               upsertCalls.push(payload);
-              return payload;
+              return {
+                ...payload,
+                productName: 'Latte',
+                productSku: 'LAT-1',
+                reserved: 0,
+                updatedAtUtc: '2026-01-01T00:00:00Z',
+                hasInventoryRow: true,
+              };
             },
             updateInventorySettings: async (payload: { showOnlyInStock: boolean }) => {
               settingsCalls.push(payload);

@@ -18,7 +18,7 @@ Base: `/api/v1/pos/admin` (Bearer + `TenantOrPlatform` + `PosAdmin`, tenant requ
 - `onHand`
 - `reserved`
 - `updatedAtUtc` (`null` cuando no existe fila en `StoreInventories`)
-- `hasInventoryRow` (opcional, `false` cuando no existe fila)
+- `hasInventoryRow` (obligatorio; `false` cuando no existe fila)
 
 ## POS Snapshot
 
