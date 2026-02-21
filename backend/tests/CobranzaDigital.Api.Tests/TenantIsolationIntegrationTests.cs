@@ -206,12 +206,13 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         var storeA = new Store { Id = Guid.NewGuid(), TenantId = tenantA.Id, Name = $"Store A-{Guid.NewGuid():N}", IsActive = true, TimeZoneId = "America/Mexico_City", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
         var storeB = new Store { Id = Guid.NewGuid(), TenantId = tenantB.Id, Name = $"Store B-{Guid.NewGuid():N}", IsActive = true, TimeZoneId = "America/Mexico_City", CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
 
-        tenantA.DefaultStoreId = storeA.Id;
-        tenantB.DefaultStoreId = storeB.Id;
-
         db.Verticals.Add(vertical);
         db.Tenants.AddRange(tenantA, tenantB);
         db.Stores.AddRange(storeA, storeB);
+        await db.SaveChangesAsync();
+
+        tenantA.DefaultStoreId = storeA.Id;
+        tenantB.DefaultStoreId = storeB.Id;
         await db.SaveChangesAsync();
 
         var managerAEmail = $"manager.a+{Guid.NewGuid():N}@test.local";

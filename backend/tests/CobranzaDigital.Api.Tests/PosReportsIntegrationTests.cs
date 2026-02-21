@@ -33,7 +33,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         var baseQuery = $"dateFrom=2026-03-01&dateTo=2026-03-02&storeId={seed.StoreId:D}";
 
-        using var dailyReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/daily?{baseQuery}", adminToken);
+        using var dailyReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/daily?{baseQuery}", adminToken, seed.TenantId);
         using var dailyResp = await _client.SendAsync(dailyReq);
         var dailyRows = await dailyResp.Content.ReadFromJsonAsync<List<DailySalesRowResponse>>();
 
@@ -65,7 +65,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
                 Assert.Equal(80m, day2.Payments.Transfer);
             });
 
-        using var methodsReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/payments/methods?{baseQuery}", adminToken);
+        using var methodsReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/payments/methods?{baseQuery}", adminToken, seed.TenantId);
         using var methodsResp = await _client.SendAsync(methodsReq);
         var methodsPayload = await methodsResp.Content.ReadFromJsonAsync<PaymentsMethodsResponse>();
 
@@ -76,7 +76,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Contains(methodsPayload.Totals, x => (x.Method is "Card" or "1") && x.Count == 1 && x.Amount == 60m);
         Assert.Contains(methodsPayload.Totals, x => (x.Method is "Transfer" or "2") && x.Count == 1 && x.Amount == 80m);
 
-        using var hourlyReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/hourly?{baseQuery}", adminToken);
+        using var hourlyReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/hourly?{baseQuery}", adminToken, seed.TenantId);
         using var hourlyResp = await _client.SendAsync(hourlyReq);
         var hourlyRows = await hourlyResp.Content.ReadFromJsonAsync<List<HourlySalesRowResponse>>();
 
@@ -87,7 +87,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Contains(hourlyRows, x => x.Hour == 10 && x.Tickets == 1 && x.TotalSales == 60m);
         Assert.Contains(hourlyRows, x => x.Hour == 15 && x.Tickets == 1 && x.TotalSales == 80m);
 
-        using var cashiersReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/cashiers?{baseQuery}", adminToken);
+        using var cashiersReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/cashiers?{baseQuery}", adminToken, seed.TenantId);
         using var cashiersResp = await _client.SendAsync(cashiersReq);
         var cashiersRows = await cashiersResp.Content.ReadFromJsonAsync<List<CashierSalesRowResponse>>();
 
@@ -96,7 +96,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Contains(cashiersRows!, x => x.CashierUserId == seed.CashierA && x.Tickets == 2 && x.TotalSales == 180m && x.AvgTicket == 90m && x.VoidsCount == 0 && x.VoidsTotal == 0m);
         Assert.Contains(cashiersRows!, x => x.CashierUserId == seed.CashierB && x.Tickets == 1 && x.TotalSales == 60m && x.AvgTicket == 60m && x.VoidsCount == 1 && x.VoidsTotal == 50m);
 
-        using var shiftsReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/shifts/summary?{baseQuery}", adminToken);
+        using var shiftsReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/shifts/summary?{baseQuery}", adminToken, seed.TenantId);
         using var shiftsResp = await _client.SendAsync(shiftsReq);
         var shiftsRows = await shiftsResp.Content.ReadFromJsonAsync<List<ShiftSummaryRowResponse>>();
 
@@ -105,7 +105,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Contains(shiftsRows!, x => x.ShiftId == seed.Shift1 && x.Tickets == 2 && x.TotalSales == 160m && x.CashDifference == 0m);
         Assert.Contains(shiftsRows!, x => x.ShiftId == seed.Shift2 && x.Tickets == 1 && x.TotalSales == 80m && x.CashDifference == -10m);
 
-        using var voidsReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/voids/reasons?{baseQuery}", adminToken);
+        using var voidsReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/voids/reasons?{baseQuery}", adminToken, seed.TenantId);
         using var voidsResp = await _client.SendAsync(voidsReq);
         var voidRows = await voidsResp.Content.ReadFromJsonAsync<List<VoidReasonRowResponse>>();
 
@@ -115,7 +115,8 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         using var topFilteredReq = CreateAuthorizedRequest(HttpMethod.Get,
             $"/api/v1/pos/reports/top-products?dateFrom=2026-03-01&dateTo=2026-03-02&storeId={seed.StoreId:D}&cashierUserId={seed.CashierA:D}&top=10",
-            adminToken);
+            adminToken,
+            seed.TenantId);
         using var topFilteredResp = await _client.SendAsync(topFilteredReq);
         var topProducts = await topFilteredResp.Content.ReadFromJsonAsync<List<TopProductResponse>>();
 
@@ -253,7 +254,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         await db.SaveChangesAsync();
 
-        return new SeedResult(storeId, cashierA, cashierB, shift1, shift2, productA);
+        return new SeedResult(storeId, tenantId, cashierA, cashierB, shift1, shift2, productA);
     }
 
     private static Product CreateProduct(Guid categoryId, Guid id, string name, string externalCode, decimal basePrice)
@@ -359,10 +360,15 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         return payload.Items[0].Id;
     }
 
-    private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token)
+    private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token, Guid? tenantId = null)
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (tenantId.HasValue)
+        {
+            request.Headers.Add("X-Tenant-Id", tenantId.Value.ToString("D"));
+        }
+
         return request;
     }
 
@@ -372,7 +378,7 @@ public sealed class PosReportsIntegrationTests : IClassFixture<CobranzaDigitalAp
         return new DateTimeOffset(utc);
     }
 
-    private sealed record SeedResult(Guid StoreId, Guid CashierA, Guid CashierB, Guid Shift1, Guid Shift2, Guid ProductA);
+    private sealed record SeedResult(Guid StoreId, Guid TenantId, Guid CashierA, Guid CashierB, Guid Shift1, Guid Shift2, Guid ProductA);
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
     private sealed record PagedResponse(List<UserListItem> Items);
     private sealed record UserListItem(string Id);
