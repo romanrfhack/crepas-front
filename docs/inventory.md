@@ -59,5 +59,7 @@ Cuando no hay inventario suficiente:
 - Lista todos los productos activos del template del tenant para la sucursal solicitada, respetando overrides `DisabledByTenant`.
 - Hace left join con `StoreInventories` por `(StoreId, ProductId)`.
 - Si no existe fila de inventario: `onHand=0`, `reserved=0`, `updatedAtUtc=null`, `hasInventoryRow=false`.
+- `updatedAtUtc` es nullable en contrato (`null` cuando no existe fila).
+- `hasInventoryRow` es obligatorio (`true` con fila real, `false` sin fila).
 - `search` filtra por `productName` o `productSku` del template.
 - `onlyWithStock=true` (opcional) filtra resultados con `onHand > 0` para soporte de UI admin.

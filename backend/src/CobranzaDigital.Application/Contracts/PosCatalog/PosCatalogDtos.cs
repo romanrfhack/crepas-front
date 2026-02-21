@@ -50,7 +50,7 @@ public sealed record CatalogStoreAvailabilityDto(
     string? ItemSku = null);
 public sealed record UpsertCatalogStoreAvailabilityRequest(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable);
 
-public sealed record StoreInventoryItemDto(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset? UpdatedAtUtc, bool? HasInventoryRow = null);
+public sealed record StoreInventoryItemDto(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset? UpdatedAtUtc, bool HasInventoryRow);
 public sealed record UpsertStoreInventoryRequest(Guid StoreId, Guid ProductId, decimal OnHand);
 public sealed record PosInventorySettingsDto(bool ShowOnlyInStock);
 public sealed record UpdatePosInventorySettingsRequest(bool ShowOnlyInStock);

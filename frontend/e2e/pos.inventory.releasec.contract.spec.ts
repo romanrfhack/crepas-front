@@ -36,6 +36,7 @@ test('inventory page updates onHand/settings payloads and local stock filter is 
             onHand: 0,
             reserved: 0,
             updatedAtUtc: null,
+            hasInventoryRow: false,
           },
           {
             storeId: 'store-e2e',
@@ -45,6 +46,7 @@ test('inventory page updates onHand/settings payloads and local stock filter is 
             onHand: 2,
             reserved: 0,
             updatedAtUtc: '2026-01-01T00:00:00Z',
+            hasInventoryRow: true,
           },
           {
             storeId: 'store-e2e',
@@ -54,6 +56,7 @@ test('inventory page updates onHand/settings payloads and local stock filter is 
             onHand: 0,
             reserved: 0,
             updatedAtUtc: null,
+            hasInventoryRow: false,
           },
         ]),
       });

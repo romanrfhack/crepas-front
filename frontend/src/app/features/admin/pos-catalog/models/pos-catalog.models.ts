@@ -146,8 +146,8 @@ export interface StoreInventoryItemDto {
   productSku?: string | null;
   onHand: number;
   reserved: number;
-  updatedAtUtc?: string | null;
-  hasInventoryRow?: boolean | null;
+  updatedAtUtc: string | null;
+  hasInventoryRow: boolean;
 }
 
 export interface UpsertStoreInventoryRequest {
