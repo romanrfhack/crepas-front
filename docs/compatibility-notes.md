@@ -55,3 +55,4 @@ Este documento registra compatibilidades temporales agregadas para evitar romper
 ## 2026-02-21 — POS inventory DTO normalization
 
 - Se agregó `hasInventoryRow` (`bool`) en `StoreInventoryItemDto`; `updatedAtUtc` ahora puede ser `null`.
+- Endurecimiento intencional de contrato interno (producto en construcción, sin consumidores externos): `hasInventoryRow` pasa a ser **required** y `updatedAtUtc` se documenta explícitamente como nullable cuando no existe fila real de inventario.
