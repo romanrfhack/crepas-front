@@ -119,15 +119,15 @@ public sealed class PosCatalogService : IPosCatalogService
     public async Task<IReadOnlyList<CatalogItemOverrideDto>> GetTenantOverridesAsync(string? itemType, CancellationToken ct)
     {
         var tenantId = RequireTenantId();
+        var mapping = await _db.TenantCatalogTemplates.AsNoTracking().SingleAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
         var query = _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId);
         if (!string.IsNullOrWhiteSpace(itemType) && Enum.TryParse<CatalogItemType>(itemType, true, out var parsedType))
         {
             query = query.Where(x => x.ItemType == parsedType);
         }
 
-        return await query.OrderBy(x => x.ItemType).ThenBy(x => x.ItemId)
-            .Select(x => new CatalogItemOverrideDto(x.ItemType.ToString(), x.ItemId, x.IsEnabled, x.UpdatedAtUtc))
-            .ToListAsync(ct).ConfigureAwait(false);
+        var rows = await query.OrderBy(x => x.ItemType).ThenBy(x => x.ItemId).ToListAsync(ct).ConfigureAwait(false);
+        return await MapOverrideRowsAsync(rows, mapping.CatalogTemplateId, ct).ConfigureAwait(false);
     }
 
     public async Task<CatalogItemOverrideDto> UpsertTenantOverrideAsync(UpsertCatalogItemOverrideRequest request, CancellationToken ct)
@@ -152,6 +152,31 @@ public sealed class PosCatalogService : IPosCatalogService
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return new CatalogItemOverrideDto(row.ItemType.ToString(), row.ItemId, row.IsEnabled, row.UpdatedAtUtc);
+    }
+
+    public async Task<IReadOnlyList<CatalogStoreAvailabilityDto>> GetStoreAvailabilityOverridesAsync(Guid storeId, string? itemType, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        var storeBelongs = await _db.Stores.AsNoTracking().AnyAsync(x => x.Id == storeId && x.TenantId == tenantId, ct).ConfigureAwait(false);
+        if (!storeBelongs)
+        {
+            throw new ForbiddenException("Store does not belong to tenant.");
+        }
+
+        var mapping = await _db.TenantCatalogTemplates.AsNoTracking().SingleAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
+        var query = _db.StoreCatalogAvailabilities.AsNoTracking().Where(x => x.StoreId == storeId);
+        if (!string.IsNullOrWhiteSpace(itemType) && Enum.TryParse<CatalogItemType>(itemType, true, out var parsedType))
+        {
+            query = query.Where(x => x.ItemType == parsedType);
+        }
+
+        var rows = await query.OrderBy(x => x.ItemType).ThenBy(x => x.ItemId).ToListAsync(ct).ConfigureAwait(false);
+        var itemDetails = await BuildTemplateItemLookupAsync(mapping.CatalogTemplateId, ct).ConfigureAwait(false);
+        return rows.Select(x =>
+        {
+            itemDetails.TryGetValue((x.ItemType, x.ItemId), out var detail);
+            return new CatalogStoreAvailabilityDto(x.StoreId, x.ItemType.ToString(), x.ItemId, x.IsAvailable, x.UpdatedAtUtc, detail?.ItemName ?? string.Empty, detail?.ItemSku);
+        }).ToList();
     }
 
     public async Task<CatalogStoreAvailabilityDto> UpsertStoreAvailabilityAsync(UpsertCatalogStoreAvailabilityRequest request, CancellationToken ct)
@@ -223,6 +248,55 @@ public sealed class PosCatalogService : IPosCatalogService
         var etagSeed = string.Join('\n', sections);
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(etagSeed));
         return $"W/\"{Convert.ToHexString(bytes)}\"";
+    }
+
+    private sealed record CatalogItemTemplateDetail(string ItemName, string? ItemSku);
+
+    private async Task<IReadOnlyList<CatalogItemOverrideDto>> MapOverrideRowsAsync(IReadOnlyList<TenantCatalogOverride> rows, Guid catalogTemplateId, CancellationToken ct)
+    {
+        var itemDetails = await BuildTemplateItemLookupAsync(catalogTemplateId, ct).ConfigureAwait(false);
+        return rows.Select(x =>
+        {
+            itemDetails.TryGetValue((x.ItemType, x.ItemId), out var detail);
+            return new CatalogItemOverrideDto(x.ItemType.ToString(), x.ItemId, x.IsEnabled, x.UpdatedAtUtc, detail?.ItemName ?? string.Empty, detail?.ItemSku, catalogTemplateId);
+        }).ToList();
+    }
+
+    private async Task<Dictionary<(CatalogItemType ItemType, Guid ItemId), CatalogItemTemplateDetail>> BuildTemplateItemLookupAsync(Guid catalogTemplateId, CancellationToken ct)
+    {
+        var lookup = new Dictionary<(CatalogItemType ItemType, Guid ItemId), CatalogItemTemplateDetail>();
+
+        var products = await _db.Products.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .Select(x => new { x.Id, x.Name, x.ExternalCode })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        foreach (var row in products)
+        {
+            lookup[(CatalogItemType.Product, row.Id)] = new CatalogItemTemplateDetail(row.Name, row.ExternalCode);
+        }
+
+        var extras = await _db.Extras.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .Select(x => new { x.Id, x.Name })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        foreach (var row in extras)
+        {
+            lookup[(CatalogItemType.Extra, row.Id)] = new CatalogItemTemplateDetail(row.Name, null);
+        }
+
+        var optionItems = await _db.OptionItems.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .Select(x => new { x.Id, x.Name })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        foreach (var row in optionItems)
+        {
+            lookup[(CatalogItemType.OptionItem, row.Id)] = new CatalogItemTemplateDetail(row.Name, null);
+        }
+
+        return lookup;
     }
 
     private static ProductDto Map(Product x) => new(x.Id, x.ExternalCode, x.Name, x.CategoryId, x.SubcategoryName, x.BasePrice, x.IsActive, x.IsAvailable, x.CustomizationSchemaId);

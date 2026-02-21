@@ -30,10 +30,24 @@ public sealed record OverrideUpsertRequest(IReadOnlyList<Guid> AllowedOptionItem
 public sealed record ProductOverrideDto(Guid Id, Guid ProductId, string GroupKey, bool IsActive, IReadOnlyList<Guid> AllowedOptionItemIds);
 
 
-public sealed record CatalogItemOverrideDto(string ItemType, Guid ItemId, bool IsEnabled, DateTimeOffset UpdatedAtUtc);
+public sealed record CatalogItemOverrideDto(
+    string ItemType,
+    Guid ItemId,
+    bool IsEnabled,
+    DateTimeOffset UpdatedAtUtc,
+    string? ItemName = null,
+    string? ItemSku = null,
+    Guid? CatalogTemplateId = null);
 public sealed record UpsertCatalogItemOverrideRequest(string ItemType, Guid ItemId, bool IsEnabled);
 
-public sealed record CatalogStoreAvailabilityDto(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable, DateTimeOffset UpdatedAtUtc);
+public sealed record CatalogStoreAvailabilityDto(
+    Guid StoreId,
+    string ItemType,
+    Guid ItemId,
+    bool IsAvailable,
+    DateTimeOffset UpdatedAtUtc,
+    string? ItemName = null,
+    string? ItemSku = null);
 public sealed record UpsertCatalogStoreAvailabilityRequest(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable);
 
 public sealed record CatalogTemplateDto(Guid Id, Guid VerticalId, string Name, string? Version, bool IsActive, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);

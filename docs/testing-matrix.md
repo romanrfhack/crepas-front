@@ -67,3 +67,7 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 
 - Platform templates UI: Unit (PlatformCatalogTemplatesApiService, platform tenant interceptor) + E2E UI-contract (routes /app/platform/* con data-testid platform-*)
 - Tenant overrides/availability UI: Unit (POS admin catalog services + error propagation) + E2E UI-contract (override-toggle-*, availability-toggle-*)
+
+
+| POS admin overrides enriquecido (`GET /api/v1/pos/admin/catalog/overrides`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PosCatalogIntegrationTests.cs` (`Catalog_Overrides_Get_Returns_Item_Metadata`). | Mantener cobertura de metadatos opcionales (`itemName`, `itemSku`, `catalogTemplateId`) y compatibilidad de campos existentes (`itemType`, `itemId`, `isEnabled`). |
+| POS admin availability GET (`GET /api/v1/pos/admin/catalog/availability`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PosCatalogIntegrationTests.cs` (`Catalog_Availability_Get_Returns_Empty_And_Overrides_By_Store`, `SuperAdmin_Can_Read_CatalogAvailability_With_Tenant_Override_Header`) y `backend/tests/CobranzaDigital.Api.Tests/TenantIsolationIntegrationTests.cs` (`Manager_CannotRead_CatalogAvailability_FromAnotherTenantStore`). | Validar lista vacía sin overrides, listado con items cuando existen, ownership por `storeId`, y acceso de `SuperAdmin` con `X-Tenant-Id`. |

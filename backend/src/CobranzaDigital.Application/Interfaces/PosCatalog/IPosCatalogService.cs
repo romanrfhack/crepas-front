@@ -45,6 +45,7 @@ public interface IPosCatalogService
     Task<ProductOverrideDto> UpsertOverrideAsync(Guid productId, string groupKey, OverrideUpsertRequest request, CancellationToken ct);
     Task<IReadOnlyList<CatalogItemOverrideDto>> GetTenantOverridesAsync(string? itemType, CancellationToken ct);
     Task<CatalogItemOverrideDto> UpsertTenantOverrideAsync(UpsertCatalogItemOverrideRequest request, CancellationToken ct);
+    Task<IReadOnlyList<CatalogStoreAvailabilityDto>> GetStoreAvailabilityOverridesAsync(Guid storeId, string? itemType, CancellationToken ct);
     Task<CatalogStoreAvailabilityDto> UpsertStoreAvailabilityAsync(UpsertCatalogStoreAvailabilityRequest request, CancellationToken ct);
     Task<CatalogSnapshotDto> GetSnapshotAsync(Guid? storeId, CancellationToken ct);
     Task<string> ComputeCatalogEtagAsync(Guid? storeId, CancellationToken ct);

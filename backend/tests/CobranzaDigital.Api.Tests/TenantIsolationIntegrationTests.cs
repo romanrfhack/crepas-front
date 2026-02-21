@@ -113,6 +113,18 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     }
 
     [Fact]
+    public async Task Manager_CannotRead_CatalogAvailability_FromAnotherTenantStore()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var managerAToken = await LoginAndGetAccessTokenAsync(setup.ManagerAEmail, setup.Password);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/admin/catalog/availability?storeId={setup.StoreBId:D}&type=Product", managerAToken);
+        using var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task PlatformEndpoints_AccessControl_WorksByRole()
     {
         var setup = await SeedIsolationDataAsync();

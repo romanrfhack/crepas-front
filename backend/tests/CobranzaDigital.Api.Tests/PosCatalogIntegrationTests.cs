@@ -135,6 +135,75 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     }
 
     [Fact]
+    public async Task Catalog_Overrides_Get_Returns_Item_Metadata()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"override-cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Override Product", externalCode = "SKU-OVR-1", categoryId = category.Id, basePrice = 9m, isActive = true, isAvailable = true });
+
+        using var putOverride = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/overrides", token);
+        putOverride.Content = JsonContent.Create(new { itemType = "Product", itemId = product.Id, isEnabled = false });
+        using var putOverrideResponse = await _client.SendAsync(putOverride);
+        Assert.Equal(HttpStatusCode.OK, putOverrideResponse.StatusCode);
+
+        using var getOverrides = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/admin/catalog/overrides?type=Product", token);
+        using var getOverridesResponse = await _client.SendAsync(getOverrides);
+        var payload = await getOverridesResponse.Content.ReadFromJsonAsync<List<CatalogItemOverrideResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, getOverridesResponse.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Contains(payload!, x => x.ItemId == product.Id && x.ItemName == "Override Product" && x.ItemSku == "SKU-OVR-1");
+    }
+
+    [Fact]
+    public async Task Catalog_Availability_Get_Returns_Empty_And_Overrides_By_Store()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"availability-cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Availability Product", categoryId = category.Id, basePrice = 12m, isActive = true, isAvailable = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        using var emptyRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/admin/catalog/availability?storeId={snapshot.StoreId:D}&type=Product", token);
+        using var emptyResponse = await _client.SendAsync(emptyRequest);
+        var emptyPayload = await emptyResponse.Content.ReadFromJsonAsync<List<CatalogStoreAvailabilityResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, emptyResponse.StatusCode);
+        Assert.NotNull(emptyPayload);
+        Assert.Empty(emptyPayload!);
+
+        using var putAvailability = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/availability", token);
+        putAvailability.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = product.Id, isAvailable = false });
+        using var putAvailabilityResponse = await _client.SendAsync(putAvailability);
+        Assert.Equal(HttpStatusCode.OK, putAvailabilityResponse.StatusCode);
+
+        using var getAvailability = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/admin/catalog/availability?storeId={snapshot.StoreId:D}&type=Product", token);
+        using var getAvailabilityResponse = await _client.SendAsync(getAvailability);
+        var payload = await getAvailabilityResponse.Content.ReadFromJsonAsync<List<CatalogStoreAvailabilityResponse>>();
+
+        Assert.Equal(HttpStatusCode.OK, getAvailabilityResponse.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Contains(payload!, x => x.ItemId == product.Id && x.IsAvailable == false && x.ItemName == "Availability Product");
+    }
+
+    [Fact]
+    public async Task SuperAdmin_Can_Read_CatalogAvailability_With_Tenant_Override_Header()
+    {
+        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var superAdminEmail = $"super.catalog.{Guid.NewGuid():N}@test.local";
+        _ = await RegisterAndGetAccessTokenAsync(superAdminEmail, "User1234!");
+        await SetUserRolesAsync(adminToken, superAdminEmail, ["SuperAdmin"]);
+
+        var superAdminToken = await LoginAndGetAccessTokenAsync(superAdminEmail, "User1234!");
+        var snapshot = await GetSnapshotAsync(adminToken);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/admin/catalog/availability?storeId={snapshot.StoreId:D}&type=Product", superAdminToken);
+        request.Headers.Add("X-Tenant-Id", snapshot.TenantId.ToString("D"));
+        using var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Catalog_Admin_Modifications_Allow_AdminAndManager_But_Deny_Cashier()
     {
         var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
@@ -321,6 +390,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record OptionItemResponse(Guid Id, Guid OptionSetId, string Name, bool IsActive, bool IsAvailable, int SortOrder);
     private sealed record SchemaResponse(Guid Id, string Name, bool IsActive);
     private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive, bool IsAvailable);
+    private sealed record CatalogItemOverrideResponse(string ItemType, Guid ItemId, bool IsEnabled, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku, Guid? CatalogTemplateId);
+    private sealed record CatalogStoreAvailabilityResponse(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
     private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record PagedResponse(List<UserListItem> Items);
