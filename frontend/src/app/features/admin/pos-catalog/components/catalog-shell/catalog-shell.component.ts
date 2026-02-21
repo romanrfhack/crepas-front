@@ -67,6 +67,13 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         >
           Overrides
         </a>
+        <a
+          routerLink="inventory"
+          routerLinkActive="catalog-nav__link--active"
+          class="catalog-nav__link"
+        >
+          Inventory
+        </a>
       </nav>
 
       <!-- CONTENIDO DINÁMICO -->

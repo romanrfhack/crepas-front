@@ -70,6 +70,7 @@ export const APP_NAV_CONFIG: NavSection[] = [
           { label: 'Extras', path: '/app/admin/pos/catalog/extras', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
           { label: 'Included Items', path: '/app/admin/pos/catalog/included-items', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
           { label: 'Overrides', path: '/app/admin/pos/catalog/overrides', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Inventory', path: '/app/admin/pos/inventory', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
         ],
       },
     ],
