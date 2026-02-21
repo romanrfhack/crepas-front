@@ -9,7 +9,7 @@ import { InventoryPage } from './inventory.page';
 
 describe('InventoryPage', () => {
   let fixture: ComponentFixture<InventoryPage>;
-  let listCalls: Array<{ storeId: string; search?: string }>;
+  let listCalls: Array<{ storeId: string; search?: string; onlyWithStock?: boolean }>;
   let upsertCalls: Array<{ storeId: string; productId: string; onHand: number }>;
   let settingsCalls: Array<{ showOnlyInStock: boolean }>;
 
@@ -24,8 +24,8 @@ describe('InventoryPage', () => {
         {
           provide: PosInventoryAdminApiService,
           useValue: {
-            listInventory: async (storeId: string, search?: string) => {
-              listCalls.push({ storeId, search });
+            listInventory: async (storeId: string, search?: string, onlyWithStock?: boolean) => {
+              listCalls.push({ storeId, search, onlyWithStock });
               return [
                 {
                   storeId,
@@ -35,6 +35,15 @@ describe('InventoryPage', () => {
                   onHand: 4,
                   reserved: 0,
                   updatedAtUtc: '2026-01-01T00:00:00Z',
+                },
+                {
+                  storeId,
+                  productId: 'product-2',
+                  productName: 'Descafeinado',
+                  productSku: 'DEC-1',
+                  onHand: 0,
+                  reserved: 0,
+                  updatedAtUtc: null,
                 },
               ];
             },
@@ -61,12 +70,12 @@ describe('InventoryPage', () => {
   });
 
   it('loads inventory on init and refreshes with search', async () => {
-    expect(listCalls[0]).toEqual({ storeId: 'store-1', search: '' });
+    expect(listCalls[0]).toEqual({ storeId: 'store-1', search: '', onlyWithStock: undefined });
 
     fixture.componentInstance.searchControl.setValue('mocha');
     await fixture.componentInstance.loadInventory();
 
-    expect(listCalls.at(-1)).toEqual({ storeId: 'store-1', search: 'mocha' });
+    expect(listCalls.at(-1)).toEqual({ storeId: 'store-1', search: 'mocha', onlyWithStock: undefined });
   });
 
   it('edits onHand and saves row', async () => {
@@ -85,6 +94,21 @@ describe('InventoryPage', () => {
     await fixture.componentInstance.saveSettings();
 
     expect(settingsCalls[0]).toEqual({ showOnlyInStock: true });
+  });
+
+
+
+  it('filters rows locally when only stock toggle is enabled', async () => {
+    expect(fixture.componentInstance.visibleItems().map((item) => item.productId)).toEqual(['product-1', 'product-2']);
+
+    fixture.componentInstance.onlyWithStockFilterControl.setValue(true);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.visibleItems().map((item) => item.productId)).toEqual(['product-1']);
+  });
+
+  it('renders fallback dash when updatedAtUtc is null', () => {
+    expect(fixture.componentInstance.formatUpdatedAt(null)).toBe('—');
   });
 
   it('shows tenant required message when backend returns 400', async () => {

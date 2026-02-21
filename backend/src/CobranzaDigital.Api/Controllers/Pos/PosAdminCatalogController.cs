@@ -92,8 +92,8 @@ public sealed class PosAdminCatalogController : ControllerBase
 
 
     [HttpGet("inventory")]
-    public Task<IReadOnlyList<StoreInventoryItemDto>> GetInventory([FromQuery] Guid storeId, [FromQuery] string? search, CancellationToken ct = default) =>
-        _service.GetInventoryAsync(storeId, search, ct);
+    public Task<IReadOnlyList<StoreInventoryItemDto>> GetInventory([FromQuery] Guid storeId, [FromQuery] string? search, [FromQuery] bool onlyWithStock = false, CancellationToken ct = default) =>
+        _service.GetInventoryAsync(storeId, search, onlyWithStock, ct);
 
     [HttpPut("inventory")]
     public Task<StoreInventoryItemDto> UpsertInventory([FromBody] UpsertStoreInventoryRequest request, CancellationToken ct) =>

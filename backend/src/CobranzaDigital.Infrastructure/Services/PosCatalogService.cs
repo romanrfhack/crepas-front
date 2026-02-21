@@ -209,16 +209,24 @@ public sealed class PosCatalogService : IPosCatalogService
         return new CatalogStoreAvailabilityDto(row.StoreId, row.ItemType.ToString(), row.ItemId, row.IsAvailable, row.UpdatedAtUtc);
     }
 
-    public async Task<IReadOnlyList<StoreInventoryItemDto>> GetInventoryAsync(Guid storeId, string? search, CancellationToken ct)
+    public async Task<IReadOnlyList<StoreInventoryItemDto>> GetInventoryAsync(Guid storeId, string? search, bool onlyWithStock, CancellationToken ct)
     {
         var tenantId = RequireTenantId();
         await EnsureStoreBelongsToTenantAsync(storeId, tenantId, ct).ConfigureAwait(false);
 
         var mapping = await _db.TenantCatalogTemplates.AsNoTracking().SingleAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
-        var query = from inventory in _db.StoreInventories.AsNoTracking()
-                    join product in _db.Products.AsNoTracking() on inventory.ProductId equals product.Id
-                    where inventory.StoreId == storeId && product.CatalogTemplateId == mapping.CatalogTemplateId
-                    select new { inventory, product };
+        var disabledProducts = await _db.TenantCatalogOverrides.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Product && !x.IsEnabled)
+            .Select(x => x.ItemId)
+            .ToHashSetAsync(ct)
+            .ConfigureAwait(false);
+
+        var query = from product in _db.Products.AsNoTracking()
+                    where product.CatalogTemplateId == mapping.CatalogTemplateId && product.IsActive && !disabledProducts.Contains(product.Id)
+                    join inventory in _db.StoreInventories.AsNoTracking().Where(x => x.StoreId == storeId)
+                        on product.Id equals inventory.ProductId into inventoryRows
+                    from inventory in inventoryRows.DefaultIfEmpty()
+                    select new { product, inventory };
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -226,9 +234,22 @@ public sealed class PosCatalogService : IPosCatalogService
             query = query.Where(x => x.product.Name.Contains(term) || (x.product.ExternalCode != null && x.product.ExternalCode.Contains(term)));
         }
 
+        if (onlyWithStock)
+        {
+            query = query.Where(x => (x.inventory != null ? x.inventory.OnHand : 0m) > 0m);
+        }
+
         var rows = await query
             .OrderBy(x => x.product.Name)
-            .Select(x => new StoreInventoryItemDto(x.inventory.StoreId, x.inventory.ProductId, x.product.Name, x.product.ExternalCode, x.inventory.OnHand, x.inventory.Reserved, x.inventory.UpdatedAtUtc))
+            .Select(x => new StoreInventoryItemDto(
+                storeId,
+                x.product.Id,
+                x.product.Name,
+                x.product.ExternalCode,
+                x.inventory != null ? x.inventory.OnHand : 0m,
+                x.inventory != null ? x.inventory.Reserved : 0m,
+                x.inventory != null ? x.inventory.UpdatedAtUtc : null,
+                x.inventory != null))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
@@ -276,7 +297,7 @@ public sealed class PosCatalogService : IPosCatalogService
         }
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return new StoreInventoryItemDto(row.StoreId, row.ProductId, product.Name, product.ExternalCode, row.OnHand, row.Reserved, row.UpdatedAtUtc);
+        return new StoreInventoryItemDto(row.StoreId, row.ProductId, product.Name, product.ExternalCode, row.OnHand, row.Reserved, row.UpdatedAtUtc, true);
     }
 
     public async Task<PosInventorySettingsDto> UpdateInventorySettingsAsync(UpdatePosInventorySettingsRequest request, CancellationToken ct)

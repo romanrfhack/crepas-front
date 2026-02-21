@@ -29,7 +29,7 @@ import { PosInventoryAdminApiService } from '../../services/pos-inventory-admin-
             [formControl]="showOnlyInStockControl"
             data-testid="inventory-settings-showOnlyInStock"
           />
-          Mostrar solo productos con existencia en POS
+          POS: mostrar solo con existencias
         </label>
         <button type="button" (click)="saveSettings()" data-testid="inventory-settings-save">
           Guardar configuración
@@ -37,6 +37,16 @@ import { PosInventoryAdminApiService } from '../../services/pos-inventory-admin-
       </div>
 
       <div class="filters-row">
+        <label>
+          <input
+            type="checkbox"
+            [formControl]="onlyWithStockFilterControl"
+            data-testid="inventory-filter-only-stock"
+          />
+          Mostrar solo con stock
+        </label>
+
+
         <label for="inventory-store-id">Sucursal</label>
         <input
           id="inventory-store-id"
@@ -55,11 +65,12 @@ import { PosInventoryAdminApiService } from '../../services/pos-inventory-admin-
           <tr>
             <th>Producto</th>
             <th>Existencia</th>
+            <th>Última actualización</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          @for (item of items(); track item.productId) {
+          @for (item of visibleItems(); track item.productId) {
             <tr [attr.data-testid]="'inventory-row-' + item.productId">
               <td>{{ item.productName }} @if (item.productSku) {<span>({{ item.productSku }})</span>}</td>
               <td>
@@ -71,6 +82,7 @@ import { PosInventoryAdminApiService } from '../../services/pos-inventory-admin-
                   [attr.data-testid]="'inventory-onhand-' + item.productId"
                 />
               </td>
+              <td>{{ formatUpdatedAt(item.updatedAtUtc) }}</td>
               <td>
                 <button
                   type="button"
@@ -116,6 +128,7 @@ export class InventoryPage {
   });
   readonly searchControl = new FormControl('', { nonNullable: true });
   readonly showOnlyInStockControl = new FormControl(false, { nonNullable: true });
+  readonly onlyWithStockFilterControl = new FormControl(false, { nonNullable: true });
 
   constructor() {
     void this.loadInventory();
@@ -155,6 +168,16 @@ export class InventoryPage {
 
   draftOnHand(productId: string, fallback: number) {
     return this.onHandDrafts()[productId] ?? fallback;
+  }
+
+  visibleItems() {
+    return this.onlyWithStockFilterControl.value
+      ? this.items().filter((item) => item.onHand > 0)
+      : this.items();
+  }
+
+  formatUpdatedAt(value: string | null | undefined) {
+    return value ?? '—';
   }
 
   async saveRow(item: StoreInventoryItemDto) {

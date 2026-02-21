@@ -6,7 +6,7 @@ Base: `/api/v1/pos/admin` (Bearer + `TenantOrPlatform` + `PosAdmin`, tenant requ
 
 | Method | Route | Body / Query | Response |
 |---|---|---|---|
-| GET | `/inventory?storeId={guid}&search={term?}` | Query `storeId` requerido | `200` → `StoreInventoryItemDto[]` |
+| GET | `/inventory?storeId={guid}&search={term?}&onlyWithStock={bool?}` | Query `storeId` requerido; `onlyWithStock` opcional (default `false`) | `200` → `StoreInventoryItemDto[]` |
 | PUT | `/inventory` | `{ storeId, productId, onHand }` | `200` → `StoreInventoryItemDto` |
 | PUT | `/inventory/settings` | `{ showOnlyInStock }` | `200` → `PosInventorySettingsDto` |
 
@@ -17,7 +17,8 @@ Base: `/api/v1/pos/admin` (Bearer + `TenantOrPlatform` + `PosAdmin`, tenant requ
 - `productSku`
 - `onHand`
 - `reserved`
-- `updatedAtUtc`
+- `updatedAtUtc` (`null` cuando no existe fila en `StoreInventories`)
+- `hasInventoryRow` (opcional, `false` cuando no existe fila)
 
 ## POS Snapshot
 
@@ -38,3 +39,8 @@ Nuevo conflicto de disponibilidad:
   - `itemName`
   - `reason`
   - `availableQty`
+
+
+Notas de contrato de inventario admin:
+- El GET de inventario ahora devuelve **todos los productos activos del template del tenant** (excluyendo `DisabledByTenant`).
+- Si un producto no tiene fila en `StoreInventories`, se retorna con `onHand=0`, `reserved=0`, `updatedAtUtc=null` y `hasInventoryRow=false`.

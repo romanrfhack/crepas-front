@@ -52,3 +52,12 @@ Cuando no hay inventario suficiente:
   - `itemName`
   - `reason`: `OutOfStock`
   - `availableQty`: cantidad disponible actual
+
+
+## Inventario Admin (GET /api/v1/pos/admin/inventory)
+
+- Lista todos los productos activos del template del tenant para la sucursal solicitada, respetando overrides `DisabledByTenant`.
+- Hace left join con `StoreInventories` por `(StoreId, ProductId)`.
+- Si no existe fila de inventario: `onHand=0`, `reserved=0`, `updatedAtUtc=null`, `hasInventoryRow=false`.
+- `search` filtra por `productName` o `productSku` del template.
+- `onlyWithStock=true` (opcional) filtra resultados con `onHand > 0` para soporte de UI admin.

@@ -169,6 +169,59 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     }
 
     [Fact]
+    public async Task Inventory_Get_Includes_Template_Products_Without_Row_With_Default_Zeroes()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var productWithRow = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Inventory P1", externalCode = "INV-1", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true });
+        var productWithoutRow = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Inventory P2", externalCode = "INV-2", categoryId = category.Id, basePrice = 12m, isActive = true, isAvailable = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        await UpsertInventoryAsync(token, snapshot.StoreId, productWithRow.Id, 4m);
+
+        var inventory = await GetInventoryAsync(token, snapshot.StoreId);
+
+        Assert.Contains(inventory, x => x.ProductId == productWithRow.Id && x.OnHand == 4m && x.HasInventoryRow == true && x.UpdatedAtUtc != null);
+        Assert.Contains(inventory, x => x.ProductId == productWithoutRow.Id && x.OnHand == 0m && x.Reserved == 0m && x.HasInventoryRow == false && x.UpdatedAtUtc == null);
+    }
+
+    [Fact]
+    public async Task Inventory_Get_Filters_By_Search_Name_And_Sku()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-search-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var latte = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Latte Search", externalCode = "LAT-SKU", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true });
+        var mocha = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Mocha Search", externalCode = "MOC-SKU", categoryId = category.Id, basePrice = 12m, isActive = true, isAvailable = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        var byName = await GetInventoryAsync(token, snapshot.StoreId, "Latte");
+        var bySku = await GetInventoryAsync(token, snapshot.StoreId, "MOC-SKU");
+
+        Assert.Contains(byName, x => x.ProductId == latte.Id);
+        Assert.DoesNotContain(byName, x => x.ProductId == mocha.Id);
+        Assert.Contains(bySku, x => x.ProductId == mocha.Id);
+        Assert.DoesNotContain(bySku, x => x.ProductId == latte.Id);
+    }
+
+    [Fact]
+    public async Task Inventory_Get_OnlyWithStock_Returns_Products_With_OnHand_Greater_Than_Zero()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-stock-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var inStock = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stocked Product", externalCode = "STK-1", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true });
+        var zeroStock = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Zero Product", externalCode = "ZER-1", categoryId = category.Id, basePrice = 12m, isActive = true, isAvailable = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        await UpsertInventoryAsync(token, snapshot.StoreId, inStock.Id, 2m);
+        await UpsertInventoryAsync(token, snapshot.StoreId, zeroStock.Id, 0m);
+
+        var filtered = await GetInventoryAsync(token, snapshot.StoreId, onlyWithStock: true);
+
+        Assert.Contains(filtered, x => x.ProductId == inStock.Id && x.OnHand == 2m);
+        Assert.DoesNotContain(filtered, x => x.ProductId == zeroStock.Id);
+    }
+
+    [Fact]
     public async Task Catalog_Overrides_Get_Returns_Item_Metadata()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
@@ -317,6 +370,25 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         return changedEtag;
     }
 
+    private async Task<List<StoreInventoryItemResponse>> GetInventoryAsync(string token, Guid storeId, string? search = null, bool onlyWithStock = false)
+    {
+        var query = $"/api/v1/pos/admin/inventory?storeId={storeId:D}";
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            query += $"&search={Uri.EscapeDataString(search)}";
+        }
+
+        if (onlyWithStock)
+        {
+            query += "&onlyWithStock=true";
+        }
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, query, token);
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<List<StoreInventoryItemResponse>>())!;
+    }
+
     private async Task UpsertInventoryAsync(string token, Guid storeId, Guid productId, decimal onHand)
     {
         using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory", token);
@@ -434,7 +506,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive, bool IsAvailable);
     private sealed record CatalogItemOverrideResponse(string ItemType, Guid ItemId, bool IsEnabled, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku, Guid? CatalogTemplateId);
     private sealed record CatalogStoreAvailabilityResponse(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku);
-    private sealed record StoreInventoryItemResponse(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset UpdatedAtUtc);
+    private sealed record StoreInventoryItemResponse(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset? UpdatedAtUtc, bool? HasInventoryRow);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
     private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record PagedResponse(List<UserListItem> Items);
