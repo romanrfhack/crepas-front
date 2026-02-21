@@ -125,6 +125,34 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     }
 
     [Fact]
+    public async Task Inventory_Upsert_Enforces_TenantOwnership_And_Allows_SuperAdmin_With_TenantHeader()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var managerAToken = await LoginAndGetAccessTokenAsync(setup.ManagerAEmail, setup.Password);
+        var superAdminToken = await LoginAndGetAccessTokenAsync(setup.SuperAdminEmail, setup.Password);
+
+        Guid productId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+            productId = await db.Products.AsNoTracking().Select(x => x.Id).FirstAsync();
+        }
+
+        using (var forbiddenRequest = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory", managerAToken))
+        {
+            forbiddenRequest.Content = JsonContent.Create(new { storeId = setup.StoreBId, productId, onHand = 5m });
+            using var forbiddenResponse = await _client.SendAsync(forbiddenRequest);
+            Assert.Equal(HttpStatusCode.Forbidden, forbiddenResponse.StatusCode);
+        }
+
+        using var superRequest = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory", superAdminToken);
+        superRequest.Headers.Add("X-Tenant-Id", setup.TenantBId.ToString("D"));
+        superRequest.Content = JsonContent.Create(new { storeId = setup.StoreBId, productId, onHand = 5m });
+        using var superResponse = await _client.SendAsync(superRequest);
+        Assert.Equal(HttpStatusCode.OK, superResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task PlatformEndpoints_AccessControl_WorksByRole()
     {
         var setup = await SeedIsolationDataAsync();

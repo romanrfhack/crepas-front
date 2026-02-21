@@ -171,6 +171,24 @@ public sealed class PosSettingsConfiguration : IEntityTypeConfiguration<PosSetti
         builder.ToTable("PosSettings");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.CashDifferenceThreshold).HasColumnType("decimal(18,2)");
+        builder.Property(x => x.ShowOnlyInStock).HasDefaultValue(false);
         builder.HasOne<Store>().WithMany().HasForeignKey(x => x.DefaultStoreId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class StoreInventoryConfiguration : IEntityTypeConfiguration<StoreInventory>
+{
+    public void Configure(EntityTypeBuilder<StoreInventory> builder)
+    {
+        builder.ToTable("StoreInventories");
+        builder.HasKey(x => new { x.StoreId, x.ProductId });
+        builder.Property(x => x.OnHand).HasColumnType("decimal(18,3)");
+        builder.Property(x => x.Reserved).HasColumnType("decimal(18,3)").HasDefaultValue(0m);
+        builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.Property(x => x.RowVersion).IsRowVersion();
+        builder.HasIndex(x => x.StoreId).HasDatabaseName("IX_StoreInventory_StoreId");
+        builder.HasIndex(x => x.ProductId).HasDatabaseName("IX_StoreInventory_ProductId");
+        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Product>().WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -209,10 +209,89 @@ public sealed class PosCatalogService : IPosCatalogService
         return new CatalogStoreAvailabilityDto(row.StoreId, row.ItemType.ToString(), row.ItemId, row.IsAvailable, row.UpdatedAtUtc);
     }
 
+    public async Task<IReadOnlyList<StoreInventoryItemDto>> GetInventoryAsync(Guid storeId, string? search, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(storeId, tenantId, ct).ConfigureAwait(false);
+
+        var mapping = await _db.TenantCatalogTemplates.AsNoTracking().SingleAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
+        var query = from inventory in _db.StoreInventories.AsNoTracking()
+                    join product in _db.Products.AsNoTracking() on inventory.ProductId equals product.Id
+                    where inventory.StoreId == storeId && product.CatalogTemplateId == mapping.CatalogTemplateId
+                    select new { inventory, product };
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(x => x.product.Name.Contains(term) || (x.product.ExternalCode != null && x.product.ExternalCode.Contains(term)));
+        }
+
+        var rows = await query
+            .OrderBy(x => x.product.Name)
+            .Select(x => new StoreInventoryItemDto(x.inventory.StoreId, x.inventory.ProductId, x.product.Name, x.product.ExternalCode, x.inventory.OnHand, x.inventory.Reserved, x.inventory.UpdatedAtUtc))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows;
+    }
+
+    public async Task<StoreInventoryItemDto> UpsertInventoryAsync(UpsertStoreInventoryRequest request, CancellationToken ct)
+    {
+        if (request.OnHand < 0m)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["onHand"] = ["onHand must be greater or equal to zero."] });
+        }
+
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(request.StoreId, tenantId, ct).ConfigureAwait(false);
+
+        var mapping = await _db.TenantCatalogTemplates.AsNoTracking().SingleAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
+        var product = await _db.Products.AsNoTracking()
+            .Where(x => x.Id == request.ProductId && x.CatalogTemplateId == mapping.CatalogTemplateId)
+            .Select(x => new { x.Id, x.Name, x.ExternalCode })
+            .SingleOrDefaultAsync(ct)
+            .ConfigureAwait(false) ?? throw new NotFoundException("Product was not found for tenant catalog template.");
+
+        Guid? userId = null;
+        var now = DateTimeOffset.UtcNow;
+        var row = await _db.StoreInventories.FindAsync([request.StoreId, request.ProductId], ct).ConfigureAwait(false);
+        if (row is null)
+        {
+            row = new StoreInventory
+            {
+                StoreId = request.StoreId,
+                ProductId = request.ProductId,
+                OnHand = request.OnHand,
+                Reserved = 0m,
+                UpdatedAtUtc = now,
+                UpdatedByUserId = userId
+            };
+            _db.StoreInventories.Add(row);
+        }
+        else
+        {
+            row.OnHand = request.OnHand;
+            row.UpdatedAtUtc = now;
+            row.UpdatedByUserId = userId;
+        }
+
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new StoreInventoryItemDto(row.StoreId, row.ProductId, product.Name, product.ExternalCode, row.OnHand, row.Reserved, row.UpdatedAtUtc);
+    }
+
+    public async Task<PosInventorySettingsDto> UpdateInventorySettingsAsync(UpdatePosInventorySettingsRequest request, CancellationToken ct)
+    {
+        _ = RequireTenantId();
+        var settings = await _db.PosSettings.OrderBy(x => x.Id).FirstAsync(ct).ConfigureAwait(false);
+        settings.ShowOnlyInStock = request.ShowOnlyInStock;
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new PosInventorySettingsDto(settings.ShowOnlyInStock);
+    }
+
     public async Task<CatalogSnapshotDto> GetSnapshotAsync(Guid? storeId, CancellationToken ct)
     {
         var tenantId = RequireTenantId();
-        var (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
+        var (resolvedStoreId, settings) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
         var tenant = await _db.Tenants.AsNoTracking().SingleAsync(x => x.Id == tenantId, ct).ConfigureAwait(false);
         var mapping = await _db.TenantCatalogTemplates.AsNoTracking().SingleAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
 
@@ -224,7 +303,11 @@ public sealed class PosCatalogService : IPosCatalogService
             .ToDictionaryAsync(x => (x.ItemType, x.ItemId), x => x.IsAvailable, ct).ConfigureAwait(false);
 
         var categories = await _db.Categories.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).OrderBy(x => x.SortOrder).Select(x => new CategoryDto(x.Id, x.Name, x.SortOrder, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
-        var products = await _db.Products.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledProducts.Contains(x.Id)).Select(x => new ProductDto(x.Id, x.ExternalCode, x.Name, x.CategoryId, x.SubcategoryName, x.BasePrice, x.IsActive, availability.TryGetValue((CatalogItemType.Product, x.Id), out var a) ? a : x.IsAvailable, x.CustomizationSchemaId)).ToListAsync(ct).ConfigureAwait(false);
+        var productCandidates = await _db.Products.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledProducts.Contains(x.Id)).Select(x => new ProductDto(x.Id, x.ExternalCode, x.Name, x.CategoryId, x.SubcategoryName, x.BasePrice, x.IsActive, availability.TryGetValue((CatalogItemType.Product, x.Id), out var a) ? a : x.IsAvailable, x.CustomizationSchemaId)).ToListAsync(ct).ConfigureAwait(false);
+        var stockByProduct = await _db.StoreInventories.AsNoTracking().Where(x => x.StoreId == resolvedStoreId).ToDictionaryAsync(x => x.ProductId, x => x.OnHand, ct).ConfigureAwait(false);
+        var products = settings.ShowOnlyInStock
+            ? productCandidates.Where(x => x.IsAvailable && stockByProduct.GetValueOrDefault(x.Id, 0m) > 0m).ToList()
+            : productCandidates;
         var optionSets = await _db.OptionSets.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).Select(x => new OptionSetDto(x.Id, x.Name, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
         var optionItems = await _db.OptionItems.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledOptionItems.Contains(x.Id)).Select(x => new OptionItemDto(x.Id, x.OptionSetId, x.Name, x.IsActive, availability.TryGetValue((CatalogItemType.OptionItem, x.Id), out var a) ? a : x.IsAvailable, x.SortOrder)).ToListAsync(ct).ConfigureAwait(false);
         var schemas = await _db.CustomizationSchemas.AsNoTracking().Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId).Select(x => new SchemaDto(x.Id, x.Name, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
@@ -307,6 +390,15 @@ public sealed class PosCatalogService : IPosCatalogService
     private async Task<ProductOverrideDto> BuildOverrideDto(ProductGroupOverride o, CancellationToken ct) { var ids = await _db.ProductGroupOverrideAllowedItems.AsNoTracking().Where(x => x.ProductGroupOverrideId == o.Id).Select(x => x.OptionItemId).ToListAsync(ct).ConfigureAwait(false); return new(o.Id, o.ProductId, o.GroupKey, o.IsActive, ids); }
     private async Task AuditAsync(string entity, string action, Guid entityId, object? before, object? after, CancellationToken ct) { await _auditLogger.LogAsync(new AuditEntry(action, null, null, entity, entityId.ToString(), before, after, "Api", null, DateTime.UtcNow), ct).ConfigureAwait(false); PosCatalogLog.AuditWritten(_logger, action, entity, entityId); }
     private Guid RequireTenantId() => _tenantContext.EffectiveTenantId ?? throw new ForbiddenException("Tenant context is required.");
+
+    private async Task EnsureStoreBelongsToTenantAsync(Guid storeId, Guid tenantId, CancellationToken ct)
+    {
+        var storeBelongs = await _db.Stores.AsNoTracking().AnyAsync(x => x.Id == storeId && x.TenantId == tenantId, ct).ConfigureAwait(false);
+        if (!storeBelongs)
+        {
+            throw new ForbiddenException("Store does not belong to tenant.");
+        }
+    }
 
     private static string ComputeWeakEtag(string stamp, Guid tenantId, Guid templateId, Guid storeId)
     {

@@ -304,6 +304,11 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.Property<bool>("MultiStoreEnabled")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("ShowOnlyInStock")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.HasKey("Id");
 
                     b.HasIndex("DefaultStoreId");
@@ -393,6 +398,21 @@ namespace CobranzaDigital.Infrastructure.Migrations
                         .HasFilter("[ClosedAtUtc] IS NOT NULL");
 
                     b.ToTable("PosShifts", (string)null);
+                });
+
+            modelBuilder.Entity("CobranzaDigital.Domain.Entities.StoreInventory", b =>
+                {
+                    b.HasOne("CobranzaDigital.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CobranzaDigital.Domain.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CobranzaDigital.Domain.Entities.Product", b =>
@@ -774,6 +794,46 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.ToTable("SelectionGroups", (string)null);
                 });
 
+            modelBuilder.Entity("CobranzaDigital.Domain.Entities.StoreInventory", b =>
+                {
+                    b.Property<Guid>("StoreId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("OnHand")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<decimal>("Reserved")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,3)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetimeoffset")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("StoreId", "ProductId");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("IX_StoreInventory_ProductId");
+
+                    b.HasIndex("StoreId")
+                        .HasDatabaseName("IX_StoreInventory_StoreId");
+
+                    b.ToTable("StoreInventories", (string)null);
+                });
+
             modelBuilder.Entity("CobranzaDigital.Domain.Entities.Store", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1048,6 +1108,21 @@ namespace CobranzaDigital.Infrastructure.Migrations
 
             modelBuilder.Entity("CobranzaDigital.Domain.Entities.PosShift", b =>
                 {
+                    b.HasOne("CobranzaDigital.Domain.Entities.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CobranzaDigital.Domain.Entities.StoreInventory", b =>
+                {
+                    b.HasOne("CobranzaDigital.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("CobranzaDigital.Domain.Entities.Store", null)
                         .WithMany()
                         .HasForeignKey("StoreId")
