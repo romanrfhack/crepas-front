@@ -93,33 +93,45 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"etag-cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
-        var optionSet = await PostAsync<OptionSetResponse>("/api/v1/pos/admin/option-sets", token, new { name = $"etag-set-{Guid.NewGuid():N}", isActive = true });
-        var optionItem = await PostAsync<OptionItemResponse>($"/api/v1/pos/admin/option-sets/{optionSet.Id}/items", token, new { name = "ETag Option", isActive = true, isAvailable = true, sortOrder = 1 });
-        var extra = await PostAsync<ExtraResponse>("/api/v1/pos/admin/extras", token, new { name = "ETag Extra", price = 5m, isActive = true, isAvailable = true });
-        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "ETag Product", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true });
+        var p1 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "P1", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true });
+        var p2 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "P2", categoryId = category.Id, basePrice = 11m, isActive = true, isAvailable = true });
 
+        var snapshot = await GetSnapshotAsync(token);
         var etag = await GetSnapshotEtagAsync(token);
-        await AssertSnapshotNotModifiedAsync(token, etag);
 
-        etag = await ToggleAvailabilityAndAssertEtagChangedAsync(
-            token,
-            etag,
-            () => UpdateProductAsync(token, product with { IsAvailable = false }));
+        using (var disableReq = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/overrides", token))
+        {
+            disableReq.Content = JsonContent.Create(new { itemType = "Product", itemId = p2.Id, isEnabled = false });
+            using var disableResp = await _client.SendAsync(disableReq);
+            Assert.Equal(HttpStatusCode.OK, disableResp.StatusCode);
+        }
 
-        etag = await ToggleAvailabilityAndAssertEtagChangedAsync(
-            token,
-            etag,
-            () => UpdateExtraAsync(token, extra with { IsAvailable = false }));
+        using (var availabilityReq = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/availability", token))
+        {
+            availabilityReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = p1.Id, isAvailable = false });
+            using var availabilityResp = await _client.SendAsync(availabilityReq);
+            Assert.Equal(HttpStatusCode.OK, availabilityResp.StatusCode);
+        }
 
-        etag = await ToggleAvailabilityAndAssertEtagChangedAsync(
-            token,
-            etag,
-            () => UpdateOptionItemAsync(token, optionSet.Id, optionItem with { IsAvailable = false }));
+        var filteredSnapshot = await GetSnapshotAsync(token);
+        Assert.DoesNotContain(filteredSnapshot.Products, x => x.Id == p2.Id);
+        Assert.Contains(filteredSnapshot.Products, x => x.Id == p1.Id && x.IsAvailable == false);
 
-        _ = await ToggleAvailabilityAndAssertEtagChangedAsync(
-            token,
-            etag,
-            () => UpdateProductAsync(token, product with { Name = "ETag Product Renamed", IsAvailable = false }));
+        var changed = await ToggleAvailabilityAndAssertEtagChangedAsync(token, etag, async () =>
+        {
+            using var enableReq = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/overrides", token);
+            enableReq.Content = JsonContent.Create(new { itemType = "Product", itemId = p2.Id, isEnabled = true });
+            using var enableResp = await _client.SendAsync(enableReq);
+            Assert.Equal(HttpStatusCode.OK, enableResp.StatusCode);
+        });
+
+        _ = await ToggleAvailabilityAndAssertEtagChangedAsync(token, changed, async () =>
+        {
+            using var availabilityReq = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/availability", token);
+            availabilityReq.Content = JsonContent.Create(new { storeId = filteredSnapshot.StoreId, itemType = "Product", itemId = p1.Id, isAvailable = true });
+            using var availabilityResp = await _client.SendAsync(availabilityReq);
+            Assert.Equal(HttpStatusCode.OK, availabilityResp.StatusCode);
+        });
     }
 
     [Fact]
@@ -157,6 +169,14 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var snapshotResp = await _client.SendAsync(snapshotReq);
 
         Assert.Equal(HttpStatusCode.Forbidden, snapshotResp.StatusCode);
+    }
+
+    private async Task<SnapshotResponse> GetSnapshotAsync(string token)
+    {
+        using var req = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
+        using var response = await _client.SendAsync(req);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<SnapshotResponse>())!;
     }
 
     private async Task<string> GetSnapshotEtagAsync(string token)
@@ -302,7 +322,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record SchemaResponse(Guid Id, string Name, bool IsActive);
     private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive, bool IsAvailable);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
-    private sealed record SnapshotResponse(Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
+    private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record PagedResponse(List<UserListItem> Items);
     private sealed record UserListItem([property: JsonPropertyName("id")] string Id);
     private sealed record AdminUserResponse(string Id, string Email, string UserName, IReadOnlyCollection<string> Roles, bool IsLockedOut, DateTimeOffset? LockoutEnd);

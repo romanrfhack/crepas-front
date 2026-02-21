@@ -11,8 +11,51 @@ public enum SelectionMode
     Multi = 1
 }
 
+public enum CatalogItemType
+{
+    Product = 0,
+    Extra = 1,
+    OptionItem = 2
+}
+
+public sealed class CatalogTemplate : Entity
+{
+    public Guid VerticalId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Version { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset CreatedAtUtc { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+}
+
+public sealed class TenantCatalogTemplate
+{
+    public Guid TenantId { get; set; }
+    public Guid? CatalogTemplateId { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+}
+
+public sealed class TenantCatalogOverride
+{
+    public Guid TenantId { get; set; }
+    public CatalogItemType ItemType { get; set; }
+    public Guid ItemId { get; set; }
+    public bool IsEnabled { get; set; } = true;
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+}
+
+public sealed class StoreCatalogAvailability
+{
+    public Guid StoreId { get; set; }
+    public CatalogItemType ItemType { get; set; }
+    public Guid ItemId { get; set; }
+    public bool IsAvailable { get; set; } = true;
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+}
+
 public sealed class Category : Entity
 {
+    public Guid? CatalogTemplateId { get; set; }
     public string Name { get; set; } = string.Empty;
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
@@ -21,6 +64,7 @@ public sealed class Category : Entity
 
 public sealed class Product : Entity
 {
+    public Guid? CatalogTemplateId { get; set; }
     public string? ExternalCode { get; set; }
     public string Name { get; set; } = string.Empty;
     public Guid CategoryId { get; set; }
@@ -34,6 +78,7 @@ public sealed class Product : Entity
 
 public sealed class OptionSet : Entity
 {
+    public Guid? CatalogTemplateId { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
@@ -41,6 +86,7 @@ public sealed class OptionSet : Entity
 
 public sealed class OptionItem : Entity
 {
+    public Guid? CatalogTemplateId { get; set; }
     public Guid OptionSetId { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
@@ -51,12 +97,14 @@ public sealed class OptionItem : Entity
 
 public sealed class CustomizationSchema : Entity
 {
+    public Guid? CatalogTemplateId { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
 }
 
 public sealed class SelectionGroup : Entity
 {
+    public Guid? CatalogTemplateId { get; set; }
     public Guid SchemaId { get; set; }
     public string Key { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
@@ -70,6 +118,7 @@ public sealed class SelectionGroup : Entity
 
 public sealed class Extra : Entity
 {
+    public Guid CatalogTemplateId { get; set; }
     public string Name { get; set; } = string.Empty;
     public decimal Price { get; set; }
     public bool IsActive { get; set; } = true;

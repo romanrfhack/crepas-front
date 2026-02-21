@@ -29,7 +29,21 @@ public sealed record ReplaceIncludedItemRow(Guid ExtraId, int Quantity);
 public sealed record OverrideUpsertRequest(IReadOnlyList<Guid> AllowedOptionItemIds);
 public sealed record ProductOverrideDto(Guid Id, Guid ProductId, string GroupKey, bool IsActive, IReadOnlyList<Guid> AllowedOptionItemIds);
 
+
+public sealed record CatalogItemOverrideDto(string ItemType, Guid ItemId, bool IsEnabled, DateTimeOffset UpdatedAtUtc);
+public sealed record UpsertCatalogItemOverrideRequest(string ItemType, Guid ItemId, bool IsEnabled);
+
+public sealed record CatalogStoreAvailabilityDto(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable, DateTimeOffset UpdatedAtUtc);
+public sealed record UpsertCatalogStoreAvailabilityRequest(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable);
+
+public sealed record CatalogTemplateDto(Guid Id, Guid VerticalId, string Name, string? Version, bool IsActive, DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
+public sealed record UpsertCatalogTemplateRequest(Guid VerticalId, string Name, string? Version, bool IsActive = true);
+public sealed record AssignTenantCatalogTemplateRequest(Guid CatalogTemplateId);
+
 public sealed record CatalogSnapshotDto(
+    Guid TenantId,
+    Guid VerticalId,
+    Guid CatalogTemplateId,
     Guid StoreId,
     string TimeZoneId,
     DateTimeOffset GeneratedAtUtc,

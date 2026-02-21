@@ -96,3 +96,25 @@ Errores:
 - Frontend unit cache por store: `frontend/src/app/features/pos/services/pos-catalog-snapshot.service.spec.ts`.
 - Frontend unit UX 409: `frontend/src/app/features/pos/pages/pos-caja.page.spec.ts`.
 - Frontend E2E stale-cache/refresh: `frontend/e2e/pos.release1.contract.spec.ts`.
+
+## Release B: Template + Tenant Overrides + Store Availability
+
+- **CatalogTemplate** es la fuente maestra por vertical.
+- Cada tenant se asocia a un template activo con `TenantCatalogTemplate`.
+- **TenantCatalogOverrides** permite habilitar/deshabilitar `Product|Extra|OptionItem` sin duplicar catálogo.
+- **StoreCatalogAvailability** permite marcar disponibilidad operativa por tienda.
+
+### Snapshot
+
+`GET /api/v1/pos/catalog/snapshot` mantiene el contrato existente y ahora agrega `tenantId`, `verticalId` y `catalogTemplateId`.
+
+Composición:
+1. Catálogo base del template del tenant.
+2. Se excluyen ítems con override `isEnabled=false`.
+3. `isAvailable` final usa `StoreCatalogAvailability`; si no hay override, usa `IsAvailable` base.
+
+### Reglas de venta (409)
+
+- `reason=DisabledByTenant`: item deshabilitado por override de tenant.
+- `reason=UnavailableInStore`: item no disponible por tienda (o base `IsAvailable=false`).
+- El payload de conflicto mantiene `itemType`, `itemId`, `itemName` y agrega `reason`.

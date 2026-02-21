@@ -5,6 +5,59 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace CobranzaDigital.Infrastructure.Persistence.Configurations;
 
+public sealed class CatalogTemplateConfiguration : IEntityTypeConfiguration<CatalogTemplate>
+{
+    public void Configure(EntityTypeBuilder<CatalogTemplate> builder)
+    {
+        builder.ToTable("CatalogTemplates");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Version).HasMaxLength(50);
+        builder.Property(x => x.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasIndex(x => new { x.VerticalId, x.Name }).IsUnique();
+        builder.HasOne<Vertical>().WithMany().HasForeignKey(x => x.VerticalId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class TenantCatalogTemplateConfiguration : IEntityTypeConfiguration<TenantCatalogTemplate>
+{
+    public void Configure(EntityTypeBuilder<TenantCatalogTemplate> builder)
+    {
+        builder.ToTable("TenantCatalogTemplates");
+        builder.HasKey(x => x.TenantId);
+        builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class TenantCatalogOverrideConfiguration : IEntityTypeConfiguration<TenantCatalogOverride>
+{
+    public void Configure(EntityTypeBuilder<TenantCatalogOverride> builder)
+    {
+        builder.ToTable("TenantCatalogOverrides");
+        builder.HasKey(x => new { x.TenantId, x.ItemType, x.ItemId });
+        builder.Property(x => x.ItemType).HasConversion<int>();
+        builder.Property(x => x.IsEnabled).HasDefaultValue(true);
+        builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class StoreCatalogAvailabilityConfiguration : IEntityTypeConfiguration<StoreCatalogAvailability>
+{
+    public void Configure(EntityTypeBuilder<StoreCatalogAvailability> builder)
+    {
+        builder.ToTable("StoreCatalogAvailability");
+        builder.HasKey(x => new { x.StoreId, x.ItemType, x.ItemId });
+        builder.Property(x => x.ItemType).HasConversion<int>();
+        builder.Property(x => x.IsAvailable).HasDefaultValue(true);
+        builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
 {
     public void Configure(EntityTypeBuilder<Category> builder)
@@ -12,10 +65,11 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
         builder.ToTable("Categories");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
-        builder.HasIndex(x => x.Name).IsUnique();
+        builder.HasIndex(x => new { x.CatalogTemplateId, x.Name }).IsUnique();
         builder.HasIndex(x => x.SortOrder);
         builder.Property(x => x.UpdatedAtUtc)
             .HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -33,6 +87,7 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(x => x.UpdatedAtUtc)
             .HasDefaultValueSql("SYSUTCDATETIME()");
         builder.HasIndex(x => x.ExternalCode).IsUnique();
+        builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Category>().WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<CustomizationSchema>().WithMany().HasForeignKey(x => x.CustomizationSchemaId).OnDelete(DeleteBehavior.Restrict);
     }
@@ -47,6 +102,7 @@ public sealed class OptionSetConfiguration : IEntityTypeConfiguration<OptionSet>
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.UpdatedAtUtc)
             .HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -60,6 +116,7 @@ public sealed class OptionItemConfiguration : IEntityTypeConfiguration<OptionIte
         builder.Property(x => x.IsAvailable).HasDefaultValue(true);
         builder.Property(x => x.UpdatedAtUtc)
             .HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<OptionSet>().WithMany().HasForeignKey(x => x.OptionSetId).OnDelete(DeleteBehavior.Restrict);
     }
 }
@@ -71,6 +128,7 @@ public sealed class CustomizationSchemaConfiguration : IEntityTypeConfiguration<
         builder.ToTable("CustomizationSchemas");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -83,6 +141,7 @@ public sealed class SelectionGroupConfiguration : IEntityTypeConfiguration<Selec
         builder.Property(x => x.Key).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Label).HasMaxLength(200).IsRequired();
         builder.HasIndex(x => new { x.SchemaId, x.Key }).IsUnique();
+        builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<CustomizationSchema>().WithMany().HasForeignKey(x => x.SchemaId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<OptionSet>().WithMany().HasForeignKey(x => x.OptionSetId).OnDelete(DeleteBehavior.Restrict);
     }
@@ -99,6 +158,7 @@ public sealed class ExtraConfiguration : IEntityTypeConfiguration<Extra>
         builder.Property(x => x.IsAvailable).HasDefaultValue(true);
         builder.Property(x => x.UpdatedAtUtc)
             .HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

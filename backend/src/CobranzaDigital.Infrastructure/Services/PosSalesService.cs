@@ -105,9 +105,23 @@ public sealed class PosSalesService : IPosSalesService
                 }
             }
 
+            var tenantTemplateId = await _db.TenantCatalogTemplates.AsNoTracking()
+                .Where(x => x.TenantId == tenantId)
+                .Select(x => x.CatalogTemplateId)
+                .SingleAsync(ct)
+                .ConfigureAwait(false);
             var productIds = request.Items.Select(x => x.ProductId).Distinct().ToArray();
+            var disabledProducts = await _db.TenantCatalogOverrides.AsNoTracking()
+                .Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Product && !x.IsEnabled)
+                .Select(x => x.ItemId)
+                .ToHashSetAsync(ct)
+                .ConfigureAwait(false);
+            var productAvailability = await _db.StoreCatalogAvailabilities.AsNoTracking()
+                .Where(x => x.StoreId == storeId && x.ItemType == CatalogItemType.Product)
+                .ToDictionaryAsync(x => x.ItemId, x => x.IsAvailable, ct)
+                .ConfigureAwait(false);
             var products = await _db.Products.AsNoTracking()
-                .Where(x => productIds.Contains(x.Id) && x.IsActive)
+                .Where(x => productIds.Contains(x.Id) && x.IsActive && x.CatalogTemplateId == tenantTemplateId)
                 .ToDictionaryAsync(x => x.Id, ct)
                 .ConfigureAwait(false);
 
@@ -116,10 +130,16 @@ public sealed class PosSalesService : IPosSalesService
                 throw ValidationError("items.productId", "One or more products were not found or are inactive.");
             }
 
-            var unavailableProduct = products.Values.FirstOrDefault(x => !x.IsAvailable);
+            var disabledProduct = products.Values.FirstOrDefault(x => disabledProducts.Contains(x.Id));
+            if (disabledProduct is not null)
+            {
+                throw new ItemUnavailableException("Product", disabledProduct.Id, disabledProduct.Name, "DisabledByTenant");
+            }
+
+            var unavailableProduct = products.Values.FirstOrDefault(x => productAvailability.TryGetValue(x.Id, out var available) ? !available : !x.IsAvailable);
             if (unavailableProduct is not null)
             {
-                throw new ItemUnavailableException("Product", unavailableProduct.Id, unavailableProduct.Name);
+                throw new ItemUnavailableException("Product", unavailableProduct.Id, unavailableProduct.Name, "UnavailableInStore");
             }
 
             var optionIds = request.Items
@@ -130,19 +150,34 @@ public sealed class PosSalesService : IPosSalesService
             var options = optionIds.Length == 0
                 ? new Dictionary<Guid, OptionItem>()
                 : await _db.OptionItems.AsNoTracking()
-                    .Where(x => optionIds.Contains(x.Id) && x.IsActive)
+                     .Where(x => optionIds.Contains(x.Id) && x.IsActive && x.CatalogTemplateId == tenantTemplateId)
                     .ToDictionaryAsync(x => x.Id, ct)
                     .ConfigureAwait(false);
 
+            var disabledOptionIds = await _db.TenantCatalogOverrides.AsNoTracking()
+                .Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.OptionItem && !x.IsEnabled)
+                .Select(x => x.ItemId)
+                .ToHashSetAsync(ct)
+                .ConfigureAwait(false);
+            var optionAvailability = await _db.StoreCatalogAvailabilities.AsNoTracking()
+                .Where(x => x.StoreId == storeId && x.ItemType == CatalogItemType.OptionItem)
+                .ToDictionaryAsync(x => x.ItemId, x => x.IsAvailable, ct)
+                .ConfigureAwait(false);
             if (options.Count != optionIds.Length)
             {
                 throw ValidationError("items.selections.optionItemId", "One or more option items were not found or are inactive.");
             }
 
-            var unavailableOption = options.Values.FirstOrDefault(x => !x.IsAvailable);
+            var disabledOption = options.Values.FirstOrDefault(x => disabledOptionIds.Contains(x.Id));
+            if (disabledOption is not null)
+            {
+                throw new ItemUnavailableException("OptionItem", disabledOption.Id, disabledOption.Name, "DisabledByTenant");
+            }
+
+            var unavailableOption = options.Values.FirstOrDefault(x => optionAvailability.TryGetValue(x.Id, out var available) ? !available : !x.IsAvailable);
             if (unavailableOption is not null)
             {
-                throw new ItemUnavailableException("OptionItem", unavailableOption.Id, unavailableOption.Name);
+                throw new ItemUnavailableException("OptionItem", unavailableOption.Id, unavailableOption.Name, "UnavailableInStore");
             }
 
             var extraIds = request.Items
@@ -153,19 +188,34 @@ public sealed class PosSalesService : IPosSalesService
             var extras = extraIds.Length == 0
                 ? new Dictionary<Guid, Extra>()
                 : await _db.Extras.AsNoTracking()
-                    .Where(x => extraIds.Contains(x.Id) && x.IsActive)
+                     .Where(x => extraIds.Contains(x.Id) && x.IsActive && x.CatalogTemplateId == tenantTemplateId)
                     .ToDictionaryAsync(x => x.Id, ct)
                     .ConfigureAwait(false);
 
+            var disabledExtraIds = await _db.TenantCatalogOverrides.AsNoTracking()
+                .Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Extra && !x.IsEnabled)
+                .Select(x => x.ItemId)
+                .ToHashSetAsync(ct)
+                .ConfigureAwait(false);
+            var extraAvailability = await _db.StoreCatalogAvailabilities.AsNoTracking()
+                .Where(x => x.StoreId == storeId && x.ItemType == CatalogItemType.Extra)
+                .ToDictionaryAsync(x => x.ItemId, x => x.IsAvailable, ct)
+                .ConfigureAwait(false);
             if (extras.Count != extraIds.Length)
             {
                 throw ValidationError("items.extras.extraId", "One or more extras were not found or are inactive.");
             }
 
-            var unavailableExtra = extras.Values.FirstOrDefault(x => !x.IsAvailable);
+            var disabledExtra = extras.Values.FirstOrDefault(x => disabledExtraIds.Contains(x.Id));
+            if (disabledExtra is not null)
+            {
+                throw new ItemUnavailableException("Extra", disabledExtra.Id, disabledExtra.Name, "DisabledByTenant");
+            }
+
+            var unavailableExtra = extras.Values.FirstOrDefault(x => extraAvailability.TryGetValue(x.Id, out var available) ? !available : !x.IsAvailable);
             if (unavailableExtra is not null)
             {
-                throw new ItemUnavailableException("Extra", unavailableExtra.Id, unavailableExtra.Name);
+                throw new ItemUnavailableException("Extra", unavailableExtra.Id, unavailableExtra.Name, "UnavailableInStore");
             }
 
             var saleId = Guid.NewGuid();

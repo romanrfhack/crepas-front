@@ -37,7 +37,7 @@ public sealed class PosCatalogController : ControllerBase
             }
         }
 
-        var etag = await _service.ComputeCatalogEtagAsync(ct).ConfigureAwait(false);
+        var etag = await _service.ComputeCatalogEtagAsync(storeId, ct).ConfigureAwait(false);
         Response.Headers[HeaderNames.ETag] = etag;
         Response.Headers[HeaderNames.CacheControl] = "public, max-age=60";
 
