@@ -155,3 +155,11 @@ Aunque no fue pedido en la lista A/B, Release B también cambia contrato de snap
   - Responde headers `ETag` y `Cache-Control: public, max-age=60`.
   - Si `If-None-Match` coincide exacto con ETag actual → `304 Not Modified` sin body.
 - Campos nuevos no rompientes en `CatalogSnapshotDto`: `tenantId`, `verticalId`, `catalogTemplateId`.
+
+
+### Release B UI test ids (frontend)
+- `platform-templates-page`, `platform-template-create`, `platform-template-save`, `platform-template-row-{i}`
+- `platform-assign-tenant`, `platform-assign-template`, `platform-assign-submit`
+- `platform-tenant-context-select`
+- `override-toggle-{itemType}-{itemId}`, `availability-toggle-{itemType}-{itemId}`
+- `platform-tenant-required-error`, `availability-forbidden-error`

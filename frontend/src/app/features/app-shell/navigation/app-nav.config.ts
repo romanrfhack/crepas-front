@@ -16,17 +16,16 @@ export interface NavSection {
 export const APP_NAV_CONFIG: NavSection[] = [
   {
     label: 'General',
-    roles: ['Admin'],
+    roles: ['Admin', 'SuperAdmin'],
     defaultExpanded: true,
     children: [
       {
         label: 'Dashboard',
         path: '/app/dashboard',
-        roles: ['Admin'],
+        roles: ['Admin', 'SuperAdmin'],
       },
     ],
   },
-
   {
     label: 'POS',
     roles: ['Admin', 'Cashier', 'Manager'],
@@ -46,7 +45,7 @@ export const APP_NAV_CONFIG: NavSection[] = [
   },
   {
     label: 'Admin',
-    roles: ['Admin'],
+    roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'],
     defaultExpanded: true,
     children: [
       {
@@ -62,45 +61,27 @@ export const APP_NAV_CONFIG: NavSection[] = [
       {
         label: 'POS Catálogo',
         path: '/app/admin/pos/catalog/categories',
-        roles: ['Admin'],
+        roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'],
         children: [
-          {
-            label: 'Categories',
-            path: '/app/admin/pos/catalog/categories',
-            roles: ['Admin'],
-          },
-          {
-            label: 'Products',
-            path: '/app/admin/pos/catalog/products',
-            roles: ['Admin'],
-          },
-          {
-            label: 'Option Sets',
-            path: '/app/admin/pos/catalog/option-sets',
-            roles: ['Admin'],
-          },
-          {
-            label: 'Schemas',
-            path: '/app/admin/pos/catalog/schemas',
-            roles: ['Admin'],
-          },
-          {
-            label: 'Extras',
-            path: '/app/admin/pos/catalog/extras',
-            roles: ['Admin'],
-          },
-          {
-            label: 'Included Items',
-            path: '/app/admin/pos/catalog/included-items',
-            roles: ['Admin'],
-          },
-          {
-            label: 'Overrides',
-            path: '/app/admin/pos/catalog/overrides',
-            roles: ['Admin'],
-          },
+          { label: 'Categories', path: '/app/admin/pos/catalog/categories', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Products', path: '/app/admin/pos/catalog/products', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Option Sets', path: '/app/admin/pos/catalog/option-sets', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Schemas', path: '/app/admin/pos/catalog/schemas', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Extras', path: '/app/admin/pos/catalog/extras', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Included Items', path: '/app/admin/pos/catalog/included-items', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Overrides', path: '/app/admin/pos/catalog/overrides', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
         ],
       },
+    ],
+  },
+  {
+    label: 'Plataforma',
+    roles: ['SuperAdmin'],
+    defaultExpanded: true,
+    children: [
+      { label: 'Catalog Templates', path: '/app/platform/catalog-templates', roles: ['SuperAdmin'] },
+      { label: 'Asignar template', path: '/app/platform/tenant-template-assignment', roles: ['SuperAdmin'] },
+      { label: 'Contexto tenant', path: '/app/platform/tenant-context', roles: ['SuperAdmin'] },
     ],
   },
 ];

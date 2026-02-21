@@ -4,9 +4,9 @@ import { roleGuard } from '../../core/guards/role.guard';
 export const adminRoutes: Routes = [
   {
     path: 'pos/catalog',
-    canMatch: [roleGuard(['Admin', 'Manager'])],
-    canActivate: [roleGuard(['Admin', 'Manager'])],
-    data: { roles: ['Admin', 'Manager'] },
+    canMatch: [roleGuard(['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'])],
+    canActivate: [roleGuard(['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'])],
+    data: { roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
     loadChildren: () =>
       import('./pos-catalog/pos-catalog.routes').then((m) => m.posCatalogRoutes),
   },

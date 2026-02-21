@@ -2,6 +2,9 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { OptionItemDto, OptionSetDto } from '../../models/pos-catalog.models';
 import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
+import { PosAdminCatalogOverridesApiService } from '../../services/pos-admin-catalog-overrides-api.service';
+import { PosAdminCatalogAvailabilityApiService } from '../../services/pos-admin-catalog-availability-api.service';
+import { StoreContextService } from '../../../../pos/services/store-context.service';
 
 @Component({
   selector: 'app-pos-catalog-option-sets-page',
@@ -209,15 +212,14 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
                         >
                           {{ item.isActive ? '&#9989; Activo' : '&#9940; Inactivo' }}
                         </span>
-                        <button
-                          type="button"
-                          class="status-badge"
-                          [class.status-badge--active]="item.isAvailable"
-                          [class.status-badge--inactive]="!item.isAvailable"
-                          (click)="onToggleItemAvailability(item)"
-                        >
-                          {{ item.isAvailable ? '&#128994; Disponible' : '&#9898; Agotado' }}
-                        </button>
+                        <label>
+                          <input type="checkbox" [checked]="isEnabled(item.id)" (change)="onToggleItemOverride(item.id, $event)" [attr.data-testid]="'override-toggle-OptionItem-' + item.id" />
+                          Ofrecer
+                        </label>
+                        <label>
+                          <input type="checkbox" [checked]="item.isAvailable" [disabled]="!isEnabled(item.id)" (change)="onToggleItemAvailability(item, $event)" [attr.data-testid]="'availability-toggle-OptionItem-' + item.id" />
+                          Disponible en sucursal
+                        </label>
                       </div>
                     </div>
                   </div>
@@ -769,11 +771,15 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
 })
 export class OptionSetsPage {
   private readonly api = inject(PosCatalogApiService);
+  private readonly overridesApi = inject(PosAdminCatalogOverridesApiService);
+  private readonly availabilityApi = inject(PosAdminCatalogAvailabilityApiService);
+  private readonly storeContext = inject(StoreContextService);
 
   readonly optionSets = signal<OptionSetDto[]>([]);
   readonly optionItems = signal<OptionItemDto[]>([]);
   readonly errorMessage = signal('');
   readonly editingItemId = signal<string | null>(null);
+  readonly overrideByItemId = signal<Record<string, boolean>>({});
 
   readonly setNameControl = new FormControl('', {
     nonNullable: true,
@@ -876,16 +882,28 @@ export class OptionSetsPage {
     this.itemIsAvailableControl.setValue(item.isAvailable);
   }
 
-  async onToggleItemAvailability(item: OptionItemDto) {
+
+  isEnabled(itemId: string) {
+    return this.overrideByItemId()[itemId] ?? true;
+  }
+
+  async onToggleItemOverride(itemId: string, event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    await this.overridesApi.upsertOverride({ itemType: 'OptionItem', itemId, isEnabled: checked });
+    this.overrideByItemId.update((current) => ({ ...current, [itemId]: checked }));
+  }
+
+  async onToggleItemAvailability(item: OptionItemDto, event: Event) {
     const setId = this.selectedSetIdControl.value;
     if (!setId) {
       return;
     }
 
     const previous = item.isAvailable;
+    const targetAvailability = (event.target as HTMLInputElement).checked;
     this.optionItems.update((items) =>
       items.map((current) =>
-        current.id === item.id ? { ...current, isAvailable: !current.isAvailable } : current,
+        current.id === item.id ? { ...current, isAvailable: targetAvailability } : current,
       ),
     );
 
@@ -894,7 +912,7 @@ export class OptionSetsPage {
         name: item.name,
         sortOrder: item.sortOrder,
         isActive: item.isActive,
-        isAvailable: !previous,
+        isAvailable: targetAvailability,
       });
     } catch {
       this.optionItems.update((items) =>

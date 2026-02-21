@@ -2,6 +2,9 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ExtraDto } from '../../models/pos-catalog.models';
 import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
+import { PosAdminCatalogOverridesApiService } from '../../services/pos-admin-catalog-overrides-api.service';
+import { PosAdminCatalogAvailabilityApiService } from '../../services/pos-admin-catalog-availability-api.service';
+import { StoreContextService } from '../../../../pos/services/store-context.service';
 
 @Component({
   selector: 'app-pos-catalog-extras-page',
@@ -152,15 +155,14 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
                     >
                       {{ item.isActive ? '&#9989; Activo' : '&#9940; Inactivo' }}
                     </span>
-                    <button
-                      type="button"
-                      class="status-badge"
-                      [class.status-badge--active]="item.isAvailable"
-                      [class.status-badge--inactive]="!item.isAvailable"
-                      (click)="onToggleAvailability(item)"
-                    >
-                      {{ item.isAvailable ? '&#128994; Disponible' : '&#9898; Agotado' }}
-                    </button>
+                    <label>
+                      <input type="checkbox" [checked]="isEnabled(item.id)" (change)="onToggleOverride(item.id, $event)" [attr.data-testid]="'override-toggle-Extra-' + item.id" />
+                      Ofrecer
+                    </label>
+                    <label>
+                      <input type="checkbox" [checked]="item.isAvailable" [disabled]="!isEnabled(item.id)" (change)="onToggleAvailability(item, $event)" [attr.data-testid]="'availability-toggle-Extra-' + item.id" />
+                      Disponible en sucursal
+                    </label>
                   </div>
                 </div>
               </div>
@@ -691,10 +693,14 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
 })
 export class ExtrasPage {
   private readonly api = inject(PosCatalogApiService);
+  private readonly overridesApi = inject(PosAdminCatalogOverridesApiService);
+  private readonly availabilityApi = inject(PosAdminCatalogAvailabilityApiService);
+  private readonly storeContext = inject(StoreContextService);
 
   readonly extras = signal<ExtraDto[]>([]);
   readonly errorMessage = signal('');
   readonly editingId = signal<string | null>(null);
+  readonly overrideByItemId = signal<Record<string, boolean>>({});
 
   readonly nameControl = new FormControl('', {
     nonNullable: true,
@@ -750,29 +756,25 @@ export class ExtrasPage {
     this.isAvailableControl.setValue(item.isAvailable);
   }
 
-  async onToggleAvailability(item: ExtraDto) {
-    const previous = item.isAvailable;
-    this.extras.update((items) =>
-      items.map((current) =>
-        current.id === item.id ? { ...current, isAvailable: !current.isAvailable } : current,
-      ),
-    );
+  isEnabled(itemId: string) {
+    return this.overrideByItemId()[itemId] ?? true;
+  }
 
-    try {
-      await this.api.updateExtra(item.id, {
-        name: item.name,
-        price: item.price,
-        isActive: item.isActive,
-        isAvailable: !previous,
-      });
-    } catch {
-      this.extras.update((items) =>
-        items.map((current) =>
-          current.id === item.id ? { ...current, isAvailable: previous } : current,
-        ),
-      );
-      this.errorMessage.set('No fue posible actualizar disponibilidad del extra.');
+  async onToggleOverride(itemId: string, event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    await this.overridesApi.upsertOverride({ itemType: 'Extra', itemId, isEnabled: checked });
+    this.overrideByItemId.update((current) => ({ ...current, [itemId]: checked }));
+  }
+
+  async onToggleAvailability(item: ExtraDto, event: Event) {
+    const storeId = this.storeContext.getActiveStoreId();
+    if (!storeId) {
+      return;
     }
+
+    const checked = (event.target as HTMLInputElement).checked;
+    await this.availabilityApi.upsertAvailability({ storeId, itemType: 'Extra', itemId: item.id, isAvailable: checked });
+    this.extras.update((items) => items.map((current) => current.id === item.id ? { ...current, isAvailable: checked } : current));
   }
 
   async onDeactivate(item: ExtraDto) {

@@ -2,6 +2,12 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CategoryDto, ProductDto, SchemaDto } from '../../models/pos-catalog.models';
 import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
+import { PosAdminCatalogOverridesApiService } from '../../services/pos-admin-catalog-overrides-api.service';
+import { PosAdminCatalogAvailabilityApiService } from '../../services/pos-admin-catalog-availability-api.service';
+import { StoreContextService } from '../../../../pos/services/store-context.service';
+import { PosCatalogSnapshotService } from '../../../../pos/services/pos-catalog-snapshot.service';
+import { HttpErrorResponse } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-pos-catalog-products-page',
@@ -143,6 +149,12 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
           </button>
         </div>
       }
+      @if (tenantRequiredError()) {
+        <p role="alert" data-testid="platform-tenant-required-error">{{ tenantRequiredError() }}</p>
+      }
+      @if (availabilityForbiddenError()) {
+        <p role="alert" data-testid="availability-forbidden-error">{{ availabilityForbiddenError() }}</p>
+      }
 
       <!-- LISTA DE PRODUCTOS -->
       @if (products().length === 0) {
@@ -175,15 +187,14 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
                     >
                       {{ item.isActive ? '✅ Activo' : '⛔ Inactivo' }}
                     </span>
-                    <button
-                      type="button"
-                      class="status-badge"
-                      [class.status-badge--active]="item.isAvailable"
-                      [class.status-badge--inactive]="!item.isAvailable"
-                      (click)="onToggleAvailability(item)"
-                    >
-                      {{ item.isAvailable ? '🟢 Disponible' : '⚪ Agotado' }}
-                    </button>
+                    <label>
+                      <input type="checkbox" [checked]="isOverrideEnabled(item.id)" (change)="onToggleOverride(item.id, $event)" [attr.data-testid]="'override-toggle-Product-' + item.id" />
+                      Ofrecer
+                    </label>
+                    <label>
+                      <input type="checkbox" [checked]="isSnapshotAvailable('Product', item.id)" [disabled]="!isOverrideEnabled(item.id)" (change)="onToggleAvailability(item.id, $event)" [attr.data-testid]="'availability-toggle-Product-' + item.id" />
+                      Disponible en sucursal
+                    </label>
                   </div>
                   <div class="product-category">
                     <span class="meta-label">Categoría:</span>
@@ -692,12 +703,20 @@ import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
 })
 export class ProductsPage {
   private readonly api = inject(PosCatalogApiService);
+  private readonly overridesApi = inject(PosAdminCatalogOverridesApiService);
+  private readonly availabilityApi = inject(PosAdminCatalogAvailabilityApiService);
+  private readonly storeContext = inject(StoreContextService);
+  private readonly snapshotService = inject(PosCatalogSnapshotService);
 
   readonly categories = signal<CategoryDto[]>([]);
   readonly schemas = signal<SchemaDto[]>([]);
   readonly products = signal<ProductDto[]>([]);
   readonly errorMessage = signal('');
   readonly editingId = signal<string | null>(null);
+  readonly overrideByItemId = signal<Record<string, boolean>>({});
+  readonly snapshotAvailabilityByItemId = signal<Record<string, boolean>>({});
+  readonly tenantRequiredError = signal('');
+  readonly availabilityForbiddenError = signal('');
 
   readonly nameControl = new FormControl('', {
     nonNullable: true,
@@ -756,7 +775,7 @@ export class ProductsPage {
         await this.api.createProduct(payload);
       }
       this.resetForm();
-      await this.loadProducts();
+      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability()]);
     } catch {
       this.errorMessage.set('No fue posible guardar el producto.');
     }
@@ -772,32 +791,47 @@ export class ProductsPage {
     this.isAvailableControl.setValue(item.isAvailable);
   }
 
-  async onToggleAvailability(item: ProductDto) {
-    const previous = item.isAvailable;
-    this.products.update((items) =>
-      items.map((current) =>
-        current.id === item.id ? { ...current, isAvailable: !current.isAvailable } : current,
-      ),
-    );
+  isOverrideEnabled(itemId: string) {
+    return this.overrideByItemId()[itemId] ?? true;
+  }
+
+  isSnapshotAvailable(itemType: string, itemId: string) {
+    if (itemType !== 'Product') {
+      return true;
+    }
+
+    return this.snapshotAvailabilityByItemId()[itemId] ?? true;
+  }
+
+  async onToggleOverride(itemId: string, event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.tenantRequiredError.set('');
 
     try {
-      await this.api.updateProduct(item.id, {
-        externalCode: item.externalCode,
-        name: item.name,
-        categoryId: item.categoryId,
-        subcategoryName: item.subcategoryName,
-        basePrice: item.basePrice,
-        isActive: item.isActive,
-        isAvailable: !previous,
-        customizationSchemaId: item.customizationSchemaId,
-      });
-    } catch {
-      this.products.update((items) =>
-        items.map((current) =>
-          current.id === item.id ? { ...current, isAvailable: previous } : current,
-        ),
-      );
-      this.errorMessage.set('No fue posible actualizar disponibilidad del producto.');
+      await this.overridesApi.upsertOverride({ itemType: 'Product', itemId, isEnabled: checked });
+      this.overrideByItemId.update((current) => ({ ...current, [itemId]: checked }));
+      this.snapshotService.invalidate();
+      await this.loadSnapshotAvailability();
+    } catch (error: unknown) {
+      this.handlePosAdminError(error);
+    }
+  }
+
+  async onToggleAvailability(itemId: string, event: Event) {
+    const storeId = this.storeContext.getActiveStoreId();
+    if (!storeId) {
+      return;
+    }
+
+    const checked = (event.target as HTMLInputElement).checked;
+    this.availabilityForbiddenError.set('');
+
+    try {
+      await this.availabilityApi.upsertAvailability({ storeId, itemType: 'Product', itemId, isAvailable: checked });
+      this.snapshotService.invalidate(storeId);
+      await this.loadSnapshotAvailability();
+    } catch (error: unknown) {
+      this.handlePosAdminError(error);
     }
   }
 
@@ -807,7 +841,7 @@ export class ProductsPage {
     this.errorMessage.set('');
     try {
       await this.api.deactivateProduct(item.id);
-      await this.loadProducts();
+      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability()]);
     } catch {
       this.errorMessage.set('No fue posible desactivar el producto.');
     }
@@ -853,10 +887,49 @@ export class ProductsPage {
         this.categoryIdControl.setValue(categories[0].id);
       }
 
-      await this.loadProducts();
+      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability()]);
     } catch {
       this.errorMessage.set('No fue posible cargar catálogos base.');
     }
+  }
+
+
+  private async loadOverrides() {
+    try {
+      const overrides = await this.overridesApi.listOverrides('Product');
+      this.overrideByItemId.set(
+        overrides.reduce<Record<string, boolean>>((acc, item) => ({ ...acc, [item.itemId]: item.isEnabled }), {}),
+      );
+    } catch {
+      this.overrideByItemId.set({});
+    }
+  }
+
+  private async loadSnapshotAvailability() {
+    try {
+      const snapshot = await firstValueFrom(this.snapshotService.getSnapshot({ forceRefresh: true }));
+      const map = (snapshot?.products ?? []).reduce<Record<string, boolean>>(
+        (acc, item) => ({ ...acc, [item.id]: item.isAvailable }),
+        {},
+      );
+      this.snapshotAvailabilityByItemId.set(map);
+    } catch {
+      this.snapshotAvailabilityByItemId.set({});
+    }
+  }
+
+  private handlePosAdminError(error: unknown) {
+    if (error instanceof HttpErrorResponse && error.status === 400) {
+      this.tenantRequiredError.set('Selecciona Tenant en Plataforma para operar POS Admin.');
+      return;
+    }
+
+    if (error instanceof HttpErrorResponse && error.status === 403) {
+      this.availabilityForbiddenError.set('La sucursal no pertenece al tenant seleccionado.');
+      return;
+    }
+
+    this.errorMessage.set('No fue posible actualizar estado POS Admin.');
   }
 
   private async loadProducts() {

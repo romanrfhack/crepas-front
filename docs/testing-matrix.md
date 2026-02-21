@@ -64,3 +64,6 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 
 | Snapshot template + tenant overrides + store availability | `backend/tests/CobranzaDigital.Api.Tests/PosCatalogIntegrationTests.cs` (`Snapshot_Uses_Etag_And_Changes_When_Availability_Changes`) | Validar exclusión de items disabled, `isAvailable` por store, y ciclo `200 -> 304 -> 200` cuando cambian overrides/disponibilidad. |
 | Create sale validation disabled vs unavailable | `backend/tests/CobranzaDigital.Api.Tests/PosSalesIntegrationTests.cs` (`CreateSale_ReturnsConflict_WithStableItemUnavailablePayload_When_Product_NotAvailable`) | `409` con `reason=DisabledByTenant` para override tenant y `reason=UnavailableInStore` para disponibilidad operativa. |
+
+- Platform templates UI: Unit (PlatformCatalogTemplatesApiService, platform tenant interceptor) + E2E UI-contract (routes /app/platform/* con data-testid platform-*)
+- Tenant overrides/availability UI: Unit (POS admin catalog services + error propagation) + E2E UI-contract (override-toggle-*, availability-toggle-*)
