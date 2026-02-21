@@ -73,6 +73,40 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     }
 
     [Fact]
+    public async Task Snapshot_Filters_OutOfStock_When_ShowOnlyInStock_Enabled_And_Etag_Changes_After_Adjustment()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"stock-cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var p1 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock P1", categoryId = category.Id, basePrice = 55m, isActive = true, isAvailable = true });
+        var p2 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock P2", categoryId = category.Id, basePrice = 65m, isActive = true, isAvailable = true });
+
+        var snapshot = await GetSnapshotAsync(token);
+
+        using (var settingsReq = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory/settings", token))
+        {
+            settingsReq.Content = JsonContent.Create(new { showOnlyInStock = true });
+            using var settingsResp = await _client.SendAsync(settingsReq);
+            Assert.Equal(HttpStatusCode.OK, settingsResp.StatusCode);
+        }
+
+        await UpsertInventoryAsync(token, snapshot.StoreId, p1.Id, 5m);
+        await UpsertInventoryAsync(token, snapshot.StoreId, p2.Id, 0m);
+
+        var etag = await GetSnapshotEtagAsync(token);
+
+        var stockFilteredSnapshot = await GetSnapshotAsync(token);
+        Assert.Contains(stockFilteredSnapshot.Products, x => x.Id == p1.Id);
+        Assert.DoesNotContain(stockFilteredSnapshot.Products, x => x.Id == p2.Id);
+
+        await UpsertInventoryAsync(token, snapshot.StoreId, p2.Id, 3m);
+        var changedEtag = await ToggleAvailabilityAndAssertEtagChangedAsync(token, etag, () => Task.CompletedTask);
+        Assert.NotEqual(etag, changedEtag);
+
+        var refreshedSnapshot = await GetSnapshotAsync(token);
+        Assert.Contains(refreshedSnapshot.Products, x => x.Id == p2.Id);
+    }
+
+    [Fact]
     public async Task Snapshot_Allows_Cashier()
     {
         var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
@@ -283,6 +317,14 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         return changedEtag;
     }
 
+    private async Task UpsertInventoryAsync(string token, Guid storeId, Guid productId, decimal onHand)
+    {
+        using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory", token);
+        request.Content = JsonContent.Create(new { storeId, productId, onHand });
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     private async Task UpdateProductAsync(string token, ProductResponse product)
     {
         using var updateReq = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/pos/admin/products/{product.Id}", token);
@@ -392,6 +434,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive, bool IsAvailable);
     private sealed record CatalogItemOverrideResponse(string ItemType, Guid ItemId, bool IsEnabled, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku, Guid? CatalogTemplateId);
     private sealed record CatalogStoreAvailabilityResponse(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku);
+    private sealed record StoreInventoryItemResponse(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset UpdatedAtUtc);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
     private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record PagedResponse(List<UserListItem> Items);

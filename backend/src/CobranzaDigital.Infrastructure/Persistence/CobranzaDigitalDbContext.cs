@@ -41,6 +41,7 @@ public sealed class CobranzaDigitalDbContext
     public DbSet<PosShift> PosShifts => Set<PosShift>();
     public DbSet<Store> Stores => Set<Store>();
     public DbSet<PosSettings> PosSettings => Set<PosSettings>();
+    public DbSet<StoreInventory> StoreInventories => Set<StoreInventory>();
     public DbSet<Vertical> Verticals => Set<Vertical>();
     public DbSet<Tenant> Tenants => Set<Tenant>();
 

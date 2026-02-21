@@ -91,6 +91,18 @@ public sealed class PosAdminCatalogController : ControllerBase
     public Task<ProductOverrideDto> UpsertOverride(Guid productId, string groupKey, [FromBody] OverrideUpsertRequest request, CancellationToken ct) => _service.UpsertOverrideAsync(productId, groupKey, request, ct);
 
 
+    [HttpGet("inventory")]
+    public Task<IReadOnlyList<StoreInventoryItemDto>> GetInventory([FromQuery] Guid storeId, [FromQuery] string? search, CancellationToken ct = default) =>
+        _service.GetInventoryAsync(storeId, search, ct);
+
+    [HttpPut("inventory")]
+    public Task<StoreInventoryItemDto> UpsertInventory([FromBody] UpsertStoreInventoryRequest request, CancellationToken ct) =>
+        _service.UpsertInventoryAsync(request, ct);
+
+    [HttpPut("inventory/settings")]
+    public Task<PosInventorySettingsDto> UpdateInventorySettings([FromBody] UpdatePosInventorySettingsRequest request, CancellationToken ct) =>
+        _service.UpdateInventorySettingsAsync(request, ct);
+
     [HttpGet("catalog/overrides")]
     public Task<IReadOnlyList<CatalogItemOverrideDto>> GetTenantOverrides([FromQuery] string? type, CancellationToken ct = default) => _service.GetTenantOverridesAsync(type, ct);
 

@@ -100,6 +100,18 @@ public sealed class PosSettings : Entity
     public int MaxStoresAllowed { get; set; } = 1;
     public decimal CashDifferenceThreshold { get; set; } = 0m;
     public Guid DefaultStoreId { get; set; }
+    public bool ShowOnlyInStock { get; set; }
+}
+
+public sealed class StoreInventory : Entity
+{
+    public Guid StoreId { get; set; }
+    public Guid ProductId { get; set; }
+    public decimal OnHand { get; set; }
+    public decimal Reserved { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+    public Guid? UpdatedByUserId { get; set; }
+    public byte[] RowVersion { get; set; } = [];
 }
 
 public sealed class SaleItem : Entity

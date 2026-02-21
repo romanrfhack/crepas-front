@@ -128,7 +128,8 @@ public static class PosBootstrapper
                 MultiStoreEnabled = false,
                 MaxStoresAllowed = 1,
                 CashDifferenceThreshold = 50m,
-                DefaultStoreId = defaultStore.Id
+                DefaultStoreId = defaultStore.Id,
+                ShowOnlyInStock = false
             });
             await db.SaveChangesAsync().ConfigureAwait(false);
         }
