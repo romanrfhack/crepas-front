@@ -32,7 +32,7 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         var seed = await SeedReportDatasetAsync();
         var baseQuery = $"dateFrom=2026-04-01&dateTo=2026-04-02&storeId={seed.StoreId:D}";
 
-        using var categoriesReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/categories?{baseQuery}", adminToken);
+        using var categoriesReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/categories?{baseQuery}", adminToken, seed.TenantId);
         using var categoriesResp = await _client.SendAsync(categoriesReq);
         var categoriesPayload = await categoriesResp.Content.ReadFromJsonAsync<CategoriesResponse>();
 
@@ -42,7 +42,7 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         Assert.Contains(categoriesPayload.Items, x => x.CategoryId == seed.CategoryA && x.Tickets == 1 && x.Quantity == 1 && x.GrossSales == 120m);
         Assert.Contains(categoriesPayload.Items, x => x.CategoryId == seed.CategoryB && x.Tickets == 1 && x.Quantity == 2 && x.GrossSales == 140m);
 
-        using var productsReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/products?{baseQuery}&top=20", adminToken);
+        using var productsReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/products?{baseQuery}&top=20", adminToken, seed.TenantId);
         using var productsResp = await _client.SendAsync(productsReq);
         var productsPayload = await productsResp.Content.ReadFromJsonAsync<ProductsResponse>();
 
@@ -51,7 +51,7 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         Assert.Contains(productsPayload!.Items, x => x.ProductId == seed.ProductA && x.Sku == $"{Prefix}-P-A" && x.Tickets == 1 && x.Quantity == 1 && x.GrossSales == 120m);
         Assert.Contains(productsPayload.Items, x => x.ProductId == seed.ProductB && x.Sku == $"{Prefix}-P-B" && x.Tickets == 1 && x.Quantity == 2 && x.GrossSales == 140m);
 
-        using var extrasReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/addons/extras?{baseQuery}&top=20", adminToken);
+        using var extrasReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/addons/extras?{baseQuery}&top=20", adminToken, seed.TenantId);
         using var extrasResp = await _client.SendAsync(extrasReq);
         var extrasPayload = await extrasResp.Content.ReadFromJsonAsync<ExtrasResponse>();
 
@@ -62,7 +62,7 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         Assert.Equal(2, extrasPayload.Items[0].Quantity);
         Assert.Equal(20m, extrasPayload.Items[0].GrossSales);
 
-        using var optionsReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/addons/options?{baseQuery}&top=20", adminToken);
+        using var optionsReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/sales/addons/options?{baseQuery}&top=20", adminToken, seed.TenantId);
         using var optionsResp = await _client.SendAsync(optionsReq);
         var optionsPayload = await optionsResp.Content.ReadFromJsonAsync<OptionsResponse>();
 
@@ -73,7 +73,7 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         Assert.Equal(2, optionsPayload.Items[0].UsageCount);
         Assert.Equal(20m, optionsPayload.Items[0].GrossImpact);
 
-        using var kpisReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/kpis/summary?{baseQuery}", adminToken);
+        using var kpisReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/kpis/summary?{baseQuery}", adminToken, seed.TenantId);
         using var kpisResp = await _client.SendAsync(kpisReq);
         var kpisPayload = await kpisResp.Content.ReadFromJsonAsync<KpisSummaryResponse>();
 
@@ -87,7 +87,7 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         Assert.Equal(1, kpisPayload.VoidCount);
         Assert.Equal(0.3333m, kpisPayload.VoidRate);
 
-        using var controlReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/control/cash-differences?{baseQuery}", adminToken);
+        using var controlReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/control/cash-differences?{baseQuery}", adminToken, seed.TenantId);
         using var controlResp = await _client.SendAsync(controlReq);
         var controlPayload = await controlResp.Content.ReadFromJsonAsync<CashControlResponse>();
 
@@ -249,7 +249,7 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
             new Payment { Id = Guid.NewGuid(), SaleId = voidSale.Id, Method = PaymentMethod.Cash, Amount = 50m, CreatedAtUtc = voidSale.OccurredAtUtc });
 
         await db.SaveChangesAsync();
-        return new SeedResult(storeId, cashierA, cashierB, cashierAUserName, cashierBUserName, shift1, shift2, categoryA, categoryB, productA, productB, extraA, optionItemA);
+        return new SeedResult(storeId, tenantId, cashierA, cashierB, cashierAUserName, cashierBUserName, shift1, shift2, categoryA, categoryB, productA, productB, extraA, optionItemA);
     }
 
     private static Sale CreateSale(Guid storeId, Guid tenantId, Guid shiftId, Guid cashierId, DateTimeOffset occurredAtUtc, decimal total, SaleStatus status)
@@ -325,10 +325,15 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         return payload.Items[0].Id;
     }
 
-    private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token)
+    private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token, Guid? tenantId = null)
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (tenantId.HasValue)
+        {
+            request.Headers.Add("X-Tenant-Id", tenantId.Value.ToString("D"));
+        }
+
         return request;
     }
 
@@ -340,6 +345,7 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
 
     private sealed record SeedResult(
         Guid StoreId,
+        Guid TenantId,
         Guid CashierA,
         Guid CashierB,
         string CashierAUserName,
