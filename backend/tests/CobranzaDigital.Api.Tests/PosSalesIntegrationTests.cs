@@ -595,6 +595,8 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
 
     private async Task EnsureOpenShiftAsync(string token, string cashierEmail, decimal initialCash = 500m)
     {
+        await UpdateInventorySettingsAsync(token, false);
+
         var defaultStoreId = await GetDefaultStoreIdAsync();
 
         using var currentReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/current", token);

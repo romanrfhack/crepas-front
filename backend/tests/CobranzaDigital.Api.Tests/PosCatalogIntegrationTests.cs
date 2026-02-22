@@ -83,28 +83,30 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         var snapshot = await GetSnapshotAsync(token);
 
-        using (var settingsReq = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory/settings", token))
+        await UpdateInventorySettingsAsync(token, true);
+
+        try
         {
-            settingsReq.Content = JsonContent.Create(new { showOnlyInStock = true });
-            using var settingsResp = await _client.SendAsync(settingsReq);
-            Assert.Equal(HttpStatusCode.OK, settingsResp.StatusCode);
+            await UpsertInventoryAsync(token, snapshot.StoreId, p1.Id, 5m);
+            await UpsertInventoryAsync(token, snapshot.StoreId, p2.Id, 0m);
+
+            var etag = await GetSnapshotEtagAsync(token);
+
+            var stockFilteredSnapshot = await GetSnapshotAsync(token);
+            Assert.Contains(stockFilteredSnapshot.Products, x => x.Id == p1.Id);
+            Assert.DoesNotContain(stockFilteredSnapshot.Products, x => x.Id == p2.Id);
+
+            await UpsertInventoryAsync(token, snapshot.StoreId, p2.Id, 3m);
+            var changedEtag = await ToggleAvailabilityAndAssertEtagChangedAsync(token, etag, () => Task.CompletedTask);
+            Assert.NotEqual(etag, changedEtag);
+
+            var refreshedSnapshot = await GetSnapshotAsync(token);
+            Assert.Contains(refreshedSnapshot.Products, x => x.Id == p2.Id);
         }
-
-        await UpsertInventoryAsync(token, snapshot.StoreId, p1.Id, 5m);
-        await UpsertInventoryAsync(token, snapshot.StoreId, p2.Id, 0m);
-
-        var etag = await GetSnapshotEtagAsync(token);
-
-        var stockFilteredSnapshot = await GetSnapshotAsync(token);
-        Assert.Contains(stockFilteredSnapshot.Products, x => x.Id == p1.Id);
-        Assert.DoesNotContain(stockFilteredSnapshot.Products, x => x.Id == p2.Id);
-
-        await UpsertInventoryAsync(token, snapshot.StoreId, p2.Id, 3m);
-        var changedEtag = await ToggleAvailabilityAndAssertEtagChangedAsync(token, etag, () => Task.CompletedTask);
-        Assert.NotEqual(etag, changedEtag);
-
-        var refreshedSnapshot = await GetSnapshotAsync(token);
-        Assert.Contains(refreshedSnapshot.Products, x => x.Id == p2.Id);
+        finally
+        {
+            await UpdateInventorySettingsAsync(token, false);
+        }
     }
 
     [Fact]
@@ -408,6 +410,14 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var response = await _client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<List<StoreInventoryItemResponse>>())!;
+    }
+
+    private async Task UpdateInventorySettingsAsync(string token, bool showOnlyInStock)
+    {
+        using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory/settings", token);
+        request.Content = JsonContent.Create(new { showOnlyInStock });
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     private async Task UpsertInventoryAsync(string token, Guid storeId, Guid productId, decimal onHand)

@@ -30,7 +30,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         var setup = await SeedIsolationDataAsync();
         var superAdminToken = await LoginAndGetAccessTokenAsync(setup.SuperAdminEmail, setup.Password);
 
-        using var globalRequest = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/reports/kpis/summary?dateFrom=2026-03-01&dateTo=2026-03-01", superAdminToken);
+        using var globalRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/kpis/summary?dateFrom={setup.SalesDate:yyyy-MM-dd}&dateTo={setup.SalesDate:yyyy-MM-dd}", superAdminToken);
         using var globalResponse = await _client.SendAsync(globalRequest);
         var globalKpis = await globalResponse.Content.ReadFromJsonAsync<PosKpisSummaryDto>();
 
@@ -39,7 +39,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         Assert.Equal(2, globalKpis.Tickets);
         Assert.Equal(30m, globalKpis.GrossSales);
 
-        using var tenantARequest = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/reports/kpis/summary?dateFrom=2026-03-01&dateTo=2026-03-01", superAdminToken);
+        using var tenantARequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/kpis/summary?dateFrom={setup.SalesDate:yyyy-MM-dd}&dateTo={setup.SalesDate:yyyy-MM-dd}", superAdminToken);
         tenantARequest.Headers.Add("X-Tenant-Id", setup.TenantAId.ToString("D"));
         using var tenantAResponse = await _client.SendAsync(tenantARequest);
         var tenantAKpis = await tenantAResponse.Content.ReadFromJsonAsync<PosKpisSummaryDto>();
@@ -49,7 +49,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         Assert.Equal(1, tenantAKpis.Tickets);
         Assert.Equal(10m, tenantAKpis.GrossSales);
 
-        using var tenantBRequest = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/reports/kpis/summary?dateFrom=2026-03-01&dateTo=2026-03-01", superAdminToken);
+        using var tenantBRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/kpis/summary?dateFrom={setup.SalesDate:yyyy-MM-dd}&dateTo={setup.SalesDate:yyyy-MM-dd}", superAdminToken);
         tenantBRequest.Headers.Add("X-Tenant-Id", setup.TenantBId.ToString("D"));
         using var tenantBResponse = await _client.SendAsync(tenantBRequest);
         var tenantBKpis = await tenantBResponse.Content.ReadFromJsonAsync<PosKpisSummaryDto>();
@@ -136,7 +136,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-            productId = await db.Products.AsNoTracking().Select(x => x.Id).FirstAsync();
+            productId = setup.TenantBProductId;
         }
 
         using (var forbiddenRequest = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory", managerAToken))
@@ -268,14 +268,37 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
             new PosShift { Id = Guid.NewGuid(), StoreId = storeA.Id, TenantId = tenantA.Id, OpenedByUserId = Guid.NewGuid(), OpenedAtUtc = DateTimeOffset.UtcNow, ClosedAtUtc = DateTimeOffset.UtcNow },
             new PosShift { Id = Guid.NewGuid(), StoreId = storeB.Id, TenantId = tenantB.Id, OpenedByUserId = Guid.NewGuid(), OpenedAtUtc = DateTimeOffset.UtcNow, ClosedAtUtc = DateTimeOffset.UtcNow });
 
-        var salesDay = new DateTimeOffset(2026, 3, 1, 12, 0, 0, TimeSpan.Zero);
+        var salesDay = DateTimeOffset.UtcNow.AddYears(1).Date.AddHours(12);
+        var tenantBCategory = new Category
+        {
+            Id = Guid.NewGuid(),
+            CatalogTemplateId = catalogTemplate.Id,
+            Name = $"Inventory Tenant B {Guid.NewGuid():N}",
+            SortOrder = 1,
+            IsActive = true,
+            UpdatedAtUtc = DateTimeOffset.UtcNow
+        };
+        var tenantBProduct = new Product
+        {
+            Id = Guid.NewGuid(),
+            CatalogTemplateId = catalogTemplate.Id,
+            Name = $"Inventory Product Tenant B {Guid.NewGuid():N}",
+            CategoryId = tenantBCategory.Id,
+            BasePrice = 15m,
+            IsActive = true,
+            IsAvailable = true,
+            UpdatedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        db.Categories.Add(tenantBCategory);
+        db.Products.Add(tenantBProduct);
         db.Sales.AddRange(
             new Sale { Id = Guid.NewGuid(), Folio = $"A-{Guid.NewGuid():N}", StoreId = storeA.Id, TenantId = tenantA.Id, CreatedByUserId = Guid.NewGuid(), OccurredAtUtc = salesDay, Subtotal = 10m, Total = 10m, Status = SaleStatus.Completed },
             new Sale { Id = Guid.NewGuid(), Folio = $"B-{Guid.NewGuid():N}", StoreId = storeB.Id, TenantId = tenantB.Id, CreatedByUserId = Guid.NewGuid(), OccurredAtUtc = salesDay, Subtotal = 20m, Total = 20m, Status = SaleStatus.Completed });
 
         await db.SaveChangesAsync();
 
-        return new SeedResult(managerAEmail, managerBEmail, cashierAEmail, superAdminEmail, password, tenantA.Id, tenantB.Id, storeA.Id, storeB.Id);
+        return new SeedResult(managerAEmail, managerBEmail, cashierAEmail, superAdminEmail, password, tenantA.Id, tenantB.Id, storeA.Id, storeB.Id, DateOnly.FromDateTime(salesDay.UtcDateTime), tenantBProduct.Id);
     }
 
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
@@ -330,7 +353,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         return request;
     }
 
-    private sealed record SeedResult(string ManagerAEmail, string ManagerBEmail, string CashierAEmail, string SuperAdminEmail, string Password, Guid TenantAId, Guid TenantBId, Guid StoreAId, Guid StoreBId);
+    private sealed record SeedResult(string ManagerAEmail, string ManagerBEmail, string CashierAEmail, string SuperAdminEmail, string Password, Guid TenantAId, Guid TenantBId, Guid StoreAId, Guid StoreBId, DateOnly SalesDate, Guid TenantBProductId);
     private sealed record PagedResponse(List<UserListItem> Items);
     private sealed record UserListItem([property: JsonPropertyName("id")] string Id);
 
