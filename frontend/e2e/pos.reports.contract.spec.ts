@@ -134,6 +134,106 @@ test('POS reports UI-contract renders sections and propagates selected filters',
       });
     }
 
+    if (url.pathname.endsWith('/reports/sales/categories')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          dateFrom: '2026-03-01',
+          dateTo: '2026-03-07',
+          items: [
+            {
+              categoryId: 'cat-hot-drinks',
+              categoryName: 'Bebidas calientes',
+              quantity: 2,
+              grossSales: 220,
+            },
+          ],
+        }),
+      });
+    }
+
+    if (url.pathname.endsWith('/reports/sales/products')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          dateFrom: '2026-03-01',
+          dateTo: '2026-03-07',
+          top: 20,
+          items: [
+            {
+              productId: 'p1',
+              productName: 'Latte',
+              quantity: 2,
+              grossSales: 220,
+            },
+          ],
+        }),
+      });
+    }
+
+    if (url.pathname.endsWith('/reports/sales/addons/extras')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          dateFrom: '2026-03-01',
+          dateTo: '2026-03-07',
+          top: 20,
+          items: [
+            {
+              extraId: 'extra-1',
+              extraName: 'Shot extra',
+              quantity: 1,
+              grossSales: 20,
+            },
+          ],
+        }),
+      });
+    }
+
+    if (url.pathname.endsWith('/reports/sales/addons/options')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          dateFrom: '2026-03-01',
+          dateTo: '2026-03-07',
+          top: 20,
+          items: [
+            {
+              optionItemId: 'option-1',
+              optionItemName: 'Leche deslactosada',
+              usageCount: 1,
+              grossImpact: 10,
+            },
+          ],
+        }),
+      });
+    }
+
+    if (url.pathname.endsWith('/reports/control/cash-differences')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          dateFrom: '2026-03-01',
+          dateTo: '2026-03-07',
+          shifts: [
+            {
+              shiftId: 'shift-e2e',
+              businessDate: '2026-03-07',
+              cashierUserId: 'cashier-e2e',
+              expectedCash: 100,
+              countedCash: 100,
+              difference: 0,
+            },
+          ],
+        }),
+      });
+    }
+
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
