@@ -274,9 +274,15 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
 
         var uniqueSuffix = Guid.NewGuid().ToString("N");
+        var catalogTemplateId = await db.CatalogTemplates.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => x.Id)
+            .FirstAsync();
+
         var category = new Category
         {
             Id = Guid.NewGuid(),
+            CatalogTemplateId = catalogTemplateId,
             Name = $"{TestDataPrefix}-Category-{uniqueSuffix}",
             SortOrder = 1,
             IsActive = true
@@ -286,6 +292,7 @@ public sealed class PosShiftIntegrationTests : IClassFixture<CobranzaDigitalApiF
         var product = new Product
         {
             Id = Guid.NewGuid(),
+            CatalogTemplateId = catalogTemplateId,
             Name = $"{TestDataPrefix}-Product-{uniqueSuffix}",
             CategoryId = category.Id,
             BasePrice = expectedBasePrice,

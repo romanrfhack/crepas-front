@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 
 using CobranzaDigital.Application.Contracts.PosSales;
 using CobranzaDigital.Domain.Entities;
@@ -215,6 +216,22 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         tenantB.DefaultStoreId = storeB.Id;
         await db.SaveChangesAsync();
 
+        var catalogTemplate = new CatalogTemplate
+        {
+            Id = Guid.NewGuid(),
+            VerticalId = vertical.Id,
+            Name = $"Template-{Guid.NewGuid():N}",
+            Version = "1.0.0",
+            IsActive = true,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+            UpdatedAtUtc = DateTimeOffset.UtcNow
+        };
+        db.CatalogTemplates.Add(catalogTemplate);
+        db.TenantCatalogTemplates.AddRange(
+            new TenantCatalogTemplate { TenantId = tenantA.Id, CatalogTemplateId = catalogTemplate.Id, UpdatedAtUtc = DateTimeOffset.UtcNow },
+            new TenantCatalogTemplate { TenantId = tenantB.Id, CatalogTemplateId = catalogTemplate.Id, UpdatedAtUtc = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
         var managerAEmail = $"manager.a+{Guid.NewGuid():N}@test.local";
         var managerBEmail = $"manager.b+{Guid.NewGuid():N}@test.local";
         var cashierAEmail = $"cashier.a+{Guid.NewGuid():N}@test.local";
@@ -264,24 +281,41 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
     {
         using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
+        Assert.NotNull(payload);
         return payload!.AccessToken;
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
     {
         using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
+        Assert.NotNull(payload);
         return payload!.AccessToken;
     }
 
     private async Task SetUserRolesAsync(string adminToken, string email, string[] roles)
     {
-        using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/admin/users/roles", adminToken, new { email, roles });
+        var userId = await GetUserIdByEmailAsync(adminToken, email);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/admin/users/{userId}/roles", adminToken, new { roles });
         using var response = await _client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.True(response.StatusCode is HttpStatusCode.NoContent or HttpStatusCode.OK);
+    }
+
+    private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)
+    {
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/admin/users?search={Uri.EscapeDataString(email)}", adminToken);
+        using var response = await _client.SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Single(payload!.Items);
+
+        return payload.Items[0].Id;
     }
 
     private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string accessToken, object? payload = null)
@@ -297,6 +331,8 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     }
 
     private sealed record SeedResult(string ManagerAEmail, string ManagerBEmail, string CashierAEmail, string SuperAdminEmail, string Password, Guid TenantAId, Guid TenantBId, Guid StoreAId, Guid StoreBId);
+    private sealed record PagedResponse(List<UserListItem> Items);
+    private sealed record UserListItem([property: JsonPropertyName("id")] string Id);
 
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
 }

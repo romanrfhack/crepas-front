@@ -42,39 +42,183 @@ public sealed class PosCatalogService : IPosCatalogService
         ITenantContext tenantContext)
     { _db = db; _auditLogger = auditLogger; _logger = logger; _groupValidator = groupValidator; _productValidator = productValidator; _extraValidator = extraValidator; _includedValidator = includedValidator; _overrideValidator = overrideValidator; _storeContext = storeContext; _tenantContext = tenantContext; }
 
-    public async Task<IReadOnlyList<CategoryDto>> GetCategoriesAsync(bool includeInactive, CancellationToken ct) =>
-        await _db.Categories.AsNoTracking().Where(x => includeInactive || x.IsActive).OrderBy(x => x.SortOrder).Select(x => new CategoryDto(x.Id, x.Name, x.SortOrder, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
-    public async Task<CategoryDto> CreateCategoryAsync(UpsertCategoryRequest request, CancellationToken ct) { var e = new Category { Id = Guid.NewGuid(), Name = request.Name, SortOrder = request.SortOrder, IsActive = request.IsActive }; _db.Categories.Add(e); await _db.SaveChangesAsync(ct).ConfigureAwait(false); return new(e.Id, e.Name, e.SortOrder, e.IsActive); }
+    public async Task<IReadOnlyList<CategoryDto>> GetCategoriesAsync(bool includeInactive, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+
+        return await _db.Categories
+            .AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .Where(x => includeInactive || x.IsActive)
+            .OrderBy(x => x.SortOrder)
+            .Select(x => new CategoryDto(x.Id, x.Name, x.SortOrder, x.IsActive))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<CategoryDto> CreateCategoryAsync(UpsertCategoryRequest request, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var e = new Category
+        {
+            Id = Guid.NewGuid(),
+            CatalogTemplateId = catalogTemplateId,
+            Name = request.Name,
+            SortOrder = request.SortOrder,
+            IsActive = request.IsActive
+        };
+
+        _db.Categories.Add(e);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new CategoryDto(e.Id, e.Name, e.SortOrder, e.IsActive);
+    }
     public async Task<CategoryDto> UpdateCategoryAsync(Guid id, UpsertCategoryRequest request, CancellationToken ct) { var e = await FindAsync(_db.Categories, id, ct).ConfigureAwait(false); var before = new { e.Name, e.SortOrder, e.IsActive }; e.Name = request.Name; e.SortOrder = request.SortOrder; e.IsActive = request.IsActive; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Category", "Update", id, before, new { e.Name, e.SortOrder, e.IsActive }, ct).ConfigureAwait(false); return new(e.Id, e.Name, e.SortOrder, e.IsActive); }
     public async Task DeactivateCategoryAsync(Guid id, CancellationToken ct) { var e = await FindAsync(_db.Categories, id, ct).ConfigureAwait(false); var before = new { e.IsActive }; e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Category", "Deactivate", id, before, new { e.IsActive }, ct).ConfigureAwait(false); }
 
-    public async Task<IReadOnlyList<ProductDto>> GetProductsAsync(bool includeInactive, Guid? categoryId, CancellationToken ct) => await _db.Products.AsNoTracking().Where(x => (includeInactive || x.IsActive) && (!categoryId.HasValue || x.CategoryId == categoryId.Value)).Select(x => Map(x)).ToListAsync(ct).ConfigureAwait(false);
-    public async Task<ProductDto> CreateProductAsync(UpsertProductRequest request, CancellationToken ct) { await _productValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); await EnsureSchemaActiveIfPresent(request.CustomizationSchemaId, ct).ConfigureAwait(false); var e = new Product { Id = Guid.NewGuid(), ExternalCode = request.ExternalCode, Name = request.Name, CategoryId = request.CategoryId, SubcategoryName = request.SubcategoryName, BasePrice = request.BasePrice, IsActive = request.IsActive, IsAvailable = request.IsAvailable, CustomizationSchemaId = request.CustomizationSchemaId }; _db.Products.Add(e); await _db.SaveChangesAsync(ct).ConfigureAwait(false); return Map(e); }
+    public async Task<IReadOnlyList<ProductDto>> GetProductsAsync(bool includeInactive, Guid? categoryId, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+
+        return await _db.Products
+            .AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .Where(x => includeInactive || x.IsActive)
+            .Where(x => !categoryId.HasValue || x.CategoryId == categoryId.Value)
+            .Select(Map)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<ProductDto> CreateProductAsync(UpsertProductRequest request, CancellationToken ct)
+    {
+        await _productValidator.EnsureValidAsync(request, ct).ConfigureAwait(false);
+        await EnsureSchemaActiveIfPresent(request.CustomizationSchemaId, ct).ConfigureAwait(false);
+
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var e = new Product
+        {
+            Id = Guid.NewGuid(),
+            CatalogTemplateId = catalogTemplateId,
+            ExternalCode = request.ExternalCode,
+            Name = request.Name,
+            CategoryId = request.CategoryId,
+            SubcategoryName = request.SubcategoryName,
+            BasePrice = request.BasePrice,
+            IsActive = request.IsActive,
+            IsAvailable = request.IsAvailable,
+            CustomizationSchemaId = request.CustomizationSchemaId
+        };
+
+        _db.Products.Add(e);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Map(e);
+    }
     public async Task<ProductDto> UpdateProductAsync(Guid id, UpsertProductRequest request, CancellationToken ct) { await _productValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); await EnsureSchemaActiveIfPresent(request.CustomizationSchemaId, ct).ConfigureAwait(false); var e = await FindAsync(_db.Products, id, ct).ConfigureAwait(false); var before = Map(e); e.ExternalCode = request.ExternalCode; e.Name = request.Name; e.CategoryId = request.CategoryId; e.SubcategoryName = request.SubcategoryName; e.BasePrice = request.BasePrice; e.IsActive = request.IsActive; e.IsAvailable = request.IsAvailable; e.CustomizationSchemaId = request.CustomizationSchemaId; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Product", before.IsAvailable != e.IsAvailable ? "UpdateProductAvailability" : "UpdateProduct", id, before, Map(e), ct).ConfigureAwait(false); return Map(e); }
     public async Task DeactivateProductAsync(Guid id, CancellationToken ct) { var e = await FindAsync(_db.Products, id, ct).ConfigureAwait(false); var before = new { e.IsActive }; e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Product", "Deactivate", id, before, new { e.IsActive }, ct).ConfigureAwait(false); }
 
-    public async Task<IReadOnlyList<OptionSetDto>> GetOptionSetsAsync(bool includeInactive, CancellationToken ct) => await _db.OptionSets.AsNoTracking().Where(x => includeInactive || x.IsActive).Select(x => new OptionSetDto(x.Id, x.Name, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
-    public async Task<OptionSetDto> CreateOptionSetAsync(UpsertOptionSetRequest request, CancellationToken ct) { var e = new OptionSet { Id = Guid.NewGuid(), Name = request.Name, IsActive = request.IsActive }; _db.OptionSets.Add(e); await _db.SaveChangesAsync(ct).ConfigureAwait(false); return new(e.Id, e.Name, e.IsActive); }
+    public async Task<IReadOnlyList<OptionSetDto>> GetOptionSetsAsync(bool includeInactive, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+
+        return await _db.OptionSets.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .Where(x => includeInactive || x.IsActive)
+            .Select(x => new OptionSetDto(x.Id, x.Name, x.IsActive))
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+    public async Task<OptionSetDto> CreateOptionSetAsync(UpsertOptionSetRequest request, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var e = new OptionSet { Id = Guid.NewGuid(), CatalogTemplateId = catalogTemplateId, Name = request.Name, IsActive = request.IsActive };
+        _db.OptionSets.Add(e);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new OptionSetDto(e.Id, e.Name, e.IsActive);
+    }
     public async Task<OptionSetDto> UpdateOptionSetAsync(Guid id, UpsertOptionSetRequest request, CancellationToken ct) { var e = await FindAsync(_db.OptionSets, id, ct).ConfigureAwait(false); var before = new { e.Name, e.IsActive }; e.Name = request.Name; e.IsActive = request.IsActive; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("OptionSet", "Update", id, before, new { e.Name, e.IsActive }, ct).ConfigureAwait(false); return new(e.Id, e.Name, e.IsActive); }
     public async Task DeactivateOptionSetAsync(Guid id, CancellationToken ct) { var e = await FindAsync(_db.OptionSets, id, ct).ConfigureAwait(false); e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); }
 
-    public async Task<IReadOnlyList<OptionItemDto>> GetOptionItemsAsync(Guid optionSetId, bool includeInactive, CancellationToken ct) => await _db.OptionItems.AsNoTracking().Where(x => x.OptionSetId == optionSetId && (includeInactive || x.IsActive)).Select(x => new OptionItemDto(x.Id, x.OptionSetId, x.Name, x.IsActive, x.IsAvailable, x.SortOrder)).ToListAsync(ct).ConfigureAwait(false);
-    public async Task<OptionItemDto> CreateOptionItemAsync(Guid optionSetId, UpsertOptionItemRequest request, CancellationToken ct) { var e = new OptionItem { Id = Guid.NewGuid(), OptionSetId = optionSetId, Name = request.Name, IsActive = request.IsActive, IsAvailable = request.IsAvailable, SortOrder = request.SortOrder }; _db.OptionItems.Add(e); await _db.SaveChangesAsync(ct).ConfigureAwait(false); return new(e.Id, e.OptionSetId, e.Name, e.IsActive, e.IsAvailable, e.SortOrder); }
+    public async Task<IReadOnlyList<OptionItemDto>> GetOptionItemsAsync(Guid optionSetId, bool includeInactive, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+
+        return await _db.OptionItems.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId && x.OptionSetId == optionSetId && (includeInactive || x.IsActive))
+            .Select(x => new OptionItemDto(x.Id, x.OptionSetId, x.Name, x.IsActive, x.IsAvailable, x.SortOrder))
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+    public async Task<OptionItemDto> CreateOptionItemAsync(Guid optionSetId, UpsertOptionItemRequest request, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var e = new OptionItem { Id = Guid.NewGuid(), CatalogTemplateId = catalogTemplateId, OptionSetId = optionSetId, Name = request.Name, IsActive = request.IsActive, IsAvailable = request.IsAvailable, SortOrder = request.SortOrder };
+        _db.OptionItems.Add(e);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new OptionItemDto(e.Id, e.OptionSetId, e.Name, e.IsActive, e.IsAvailable, e.SortOrder);
+    }
     public async Task<OptionItemDto> UpdateOptionItemAsync(Guid optionSetId, Guid itemId, UpsertOptionItemRequest request, CancellationToken ct) { var e = await _db.OptionItems.SingleOrDefaultAsync(x => x.Id == itemId && x.OptionSetId == optionSetId, ct).ConfigureAwait(false) ?? throw new NotFoundException("Option item not found"); var wasAvailable = e.IsAvailable; e.Name = request.Name; e.IsActive = request.IsActive; e.IsAvailable = request.IsAvailable; e.SortOrder = request.SortOrder; await _db.SaveChangesAsync(ct).ConfigureAwait(false); if (wasAvailable != e.IsAvailable) await AuditAsync("OptionItem", "UpdateOptionItemAvailability", e.Id, new { IsAvailable = wasAvailable }, new { e.IsAvailable }, ct).ConfigureAwait(false); return new(e.Id, e.OptionSetId, e.Name, e.IsActive, e.IsAvailable, e.SortOrder); }
     public async Task DeactivateOptionItemAsync(Guid optionSetId, Guid itemId, CancellationToken ct) { var e = await _db.OptionItems.SingleOrDefaultAsync(x => x.Id == itemId && x.OptionSetId == optionSetId, ct).ConfigureAwait(false) ?? throw new NotFoundException("Option item not found"); e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); }
 
-    public async Task<IReadOnlyList<SchemaDto>> GetSchemasAsync(bool includeInactive, CancellationToken ct) => await _db.CustomizationSchemas.AsNoTracking().Where(x => includeInactive || x.IsActive).Select(x => new SchemaDto(x.Id, x.Name, x.IsActive)).ToListAsync(ct).ConfigureAwait(false);
-    public async Task<SchemaDto> CreateSchemaAsync(UpsertSchemaRequest request, CancellationToken ct) { var e = new CustomizationSchema { Id = Guid.NewGuid(), Name = request.Name, IsActive = request.IsActive }; _db.CustomizationSchemas.Add(e); await _db.SaveChangesAsync(ct).ConfigureAwait(false); return new(e.Id, e.Name, e.IsActive); }
+    public async Task<IReadOnlyList<SchemaDto>> GetSchemasAsync(bool includeInactive, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+
+        return await _db.CustomizationSchemas.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .Where(x => includeInactive || x.IsActive)
+            .Select(x => new SchemaDto(x.Id, x.Name, x.IsActive))
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+    public async Task<SchemaDto> CreateSchemaAsync(UpsertSchemaRequest request, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var e = new CustomizationSchema { Id = Guid.NewGuid(), CatalogTemplateId = catalogTemplateId, Name = request.Name, IsActive = request.IsActive };
+        _db.CustomizationSchemas.Add(e);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new SchemaDto(e.Id, e.Name, e.IsActive);
+    }
     public async Task<SchemaDto> UpdateSchemaAsync(Guid id, UpsertSchemaRequest request, CancellationToken ct) { var e = await FindAsync(_db.CustomizationSchemas, id, ct).ConfigureAwait(false); e.Name = request.Name; e.IsActive = request.IsActive; await _db.SaveChangesAsync(ct).ConfigureAwait(false); return new(e.Id, e.Name, e.IsActive); }
     public async Task DeactivateSchemaAsync(Guid id, CancellationToken ct) { var e = await FindAsync(_db.CustomizationSchemas, id, ct).ConfigureAwait(false); e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); }
 
-    public async Task<IReadOnlyList<SelectionGroupDto>> GetGroupsAsync(Guid schemaId, bool includeInactive, CancellationToken ct) => await _db.SelectionGroups.AsNoTracking().Where(x => x.SchemaId == schemaId && (includeInactive || x.IsActive)).Select(x => Map(x)).ToListAsync(ct).ConfigureAwait(false);
-    public async Task<SelectionGroupDto> CreateGroupAsync(Guid schemaId, UpsertSelectionGroupRequest request, CancellationToken ct) { await _groupValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); await EnsureUniqueGroupKey(schemaId, request.Key, null, ct).ConfigureAwait(false); var e = new SelectionGroup { Id = Guid.NewGuid(), SchemaId = schemaId, Key = request.Key, Label = request.Label, SelectionMode = request.SelectionMode, MinSelections = request.MinSelections, MaxSelections = request.MaxSelections, OptionSetId = request.OptionSetId, IsActive = request.IsActive, SortOrder = request.SortOrder }; _db.SelectionGroups.Add(e); await _db.SaveChangesAsync(ct).ConfigureAwait(false); return Map(e); }
+    public async Task<IReadOnlyList<SelectionGroupDto>> GetGroupsAsync(Guid schemaId, bool includeInactive, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+
+        return await _db.SelectionGroups.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId && x.SchemaId == schemaId && (includeInactive || x.IsActive))
+            .Select(Map)
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+    public async Task<SelectionGroupDto> CreateGroupAsync(Guid schemaId, UpsertSelectionGroupRequest request, CancellationToken ct)
+    {
+        await _groupValidator.EnsureValidAsync(request, ct).ConfigureAwait(false);
+        await EnsureUniqueGroupKey(schemaId, request.Key, null, ct).ConfigureAwait(false);
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var e = new SelectionGroup { Id = Guid.NewGuid(), CatalogTemplateId = catalogTemplateId, SchemaId = schemaId, Key = request.Key, Label = request.Label, SelectionMode = request.SelectionMode, MinSelections = request.MinSelections, MaxSelections = request.MaxSelections, OptionSetId = request.OptionSetId, IsActive = request.IsActive, SortOrder = request.SortOrder };
+        _db.SelectionGroups.Add(e);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Map(e);
+    }
     public async Task<SelectionGroupDto> UpdateGroupAsync(Guid schemaId, Guid groupId, UpsertSelectionGroupRequest request, CancellationToken ct) { await _groupValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); await EnsureUniqueGroupKey(schemaId, request.Key, groupId, ct).ConfigureAwait(false); var e = await _db.SelectionGroups.SingleOrDefaultAsync(x => x.Id == groupId && x.SchemaId == schemaId, ct).ConfigureAwait(false) ?? throw new NotFoundException("Selection group not found"); e.Key = request.Key; e.Label = request.Label; e.SelectionMode = request.SelectionMode; e.MinSelections = request.MinSelections; e.MaxSelections = request.MaxSelections; e.OptionSetId = request.OptionSetId; e.IsActive = request.IsActive; e.SortOrder = request.SortOrder; await _db.SaveChangesAsync(ct).ConfigureAwait(false); return Map(e); }
     public async Task DeactivateGroupAsync(Guid schemaId, Guid groupId, CancellationToken ct) { var e = await _db.SelectionGroups.SingleOrDefaultAsync(x => x.Id == groupId && x.SchemaId == schemaId, ct).ConfigureAwait(false) ?? throw new NotFoundException("Selection group not found"); e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); }
 
-    public async Task<IReadOnlyList<ExtraDto>> GetExtrasAsync(bool includeInactive, CancellationToken ct) => await _db.Extras.AsNoTracking().Where(x => includeInactive || x.IsActive).Select(x => new ExtraDto(x.Id, x.Name, x.Price, x.IsActive, x.IsAvailable)).ToListAsync(ct).ConfigureAwait(false);
-    public async Task<ExtraDto> CreateExtraAsync(UpsertExtraRequest request, CancellationToken ct) { await _extraValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); var e = new Extra { Id = Guid.NewGuid(), Name = request.Name, Price = request.Price, IsActive = request.IsActive, IsAvailable = request.IsAvailable }; _db.Extras.Add(e); await _db.SaveChangesAsync(ct).ConfigureAwait(false); return new(e.Id, e.Name, e.Price, e.IsActive, e.IsAvailable); }
+    public async Task<IReadOnlyList<ExtraDto>> GetExtrasAsync(bool includeInactive, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+
+        return await _db.Extras.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .Where(x => includeInactive || x.IsActive)
+            .Select(x => new ExtraDto(x.Id, x.Name, x.Price, x.IsActive, x.IsAvailable))
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+    public async Task<ExtraDto> CreateExtraAsync(UpsertExtraRequest request, CancellationToken ct)
+    {
+        await _extraValidator.EnsureValidAsync(request, ct).ConfigureAwait(false);
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var e = new Extra { Id = Guid.NewGuid(), CatalogTemplateId = catalogTemplateId, Name = request.Name, Price = request.Price, IsActive = request.IsActive, IsAvailable = request.IsAvailable };
+        _db.Extras.Add(e);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new ExtraDto(e.Id, e.Name, e.Price, e.IsActive, e.IsAvailable);
+    }
     public async Task<ExtraDto> UpdateExtraAsync(Guid id, UpsertExtraRequest request, CancellationToken ct) { await _extraValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); var e = await FindAsync(_db.Extras, id, ct).ConfigureAwait(false); var wasAvailable = e.IsAvailable; e.Name = request.Name; e.Price = request.Price; e.IsActive = request.IsActive; e.IsAvailable = request.IsAvailable; await _db.SaveChangesAsync(ct).ConfigureAwait(false); if (wasAvailable != e.IsAvailable) await AuditAsync("Extra", "UpdateExtraAvailability", e.Id, new { IsAvailable = wasAvailable }, new { e.IsAvailable }, ct).ConfigureAwait(false); return new(e.Id, e.Name, e.Price, e.IsActive, e.IsAvailable); }
     public async Task DeactivateExtraAsync(Guid id, CancellationToken ct) { var e = await FindAsync(_db.Extras, id, ct).ConfigureAwait(false); e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); }
 
@@ -552,6 +696,26 @@ public sealed class PosCatalogService : IPosCatalogService
     private async Task<ProductOverrideDto> BuildOverrideDto(ProductGroupOverride o, CancellationToken ct) { var ids = await _db.ProductGroupOverrideAllowedItems.AsNoTracking().Where(x => x.ProductGroupOverrideId == o.Id).Select(x => x.OptionItemId).ToListAsync(ct).ConfigureAwait(false); return new(o.Id, o.ProductId, o.GroupKey, o.IsActive, ids); }
     private async Task AuditAsync(string entity, string action, Guid entityId, object? before, object? after, CancellationToken ct) { await _auditLogger.LogAsync(new AuditEntry(action, null, null, entity, entityId.ToString(), before, after, "Api", null, DateTime.UtcNow), ct).ConfigureAwait(false); PosCatalogLog.AuditWritten(_logger, action, entity, entityId); }
     private Guid RequireTenantId() => _tenantContext.EffectiveTenantId ?? throw new ForbiddenException("Tenant context is required.");
+
+
+    private async Task<Guid> GetTenantCatalogTemplateIdAsync(CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        var mapping = await _db.TenantCatalogTemplates
+            .AsNoTracking()
+            .SingleAsync(x => x.TenantId == tenantId, ct)
+            .ConfigureAwait(false);
+
+        if (!mapping.CatalogTemplateId.HasValue)
+        {
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["catalogTemplateId"] = ["Tenant catalog template is not configured."]
+            });
+        }
+
+        return mapping.CatalogTemplateId.Value;
+    }
 
     private async Task EnsureStoreBelongsToTenantAsync(Guid storeId, Guid tenantId, CancellationToken ct)
     {

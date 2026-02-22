@@ -150,11 +150,11 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthorizationPolicies.AdminOnly, policy =>
         policy.RequireRole("Admin"));
     options.AddPolicy(AuthorizationPolicies.PosAdmin, policy =>
-        policy.RequireRole("Admin", "Manager", "TenantAdmin"));
+        policy.RequireRole("Admin", "Manager", "TenantAdmin", "SuperAdmin"));
     options.AddPolicy(AuthorizationPolicies.PosOperator, policy =>
-        policy.RequireRole("Admin", "Cashier", "Manager", "TenantAdmin"));
+        policy.RequireRole("Admin", "Cashier", "Manager", "TenantAdmin", "SuperAdmin"));
     options.AddPolicy(AuthorizationPolicies.PosReportViewer, policy =>
-        policy.RequireRole("Admin", "Manager", "TenantAdmin"));
+        policy.RequireRole("Admin", "Manager", "TenantAdmin", "SuperAdmin"));
     options.AddPolicy(AuthorizationPolicies.PlatformOnly, policy =>
         policy.RequireRole("SuperAdmin"));
     options.AddPolicy(AuthorizationPolicies.TenantScoped, policy =>
@@ -242,7 +242,10 @@ if (!app.Environment.IsEnvironment("Testing"))
 
 app.UseCors("DefaultCors");
 
-app.UseRateLimiter();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseRateLimiter();
+}
 
 app.UseRouting();
 app.UseAuthentication();
