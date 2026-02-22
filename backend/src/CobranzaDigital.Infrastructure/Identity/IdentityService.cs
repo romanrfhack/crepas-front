@@ -1,7 +1,10 @@
 using CobranzaDigital.Application.Contracts.Auth;
 using CobranzaDigital.Application.Interfaces;
 
+using CobranzaDigital.Infrastructure.Persistence;
+
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace CobranzaDigital.Infrastructure.Identity;
 
@@ -11,22 +14,32 @@ public sealed class IdentityService : IIdentityService
 
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
+    private readonly CobranzaDigitalDbContext _dbContext;
 
-    public IdentityService(UserManager<ApplicationUser> userManager, RoleManager<ApplicationRole> roleManager)
+    public IdentityService(UserManager<ApplicationUser> userManager, RoleManager<ApplicationRole> roleManager, CobranzaDigitalDbContext dbContext)
     {
         _userManager = userManager;
         _roleManager = roleManager;
+        _dbContext = dbContext;
     }
 
     public async Task<(bool Success, string UserId, IEnumerable<string> Errors)> CreateUserAsync(
         string email,
         string password)
     {
+        var defaultTenantId = await _dbContext.Tenants
+            .AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync()
+            .ConfigureAwait(false);
+
         var user = new ApplicationUser
         {
             Id = Guid.NewGuid(),
             UserName = email,
-            Email = email
+            Email = email,
+            TenantId = defaultTenantId
         };
 
         var result = await _userManager.CreateAsync(user, password).ConfigureAwait(false);
