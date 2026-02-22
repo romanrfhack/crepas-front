@@ -595,23 +595,43 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
 
     private async Task EnsureOpenShiftAsync(string token, string cashierEmail, decimal initialCash = 500m)
     {
+        var defaultStoreId = await GetDefaultStoreIdAsync();
+
         using var currentReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/current", token);
         using var currentResp = await _client.SendAsync(currentReq);
         if (currentResp.StatusCode == HttpStatusCode.OK)
         {
             var current = await currentResp.Content.ReadFromJsonAsync<PosShiftResponse>();
             Assert.NotNull(current);
-            return;
-        }
+            if (current!.StoreId == defaultStoreId)
+            {
+                return;
+            }
 
-        Assert.Equal(HttpStatusCode.NoContent, currentResp.StatusCode);
+            using var closeReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/close", token);
+            closeReq.Content = JsonContent.Create(new
+            {
+                shiftId = current.Id,
+                countedDenominations = new[] { new { denominationValue = 500m, count = 1 } },
+                closeReason = "switch-store",
+                clientOperationId = Guid.NewGuid(),
+                storeId = current.StoreId
+            });
+            using var closeResp = await _client.SendAsync(closeReq);
+            Assert.Equal(HttpStatusCode.OK, closeResp.StatusCode);
+        }
+        else
+        {
+            Assert.Equal(HttpStatusCode.NoContent, currentResp.StatusCode);
+        }
 
         using var openReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/open", token);
         openReq.Content = JsonContent.Create(new
         {
             startingCashAmount = initialCash,
             notes = $"Opened by {cashierEmail} for integration test",
-            clientOperationId = Guid.NewGuid()
+            clientOperationId = Guid.NewGuid(),
+            storeId = defaultStoreId
         });
 
         using var openResp = await _client.SendAsync(openReq);
@@ -620,6 +640,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         var openedShift = await openResp.Content.ReadFromJsonAsync<PosShiftResponse>();
         Assert.NotNull(openedShift);
         Assert.Equal(initialCash, openedShift!.OpeningCashAmount);
+        Assert.Equal(defaultStoreId, openedShift.StoreId);
 
         using var verifyReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/shifts/current", token);
         using var verifyResp = await _client.SendAsync(verifyReq);
@@ -627,6 +648,14 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         var verifiedShift = await verifyResp.Content.ReadFromJsonAsync<PosShiftResponse>();
         Assert.NotNull(verifiedShift);
         Assert.Equal(initialCash, verifiedShift!.OpeningCashAmount);
+        Assert.Equal(defaultStoreId, verifiedShift.StoreId);
+    }
+
+    private async Task<Guid> GetDefaultStoreIdAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        return await db.PosSettings.AsNoTracking().OrderBy(x => x.Id).Select(x => x.DefaultStoreId).FirstAsync();
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)

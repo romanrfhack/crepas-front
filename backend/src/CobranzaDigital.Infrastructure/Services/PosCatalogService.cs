@@ -84,7 +84,7 @@ public sealed class PosCatalogService : IPosCatalogService
             .Where(x => x.CatalogTemplateId == catalogTemplateId)
             .Where(x => includeInactive || x.IsActive)
             .Where(x => !categoryId.HasValue || x.CategoryId == categoryId.Value)
-            .Select(x => Map(x))
+            .Select(Map)
             .ToListAsync(ct)
             .ConfigureAwait(false);
     }
@@ -184,7 +184,7 @@ public sealed class PosCatalogService : IPosCatalogService
 
         return await _db.SelectionGroups.AsNoTracking()
             .Where(x => x.CatalogTemplateId == catalogTemplateId && x.SchemaId == schemaId && (includeInactive || x.IsActive))
-            .Select(x => Map(x))
+            .Select(Map)
             .ToListAsync(ct).ConfigureAwait(false);
     }
     public async Task<SelectionGroupDto> CreateGroupAsync(Guid schemaId, UpsertSelectionGroupRequest request, CancellationToken ct)

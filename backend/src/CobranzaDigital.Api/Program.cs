@@ -242,7 +242,10 @@ if (!app.Environment.IsEnvironment("Testing"))
 
 app.UseCors("DefaultCors");
 
-app.UseRateLimiter();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseRateLimiter();
+}
 
 app.UseRouting();
 app.UseAuthentication();

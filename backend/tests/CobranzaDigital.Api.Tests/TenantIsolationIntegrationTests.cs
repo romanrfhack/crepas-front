@@ -216,6 +216,22 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         tenantB.DefaultStoreId = storeB.Id;
         await db.SaveChangesAsync();
 
+        var catalogTemplate = new CatalogTemplate
+        {
+            Id = Guid.NewGuid(),
+            VerticalId = vertical.Id,
+            Name = $"Template-{Guid.NewGuid():N}",
+            Version = "1.0.0",
+            IsActive = true,
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+            UpdatedAtUtc = DateTimeOffset.UtcNow
+        };
+        db.CatalogTemplates.Add(catalogTemplate);
+        db.TenantCatalogTemplates.AddRange(
+            new TenantCatalogTemplate { TenantId = tenantA.Id, CatalogTemplateId = catalogTemplate.Id, UpdatedAtUtc = DateTimeOffset.UtcNow },
+            new TenantCatalogTemplate { TenantId = tenantB.Id, CatalogTemplateId = catalogTemplate.Id, UpdatedAtUtc = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
         var managerAEmail = $"manager.a+{Guid.NewGuid():N}@test.local";
         var managerBEmail = $"manager.b+{Guid.NewGuid():N}@test.local";
         var cashierAEmail = $"cashier.a+{Guid.NewGuid():N}@test.local";
