@@ -267,8 +267,8 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         db.PosShifts.AddRange(
             new PosShift { Id = Guid.NewGuid(), StoreId = storeA.Id, TenantId = tenantA.Id, OpenedByUserId = Guid.NewGuid(), OpenedAtUtc = DateTimeOffset.UtcNow, ClosedAtUtc = DateTimeOffset.UtcNow },
             new PosShift { Id = Guid.NewGuid(), StoreId = storeB.Id, TenantId = tenantB.Id, OpenedByUserId = Guid.NewGuid(), OpenedAtUtc = DateTimeOffset.UtcNow, ClosedAtUtc = DateTimeOffset.UtcNow });
-
-        var salesDay = DateTimeOffset.UtcNow.AddYears(1).Date.AddHours(12);
+        
+        var salesDay = new DateTimeOffset(DateTimeOffset.UtcNow.AddYears(1).Date.AddHours(12), TimeSpan.Zero);
         var tenantBCategory = new Category
         {
             Id = Guid.NewGuid(),
