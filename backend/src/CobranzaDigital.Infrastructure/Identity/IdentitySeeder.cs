@@ -1,4 +1,7 @@
+using CobranzaDigital.Infrastructure.Persistence;
+
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -16,6 +19,7 @@ public static partial class IdentitySeeder
         var logger = scopedProvider.GetRequiredService<ILoggerFactory>().CreateLogger("IdentitySeeder");
         var roleManager = scopedProvider.GetRequiredService<RoleManager<ApplicationRole>>();
         var userManager = scopedProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var dbContext = scopedProvider.GetRequiredService<CobranzaDigitalDbContext>();
 
         foreach (var roleName in DefaultRoles)
         {
@@ -28,6 +32,13 @@ public static partial class IdentitySeeder
                 }
             }
         }
+
+        var defaultTenantId = await dbContext.Tenants
+            .AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync()
+            .ConfigureAwait(false);
 
         var adminEmail = configuration["IdentitySeed:AdminEmail"];
         var adminPassword = configuration["IdentitySeed:AdminPassword"];
@@ -45,7 +56,8 @@ public static partial class IdentitySeeder
             {
                 Email = adminEmail,
                 UserName = adminEmail,
-                EmailConfirmed = true
+                EmailConfirmed = true,
+                TenantId = defaultTenantId
             };
 
             var createResult = await userManager.CreateAsync(adminUser, adminPassword).ConfigureAwait(false);
@@ -53,6 +65,16 @@ public static partial class IdentitySeeder
             {
                 LogMessages.FailedToCreateAdminUser(logger, createResult.Errors);
                 return;
+            }
+        }
+
+        if (!adminUser.TenantId.HasValue && defaultTenantId.HasValue)
+        {
+            adminUser.TenantId = defaultTenantId;
+            var updateResult = await userManager.UpdateAsync(adminUser).ConfigureAwait(false);
+            if (!updateResult.Succeeded)
+            {
+                LogMessages.FailedToSetAdminTenant(logger, updateResult.Errors);
             }
         }
 
@@ -79,5 +101,8 @@ public static partial class IdentitySeeder
 
         [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to add admin user to Admin role: {Errors}")]
         public static partial void FailedToAddAdminRole(ILogger logger, IEnumerable<IdentityError> errors);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to assign tenant to admin user: {Errors}")]
+        public static partial void FailedToSetAdminTenant(ILogger logger, IEnumerable<IdentityError> errors);
     }
 }
