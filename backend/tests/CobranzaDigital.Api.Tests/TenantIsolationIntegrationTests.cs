@@ -265,16 +265,18 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
     {
         using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
+        Assert.NotNull(payload);
         return payload!.AccessToken;
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
     {
         using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
+        Assert.NotNull(payload);
         return payload!.AccessToken;
     }
 
