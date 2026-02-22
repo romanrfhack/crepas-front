@@ -138,6 +138,11 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
         var extraA = Guid.NewGuid();
         var optionSetA = Guid.NewGuid();
         var optionItemA = Guid.NewGuid();
+        var catalogTemplateId = await db.CatalogTemplates
+            .AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => x.Id)
+            .FirstAsync();
 
         var cashierAUserName = $"{Prefix}-cashier-a";
         var cashierBUserName = $"{Prefix}-cashier-b";
@@ -161,16 +166,16 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
             });
 
         db.Categories.AddRange(
-            new Category { Id = categoryA, Name = $"{Prefix}-cat-a", SortOrder = 1, IsActive = true },
-            new Category { Id = categoryB, Name = $"{Prefix}-cat-b", SortOrder = 2, IsActive = true });
+            new Category { Id = categoryA, CatalogTemplateId = catalogTemplateId, Name = $"{Prefix}-cat-a", SortOrder = 1, IsActive = true },
+            new Category { Id = categoryB, CatalogTemplateId = catalogTemplateId, Name = $"{Prefix}-cat-b", SortOrder = 2, IsActive = true });
 
         db.Products.AddRange(
-            new Product { Id = productA, CategoryId = categoryA, Name = "Producto A", ExternalCode = $"{Prefix}-P-A", BasePrice = 100m, IsActive = true },
-            new Product { Id = productB, CategoryId = categoryB, Name = "Producto B", ExternalCode = $"{Prefix}-P-B", BasePrice = 60m, IsActive = true });
+            new Product { Id = productA, CatalogTemplateId = catalogTemplateId, CategoryId = categoryA, Name = "Producto A", ExternalCode = $"{Prefix}-P-A", BasePrice = 100m, IsActive = true },
+            new Product { Id = productB, CatalogTemplateId = catalogTemplateId, CategoryId = categoryB, Name = "Producto B", ExternalCode = $"{Prefix}-P-B", BasePrice = 60m, IsActive = true });
 
-        db.Extras.Add(new Extra { Id = extraA, Name = "Queso extra", Price = 10m, IsActive = true });
-        db.OptionSets.Add(new OptionSet { Id = optionSetA, Name = "Salsas", IsActive = true });
-        db.OptionItems.Add(new OptionItem { Id = optionItemA, OptionSetId = optionSetA, Name = "Salsa especial", SortOrder = 1, IsActive = true });
+        db.Extras.Add(new Extra { Id = extraA, CatalogTemplateId = catalogTemplateId, Name = "Queso extra", Price = 10m, IsActive = true });
+        db.OptionSets.Add(new OptionSet { Id = optionSetA, CatalogTemplateId = catalogTemplateId, Name = "Salsas", IsActive = true });
+        db.OptionItems.Add(new OptionItem { Id = optionItemA, CatalogTemplateId = catalogTemplateId, OptionSetId = optionSetA, Name = "Salsa especial", SortOrder = 1, IsActive = true });
 
         db.PosShifts.AddRange(
             new PosShift
