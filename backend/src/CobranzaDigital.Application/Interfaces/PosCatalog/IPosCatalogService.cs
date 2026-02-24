@@ -47,8 +47,13 @@ public interface IPosCatalogService
     Task<CatalogItemOverrideDto> UpsertTenantOverrideAsync(UpsertCatalogItemOverrideRequest request, CancellationToken ct);
     Task<IReadOnlyList<CatalogStoreAvailabilityDto>> GetStoreAvailabilityOverridesAsync(Guid storeId, string? itemType, CancellationToken ct);
     Task<CatalogStoreAvailabilityDto> UpsertStoreAvailabilityAsync(UpsertCatalogStoreAvailabilityRequest request, CancellationToken ct);
+    Task<IReadOnlyList<CatalogStoreOverrideDto>> GetStoreOverridesAsync(Guid storeId, string? itemType, bool onlyOverrides, CancellationToken ct);
+    Task<CatalogStoreOverrideDto> UpsertStoreOverrideAsync(UpsertCatalogStoreOverrideRequest request, CancellationToken ct);
+    Task DeleteStoreOverrideAsync(Guid storeId, string itemType, Guid itemId, CancellationToken ct);
     Task<IReadOnlyList<StoreInventoryItemDto>> GetInventoryAsync(Guid storeId, string? search, bool onlyWithStock, CancellationToken ct);
     Task<StoreInventoryItemDto> UpsertInventoryAsync(UpsertStoreInventoryRequest request, CancellationToken ct);
+    Task<IReadOnlyList<CatalogInventoryItemDto>> GetCatalogInventoryAsync(Guid storeId, string? itemType, Guid? itemId, bool onlyTracked, CancellationToken ct);
+    Task<CatalogInventoryItemDto> UpsertCatalogInventoryAsync(UpsertCatalogInventoryRequest request, CancellationToken ct);
     Task<PosInventorySettingsDto> UpdateInventorySettingsAsync(UpdatePosInventorySettingsRequest request, CancellationToken ct);
     Task<CatalogSnapshotDto> GetSnapshotAsync(Guid? storeId, CancellationToken ct);
     Task<string> ComputeCatalogEtagAsync(Guid? storeId, CancellationToken ct);

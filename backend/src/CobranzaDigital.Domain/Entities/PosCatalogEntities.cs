@@ -18,6 +18,12 @@ public enum CatalogItemType
     OptionItem = 2
 }
 
+public enum CatalogOverrideState
+{
+    Enabled = 0,
+    Disabled = 1
+}
+
 public sealed class CatalogTemplate : Entity
 {
     public Guid VerticalId { get; set; }
@@ -53,6 +59,41 @@ public sealed class StoreCatalogAvailability
     public DateTimeOffset UpdatedAtUtc { get; set; }
 }
 
+public sealed class StoreCatalogOverride : Entity
+{
+    public Guid TenantId { get; set; }
+    public Guid StoreId { get; set; }
+    public CatalogItemType ItemType { get; set; }
+    public Guid ItemId { get; set; }
+    public CatalogOverrideState OverrideState { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+}
+
+public sealed class CatalogInventoryBalance : Entity
+{
+    public Guid TenantId { get; set; }
+    public Guid StoreId { get; set; }
+    public CatalogItemType ItemType { get; set; }
+    public Guid ItemId { get; set; }
+    public decimal OnHandQty { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+}
+
+public sealed class CatalogInventoryAdjustment : Entity
+{
+    public Guid TenantId { get; set; }
+    public Guid StoreId { get; set; }
+    public CatalogItemType ItemType { get; set; }
+    public Guid ItemId { get; set; }
+    public decimal DeltaQty { get; set; }
+    public decimal ResultingOnHandQty { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? Reference { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; set; }
+    public Guid? CreatedByUserId { get; set; }
+}
+
 public sealed class Category : Entity
 {
     public Guid? CatalogTemplateId { get; set; }
@@ -72,6 +113,7 @@ public sealed class Product : Entity
     public decimal BasePrice { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsAvailable { get; set; } = true;
+    public bool IsInventoryTracked { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public Guid? CustomizationSchemaId { get; set; }
 }
@@ -123,6 +165,7 @@ public sealed class Extra : Entity
     public decimal Price { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsAvailable { get; set; } = true;
+    public bool IsInventoryTracked { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 

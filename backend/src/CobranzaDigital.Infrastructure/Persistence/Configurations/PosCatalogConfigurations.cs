@@ -58,6 +58,55 @@ public sealed class StoreCatalogAvailabilityConfiguration : IEntityTypeConfigura
     }
 }
 
+public sealed class StoreCatalogOverrideConfiguration : IEntityTypeConfiguration<StoreCatalogOverride>
+{
+    public void Configure(EntityTypeBuilder<StoreCatalogOverride> builder)
+    {
+        builder.ToTable("StoreCatalogOverrides");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.ItemType).HasConversion<int>();
+        builder.Property(x => x.OverrideState).HasConversion<int>();
+        builder.Property(x => x.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasIndex(x => new { x.StoreId, x.ItemType, x.ItemId }).IsUnique();
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class CatalogInventoryBalanceConfiguration : IEntityTypeConfiguration<CatalogInventoryBalance>
+{
+    public void Configure(EntityTypeBuilder<CatalogInventoryBalance> builder)
+    {
+        builder.ToTable("CatalogInventoryBalances");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.ItemType).HasConversion<int>();
+        builder.Property(x => x.OnHandQty).HasColumnType("decimal(18,3)");
+        builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasIndex(x => new { x.StoreId, x.ItemType, x.ItemId }).IsUnique();
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class CatalogInventoryAdjustmentConfiguration : IEntityTypeConfiguration<CatalogInventoryAdjustment>
+{
+    public void Configure(EntityTypeBuilder<CatalogInventoryAdjustment> builder)
+    {
+        builder.ToTable("CatalogInventoryAdjustments");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.ItemType).HasConversion<int>();
+        builder.Property(x => x.DeltaQty).HasColumnType("decimal(18,3)");
+        builder.Property(x => x.ResultingOnHandQty).HasColumnType("decimal(18,3)");
+        builder.Property(x => x.Reason).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Reference).HasMaxLength(200);
+        builder.Property(x => x.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasIndex(x => new { x.StoreId, x.ItemType, x.ItemId });
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
 {
     public void Configure(EntityTypeBuilder<Category> builder)
@@ -84,6 +133,7 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(x => x.SubcategoryName).HasMaxLength(200);
         builder.Property(x => x.BasePrice).HasColumnType("decimal(18,2)");
         builder.Property(x => x.IsAvailable).HasDefaultValue(true);
+        builder.Property(x => x.IsInventoryTracked).HasDefaultValue(false);
         builder.Property(x => x.UpdatedAtUtc)
             .HasDefaultValueSql("SYSUTCDATETIME()");
         builder.HasIndex(x => x.ExternalCode).IsUnique();
@@ -114,6 +164,7 @@ public sealed class OptionItemConfiguration : IEntityTypeConfiguration<OptionIte
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.IsAvailable).HasDefaultValue(true);
+        builder.Property(x => x.IsInventoryTracked).HasDefaultValue(false);
         builder.Property(x => x.UpdatedAtUtc)
             .HasDefaultValueSql("SYSUTCDATETIME()");
         builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
