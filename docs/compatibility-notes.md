@@ -69,3 +69,10 @@ Este documento registra compatibilidades temporales agregadas para evitar romper
 
 Se agregan campos opcionales no rompientes en snapshot (`availabilityReason`, `storeOverrideState`, `isInventoryTracked`, `stockOnHandQty`).
 No se removieron rutas ni campos existentes (compatibilidad Release A/B preservada).
+
+## 2026-02-24 — Frontend dual inventory admin endpoint support
+
+- Frontend conserva compatibilidad temporal para inventario admin:
+  - Release C: `/api/v1/pos/admin/catalog/inventory`.
+  - Legacy: `/api/v1/pos/admin/inventory` (UI de inventario existente).
+- El cliente tipa campos opcionales de snapshot Release C (`availabilityReason`, `storeOverrideState`, `isInventoryTracked`, `stockOnHandQty`) sin volverlos obligatorios.

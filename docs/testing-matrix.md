@@ -89,3 +89,5 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 - CreateSale 409 reason estable para Product/Extra/OptionItem según precedencia.
 - Admin endpoints release C: store-overrides + inventory (incluye rechazo OptionItem 400 y tenant isolation).
 - Snapshot ETag: 200/304 y cambio al modificar override/inventory/manual availability.
+| Store overrides FE service contract (Release C) | Frontend Unit: `frontend/src/app/features/admin/pos-catalog/services/pos-admin-catalog-services.spec.ts` | Verifica GET/PUT/DELETE sobre `/api/v1/pos/admin/catalog/store-overrides` con `storeId/itemType/itemId` correctos. |
+| Catalog inventory lite FE service contract (Release C) | Frontend Unit: `frontend/src/app/features/admin/pos-catalog/services/pos-inventory-admin-api.service.spec.ts` | Verifica GET/PUT sobre `/api/v1/pos/admin/catalog/inventory` y compat legacy `/api/v1/pos/admin/inventory`. |

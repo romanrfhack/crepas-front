@@ -19,6 +19,10 @@ export interface ProductDto {
   isActive: boolean;
   isAvailable: boolean;
   customizationSchemaId: string | null;
+  availabilityReason?: string | null;
+  storeOverrideState?: string | null;
+  isInventoryTracked?: boolean | null;
+  stockOnHandQty?: number | null;
 }
 
 export interface OptionSetDto {
@@ -34,6 +38,8 @@ export interface OptionItemDto {
   isActive: boolean;
   isAvailable: boolean;
   sortOrder: number;
+  availabilityReason?: string | null;
+  storeOverrideState?: string | null;
 }
 
 export interface SchemaDto {
@@ -61,6 +67,10 @@ export interface ExtraDto {
   price: number;
   isActive: boolean;
   isAvailable: boolean;
+  availabilityReason?: string | null;
+  storeOverrideState?: string | null;
+  isInventoryTracked?: boolean | null;
+  stockOnHandQty?: number | null;
 }
 
 export interface IncludedItemDto {

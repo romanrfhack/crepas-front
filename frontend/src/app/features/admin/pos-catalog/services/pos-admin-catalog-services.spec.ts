@@ -5,7 +5,7 @@ import { PosAdminCatalogAvailabilityApiService } from './pos-admin-catalog-avail
 import { PosAdminCatalogOverridesApiService } from './pos-admin-catalog-overrides-api.service';
 
 describe('POS admin catalog services', () => {
-  it('sends expected DTO payloads for overrides and availability', async () => {
+  it('sends expected DTO payloads for store overrides and availability', async () => {
     const calls: Array<{ method: string; path: string; body?: unknown }> = [];
     TestBed.configureTestingModule({
       providers: [
@@ -14,11 +14,12 @@ describe('POS admin catalog services', () => {
         {
           provide: ApiClient,
           useValue: {
-            get: () => throwError(() => new Error('skip')),
+            get: (path: string) => { calls.push({ method: 'get', path }); return throwError(() => new Error('skip')); },
             put: (path: string, body: unknown) => {
               calls.push({ method: 'put', path, body });
               return throwError(() => new Error('done'));
             },
+            delete: (path: string) => { calls.push({ method: 'delete', path }); return throwError(() => new Error('done')); },
           },
         },
       ],
@@ -27,13 +28,23 @@ describe('POS admin catalog services', () => {
     const overrides = TestBed.inject(PosAdminCatalogOverridesApiService);
     const availability = TestBed.inject(PosAdminCatalogAvailabilityApiService);
 
-    await expect(overrides.upsertOverride({ itemType: 'Product', itemId: 'item-1', isEnabled: true })).rejects.toBeTruthy();
+    await expect(overrides.listOverrides('store-1', 'Product')).rejects.toBeTruthy();
+    await expect(overrides.upsertOverride({ storeId: 'store-1', itemType: 'Product', itemId: 'item-1', state: 'Enabled' })).rejects.toBeTruthy();
+    await expect(overrides.deleteOverride('store-1', 'Product', 'item-1')).rejects.toBeTruthy();
     await expect(availability.upsertAvailability({ storeId: 'store-1', itemType: 'Extra', itemId: 'item-2', isAvailable: false })).rejects.toBeTruthy();
 
     expect(calls).toContainEqual({
+      method: 'get',
+      path: '/v1/pos/admin/catalog/store-overrides?storeId=store-1&onlyOverrides=true&itemType=Product',
+    });
+    expect(calls).toContainEqual({
       method: 'put',
-      path: '/v1/pos/admin/catalog/overrides',
-      body: { itemType: 'Product', itemId: 'item-1', isEnabled: true },
+      path: '/v1/pos/admin/catalog/store-overrides',
+      body: { storeId: 'store-1', itemType: 'Product', itemId: 'item-1', state: 'Enabled' },
+    });
+    expect(calls).toContainEqual({
+      method: 'delete',
+      path: '/v1/pos/admin/catalog/store-overrides?storeId=store-1&itemType=Product&itemId=item-1',
     });
     expect(calls).toContainEqual({
       method: 'put',
@@ -59,6 +70,6 @@ describe('POS admin catalog services', () => {
     });
 
     const overrides = TestBed.inject(PosAdminCatalogOverridesApiService);
-    await expect(overrides.upsertOverride({ itemType: 'Product', itemId: 'item-1', isEnabled: true })).rejects.toBe(tenantRequired);
+    await expect(overrides.upsertOverride({ storeId: 'store-1', itemType: 'Product', itemId: 'item-1', state: 'Enabled' })).rejects.toBe(tenantRequired);
   });
 });

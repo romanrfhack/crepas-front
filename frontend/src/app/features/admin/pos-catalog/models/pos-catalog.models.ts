@@ -21,6 +21,10 @@ export interface ProductDto {
   isActive: boolean;
   isAvailable: boolean;
   customizationSchemaId: string | null;
+  isInventoryTracked?: boolean | null;
+  stockOnHandQty?: number | null;
+  availabilityReason?: string | null;
+  storeOverrideState?: string | null;
 }
 
 export interface UpsertProductRequest {
@@ -52,6 +56,8 @@ export interface OptionItemDto {
   isActive: boolean;
   isAvailable: boolean;
   sortOrder: number;
+  availabilityReason?: string | null;
+  storeOverrideState?: string | null;
 }
 
 export interface UpsertOptionItemRequest {
@@ -102,6 +108,10 @@ export interface ExtraDto {
   price: number;
   isActive: boolean;
   isAvailable: boolean;
+  isInventoryTracked?: boolean | null;
+  stockOnHandQty?: number | null;
+  availabilityReason?: string | null;
+  storeOverrideState?: string | null;
 }
 
 export interface UpsertExtraRequest {
@@ -159,3 +169,24 @@ export interface UpsertStoreInventoryRequest {
 export interface PosInventorySettingsDto {
   showOnlyInStock: boolean;
 }
+
+export interface CatalogInventoryItemDto {
+  storeId: string;
+  itemType: string;
+  itemId: string;
+  onHandQty: number;
+  updatedAtUtc: string;
+  itemName?: string | null;
+  itemSku?: string | null;
+  isInventoryTracked?: boolean | null;
+}
+
+export interface UpsertCatalogInventoryRequest {
+  storeId: string;
+  itemType: CatalogItemType;
+  itemId: string;
+  onHandQty: number;
+  reason?: string | null;
+  reference?: string | null;
+}
+export type CatalogItemType = 'Product' | 'Extra' | 'OptionItem';

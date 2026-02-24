@@ -762,7 +762,9 @@ export class ExtrasPage {
 
   async onToggleOverride(itemId: string, event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
-    await this.overridesApi.upsertOverride({ itemType: 'Extra', itemId, isEnabled: checked });
+    const storeId = this.storeContext.getActiveStoreId();
+    if (!storeId) { return; }
+    await this.overridesApi.upsertOverride({ storeId, itemType: 'Extra', itemId, state: checked ? 'Enabled' : 'Disabled' });
     this.overrideByItemId.update((current) => ({ ...current, [itemId]: checked }));
   }
 

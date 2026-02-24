@@ -141,3 +141,22 @@ Se resuelve con precedencia estable por tienda para `Product`, `Extra` y `Option
 - `stockOnHandQty` (Product/Extra)
 
 El ETag del snapshot cambia también cuando cambian overrides tenant/store, inventario lite y disponibilidad manual base.
+
+## Release C frontend (store overrides + inventory lite)
+
+Fuente de verdad backend (`PosAdminCatalogController`):
+- `GET /api/v1/pos/admin/catalog/store-overrides?storeId={storeId}&itemType={type}&onlyOverrides={bool}`
+- `PUT /api/v1/pos/admin/catalog/store-overrides`
+- `DELETE /api/v1/pos/admin/catalog/store-overrides?storeId={storeId}&itemType={type}&itemId={itemId}`
+- `GET /api/v1/pos/admin/catalog/inventory?storeId={storeId}&itemType={type?}&itemId={itemId?}&onlyTracked={bool}`
+- `PUT /api/v1/pos/admin/catalog/inventory`
+
+Snapshot POS mantiene compatibilidad backward agregando opcionales:
+`availabilityReason`, `storeOverrideState`, `isInventoryTracked`, `stockOnHandQty`.
+
+### Test IDs estables Release C
+- `availability-badge-{type}-{id}`
+- `unavailable-alert`
+- `unavailable-message`
+- `unavailable-item-name`
+- `refresh-catalog-unavailable`
