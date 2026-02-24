@@ -56,3 +56,10 @@ Este documento registra compatibilidades temporales agregadas para evitar romper
 
 - Se agregó `hasInventoryRow` (`bool`) en `StoreInventoryItemDto`; `updatedAtUtc` ahora puede ser `null`.
 - Endurecimiento intencional de contrato interno (producto en construcción, sin consumidores externos): `hasInventoryRow` pasa a ser **required** y `updatedAtUtc` se documenta explícitamente como nullable cuando no existe fila real de inventario.
+
+## 2026-02 Release C
+
+- Snapshot POS agrega campos opcionales (`availabilityReason`, `storeOverrideState`, `isInventoryTracked`, `stockOnHandQty`) sin romper campos existentes.
+- Nuevos endpoints admin:
+  - `GET|PUT|DELETE /api/v1/pos/admin/catalog/store-overrides`
+  - `GET|PUT /api/v1/pos/admin/catalog/inventory`

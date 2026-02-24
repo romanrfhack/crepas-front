@@ -24,6 +24,9 @@ public sealed class CobranzaDigitalDbContext
     public DbSet<TenantCatalogTemplate> TenantCatalogTemplates => Set<TenantCatalogTemplate>();
     public DbSet<TenantCatalogOverride> TenantCatalogOverrides => Set<TenantCatalogOverride>();
     public DbSet<StoreCatalogAvailability> StoreCatalogAvailabilities => Set<StoreCatalogAvailability>();
+    public DbSet<StoreCatalogOverride> StoreCatalogOverrides => Set<StoreCatalogOverride>();
+    public DbSet<CatalogInventoryBalance> CatalogInventoryBalances => Set<CatalogInventoryBalance>();
+    public DbSet<CatalogInventoryAdjustment> CatalogInventoryAdjustments => Set<CatalogInventoryAdjustment>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<OptionSet> OptionSets => Set<OptionSet>();
     public DbSet<OptionItem> OptionItems => Set<OptionItem>();
@@ -105,6 +108,12 @@ public sealed class CobranzaDigitalDbContext
                         break;
                     case StoreCatalogAvailability storeAvailability:
                         storeAvailability.UpdatedAtUtc = utcNow;
+                        break;
+                    case StoreCatalogOverride storeOverride:
+                        storeOverride.UpdatedAtUtc = utcNow;
+                        break;
+                    case CatalogInventoryBalance balance:
+                        balance.UpdatedAtUtc = utcNow;
                         break;
                 }
             }

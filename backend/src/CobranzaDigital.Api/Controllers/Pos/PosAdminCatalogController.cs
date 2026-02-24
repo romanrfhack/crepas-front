@@ -116,4 +116,23 @@ public sealed class PosAdminCatalogController : ControllerBase
     [HttpPut("catalog/availability")]
     public Task<CatalogStoreAvailabilityDto> UpsertStoreAvailability([FromBody] UpsertCatalogStoreAvailabilityRequest request, CancellationToken ct) => _service.UpsertStoreAvailabilityAsync(request, ct);
 
+    [HttpGet("catalog/store-overrides")]
+    public Task<IReadOnlyList<CatalogStoreOverrideDto>> GetStoreOverrides([FromQuery] Guid storeId, [FromQuery] string? itemType, [FromQuery] bool onlyOverrides = false, CancellationToken ct = default) =>
+        _service.GetStoreOverridesAsync(storeId, itemType, onlyOverrides, ct);
+
+    [HttpPut("catalog/store-overrides")]
+    public Task<CatalogStoreOverrideDto> UpsertStoreOverride([FromBody] UpsertCatalogStoreOverrideRequest request, CancellationToken ct) => _service.UpsertStoreOverrideAsync(request, ct);
+
+    [HttpDelete("catalog/store-overrides")]
+    public Task DeleteStoreOverride([FromQuery] Guid storeId, [FromQuery] string itemType, [FromQuery] Guid itemId, CancellationToken ct) =>
+        _service.DeleteStoreOverrideAsync(storeId, itemType, itemId, ct);
+
+    [HttpGet("catalog/inventory")]
+    public Task<IReadOnlyList<CatalogInventoryItemDto>> GetCatalogInventory([FromQuery] Guid storeId, [FromQuery] string? itemType, [FromQuery] Guid? itemId, [FromQuery] bool onlyTracked = false, CancellationToken ct = default) =>
+        _service.GetCatalogInventoryAsync(storeId, itemType, itemId, onlyTracked, ct);
+
+    [HttpPut("catalog/inventory")]
+    public Task<CatalogInventoryItemDto> UpsertCatalogInventory([FromBody] UpsertCatalogInventoryRequest request, CancellationToken ct) =>
+        _service.UpsertCatalogInventoryAsync(request, ct);
+
 }

@@ -106,14 +106,15 @@ public sealed class PosCatalogService : IPosCatalogService
             BasePrice = request.BasePrice,
             IsActive = request.IsActive,
             IsAvailable = request.IsAvailable,
-            CustomizationSchemaId = request.CustomizationSchemaId
+            CustomizationSchemaId = request.CustomizationSchemaId,
+            IsInventoryTracked = request.IsInventoryTracked
         };
 
         _db.Products.Add(e);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Map(e);
     }
-    public async Task<ProductDto> UpdateProductAsync(Guid id, UpsertProductRequest request, CancellationToken ct) { await _productValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); await EnsureSchemaActiveIfPresent(request.CustomizationSchemaId, ct).ConfigureAwait(false); var e = await FindAsync(_db.Products, id, ct).ConfigureAwait(false); var before = Map(e); e.ExternalCode = request.ExternalCode; e.Name = request.Name; e.CategoryId = request.CategoryId; e.SubcategoryName = request.SubcategoryName; e.BasePrice = request.BasePrice; e.IsActive = request.IsActive; e.IsAvailable = request.IsAvailable; e.CustomizationSchemaId = request.CustomizationSchemaId; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Product", before.IsAvailable != e.IsAvailable ? "UpdateProductAvailability" : "UpdateProduct", id, before, Map(e), ct).ConfigureAwait(false); return Map(e); }
+    public async Task<ProductDto> UpdateProductAsync(Guid id, UpsertProductRequest request, CancellationToken ct) { await _productValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); await EnsureSchemaActiveIfPresent(request.CustomizationSchemaId, ct).ConfigureAwait(false); var e = await FindAsync(_db.Products, id, ct).ConfigureAwait(false); var before = Map(e); e.ExternalCode = request.ExternalCode; e.Name = request.Name; e.CategoryId = request.CategoryId; e.SubcategoryName = request.SubcategoryName; e.BasePrice = request.BasePrice; e.IsActive = request.IsActive; e.IsAvailable = request.IsAvailable; e.CustomizationSchemaId = request.CustomizationSchemaId; e.IsInventoryTracked = request.IsInventoryTracked; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Product", before.IsAvailable != e.IsAvailable ? "UpdateProductAvailability" : "UpdateProduct", id, before, Map(e), ct).ConfigureAwait(false); return Map(e); }
     public async Task DeactivateProductAsync(Guid id, CancellationToken ct) { var e = await FindAsync(_db.Products, id, ct).ConfigureAwait(false); var before = new { e.IsActive }; e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Product", "Deactivate", id, before, new { e.IsActive }, ct).ConfigureAwait(false); }
 
     public async Task<IReadOnlyList<OptionSetDto>> GetOptionSetsAsync(bool includeInactive, CancellationToken ct)
@@ -214,12 +215,12 @@ public sealed class PosCatalogService : IPosCatalogService
     {
         await _extraValidator.EnsureValidAsync(request, ct).ConfigureAwait(false);
         var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
-        var e = new Extra { Id = Guid.NewGuid(), CatalogTemplateId = catalogTemplateId, Name = request.Name, Price = request.Price, IsActive = request.IsActive, IsAvailable = request.IsAvailable };
+        var e = new Extra { Id = Guid.NewGuid(), CatalogTemplateId = catalogTemplateId, Name = request.Name, Price = request.Price, IsActive = request.IsActive, IsAvailable = request.IsAvailable, IsInventoryTracked = request.IsInventoryTracked };
         _db.Extras.Add(e);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return new ExtraDto(e.Id, e.Name, e.Price, e.IsActive, e.IsAvailable);
+        return new ExtraDto(e.Id, e.Name, e.Price, e.IsActive, e.IsAvailable, e.IsInventoryTracked);
     }
-    public async Task<ExtraDto> UpdateExtraAsync(Guid id, UpsertExtraRequest request, CancellationToken ct) { await _extraValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); var e = await FindAsync(_db.Extras, id, ct).ConfigureAwait(false); var wasAvailable = e.IsAvailable; e.Name = request.Name; e.Price = request.Price; e.IsActive = request.IsActive; e.IsAvailable = request.IsAvailable; await _db.SaveChangesAsync(ct).ConfigureAwait(false); if (wasAvailable != e.IsAvailable) await AuditAsync("Extra", "UpdateExtraAvailability", e.Id, new { IsAvailable = wasAvailable }, new { e.IsAvailable }, ct).ConfigureAwait(false); return new(e.Id, e.Name, e.Price, e.IsActive, e.IsAvailable); }
+    public async Task<ExtraDto> UpdateExtraAsync(Guid id, UpsertExtraRequest request, CancellationToken ct) { await _extraValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); var e = await FindAsync(_db.Extras, id, ct).ConfigureAwait(false); var wasAvailable = e.IsAvailable; e.Name = request.Name; e.Price = request.Price; e.IsActive = request.IsActive; e.IsAvailable = request.IsAvailable; e.IsInventoryTracked = request.IsInventoryTracked; await _db.SaveChangesAsync(ct).ConfigureAwait(false); if (wasAvailable != e.IsAvailable) await AuditAsync("Extra", "UpdateExtraAvailability", e.Id, new { IsAvailable = wasAvailable }, new { e.IsAvailable }, ct).ConfigureAwait(false); return new(e.Id, e.Name, e.Price, e.IsActive, e.IsAvailable, e.IsInventoryTracked); }
     public async Task DeactivateExtraAsync(Guid id, CancellationToken ct) { var e = await FindAsync(_db.Extras, id, ct).ConfigureAwait(false); e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); }
 
     public async Task<IReadOnlyList<IncludedItemDto>> GetIncludedItemsAsync(Guid productId, CancellationToken ct) => await _db.IncludedItems.AsNoTracking().Where(x => x.ProductId == productId).Select(x => new IncludedItemDto(x.Id, x.ProductId, x.ExtraId, x.Quantity)).ToListAsync(ct).ConfigureAwait(false);
@@ -361,6 +362,130 @@ public sealed class PosCatalogService : IPosCatalogService
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return new CatalogStoreAvailabilityDto(row.StoreId, row.ItemType.ToString(), row.ItemId, row.IsAvailable, row.UpdatedAtUtc);
+    }
+
+    public async Task<IReadOnlyList<CatalogStoreOverrideDto>> GetStoreOverridesAsync(Guid storeId, string? itemType, bool onlyOverrides, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(storeId, tenantId, ct).ConfigureAwait(false);
+        var query = _db.StoreCatalogOverrides.AsNoTracking().Where(x => x.StoreId == storeId && x.TenantId == tenantId);
+        if (!string.IsNullOrWhiteSpace(itemType) && Enum.TryParse<CatalogItemType>(itemType, true, out var parsed))
+        {
+            query = query.Where(x => x.ItemType == parsed);
+        }
+
+        var rows = await query.OrderBy(x => x.ItemType).ThenBy(x => x.ItemId).ToListAsync(ct).ConfigureAwait(false);
+        if (onlyOverrides)
+        {
+            return rows.Select(x => new CatalogStoreOverrideDto(x.StoreId, x.ItemType.ToString(), x.ItemId, x.OverrideState.ToString(), x.UpdatedAtUtc)).ToList();
+        }
+
+        return rows.Select(x => new CatalogStoreOverrideDto(x.StoreId, x.ItemType.ToString(), x.ItemId, x.OverrideState.ToString(), x.UpdatedAtUtc)).ToList();
+    }
+
+    public async Task<CatalogStoreOverrideDto> UpsertStoreOverrideAsync(UpsertCatalogStoreOverrideRequest request, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(request.StoreId, tenantId, ct).ConfigureAwait(false);
+        if (!Enum.TryParse<CatalogItemType>(request.ItemType, true, out var itemType))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["itemType is invalid."] });
+        }
+        if (!Enum.TryParse<CatalogOverrideState>(request.State, true, out var state))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["state"] = ["state must be Enabled or Disabled."] });
+        }
+
+        var row = await _db.StoreCatalogOverrides.SingleOrDefaultAsync(x => x.StoreId == request.StoreId && x.ItemType == itemType && x.ItemId == request.ItemId, ct).ConfigureAwait(false);
+        if (row is null)
+        {
+            row = new StoreCatalogOverride { Id = Guid.NewGuid(), TenantId = tenantId, StoreId = request.StoreId, ItemType = itemType, ItemId = request.ItemId, OverrideState = state, CreatedAtUtc = DateTimeOffset.UtcNow, UpdatedAtUtc = DateTimeOffset.UtcNow };
+            _db.StoreCatalogOverrides.Add(row);
+        }
+        else
+        {
+            row.OverrideState = state;
+            row.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new CatalogStoreOverrideDto(row.StoreId, row.ItemType.ToString(), row.ItemId, row.OverrideState.ToString(), row.UpdatedAtUtc);
+    }
+
+    public async Task DeleteStoreOverrideAsync(Guid storeId, string itemType, Guid itemId, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(storeId, tenantId, ct).ConfigureAwait(false);
+        if (!Enum.TryParse<CatalogItemType>(itemType, true, out var parsed))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["itemType is invalid."] });
+        }
+
+        var row = await _db.StoreCatalogOverrides.SingleOrDefaultAsync(x => x.StoreId == storeId && x.ItemType == parsed && x.ItemId == itemId, ct).ConfigureAwait(false);
+        if (row is null)
+        {
+            return;
+        }
+
+        _db.StoreCatalogOverrides.Remove(row);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<CatalogInventoryItemDto>> GetCatalogInventoryAsync(Guid storeId, string? itemType, Guid? itemId, bool onlyTracked, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(storeId, tenantId, ct).ConfigureAwait(false);
+        var query = _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.StoreId == storeId && x.TenantId == tenantId);
+        if (!string.IsNullOrWhiteSpace(itemType) && Enum.TryParse<CatalogItemType>(itemType, true, out var parsed))
+        {
+            if (parsed == CatalogItemType.OptionItem) throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["OptionItem is not inventory-trackable in v1."] });
+            query = query.Where(x => x.ItemType == parsed);
+        }
+        if (itemId.HasValue) query = query.Where(x => x.ItemId == itemId.Value);
+        if (onlyTracked)
+        {
+            var trackedProducts = _db.Products.AsNoTracking().Where(x => x.IsInventoryTracked).Select(x => x.Id);
+            var trackedExtras = _db.Extras.AsNoTracking().Where(x => x.IsInventoryTracked).Select(x => x.Id);
+            query = query.Where(x => (x.ItemType == CatalogItemType.Product && trackedProducts.Contains(x.ItemId)) || (x.ItemType == CatalogItemType.Extra && trackedExtras.Contains(x.ItemId)));
+        }
+
+        return await query.OrderBy(x => x.ItemType).ThenBy(x => x.ItemId)
+            .Select(x => new CatalogInventoryItemDto(x.StoreId, x.ItemType.ToString(), x.ItemId, x.OnHandQty, x.UpdatedAtUtc))
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<CatalogInventoryItemDto> UpsertCatalogInventoryAsync(UpsertCatalogInventoryRequest request, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(request.StoreId, tenantId, ct).ConfigureAwait(false);
+        if (!Enum.TryParse<CatalogItemType>(request.ItemType, true, out var itemType) || itemType == CatalogItemType.OptionItem)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["itemType must be Product or Extra."] });
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var row = await _db.CatalogInventoryBalances.SingleOrDefaultAsync(x => x.StoreId == request.StoreId && x.ItemType == itemType && x.ItemId == request.ItemId, ct).ConfigureAwait(false);
+        var previousQty = row?.OnHandQty ?? 0m;
+        if (row is null)
+        {
+            row = new CatalogInventoryBalance { Id = Guid.NewGuid(), TenantId = tenantId, StoreId = request.StoreId, ItemType = itemType, ItemId = request.ItemId, OnHandQty = request.OnHandQty, UpdatedAtUtc = now };
+            _db.CatalogInventoryBalances.Add(row);
+        }
+        else
+        {
+            row.OnHandQty = request.OnHandQty;
+            row.UpdatedAtUtc = now;
+        }
+
+        _db.CatalogInventoryAdjustments.Add(new CatalogInventoryAdjustment
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, StoreId = request.StoreId, ItemType = itemType, ItemId = request.ItemId,
+            DeltaQty = request.OnHandQty - previousQty, ResultingOnHandQty = request.OnHandQty,
+            Reason = request.Reason ?? "SetOnHand", Reference = request.Reference, CreatedAtUtc = now
+        });
+
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return new CatalogInventoryItemDto(row.StoreId, row.ItemType.ToString(), row.ItemId, row.OnHandQty, row.UpdatedAtUtc);
     }
 
     public async Task<IReadOnlyList<StoreInventoryItemDto>> GetInventoryAsync(Guid storeId, string? search, bool onlyWithStock, CancellationToken ct)
@@ -688,7 +813,7 @@ public sealed class PosCatalogService : IPosCatalogService
         return lookup;
     }
 
-    private static ProductDto Map(Product x) => new(x.Id, x.ExternalCode, x.Name, x.CategoryId, x.SubcategoryName, x.BasePrice, x.IsActive, x.IsAvailable, x.CustomizationSchemaId);
+    private static ProductDto Map(Product x) => new(x.Id, x.ExternalCode, x.Name, x.CategoryId, x.SubcategoryName, x.BasePrice, x.IsActive, x.IsAvailable, x.CustomizationSchemaId, x.IsInventoryTracked);
     private static SelectionGroupDto Map(SelectionGroup x) => new(x.Id, x.SchemaId, x.Key, x.Label, x.SelectionMode, x.MinSelections, x.MaxSelections, x.OptionSetId, x.IsActive, x.SortOrder);
     private static async Task<T> FindAsync<T>(DbSet<T> set, Guid id, CancellationToken ct) where T : class => await set.FindAsync([id], ct).ConfigureAwait(false) ?? throw new NotFoundException(typeof(T).Name + " not found");
     private async Task EnsureSchemaActiveIfPresent(Guid? schemaId, CancellationToken ct) { if (!schemaId.HasValue) return; var ok = await _db.CustomizationSchemas.AnyAsync(x => x.Id == schemaId && x.IsActive, ct).ConfigureAwait(false); if (!ok) throw new ValidationException(new Dictionary<string, string[]> { { "customizationSchemaId", ["Schema must exist and be active."] } }); }

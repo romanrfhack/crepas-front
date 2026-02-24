@@ -118,3 +118,9 @@ Composición:
 - `reason=DisabledByTenant`: item deshabilitado por override de tenant.
 - `reason=UnavailableInStore`: item no disponible por tienda (o base `IsAvailable=false`).
 - El payload de conflicto mantiene `itemType`, `itemId`, `itemName` y agrega `reason`.
+
+## Release C (backend)
+
+- Se agregan endpoints tenant-scoped para `store-overrides` con estados explícitos `Enabled|Disabled` y soporte de eliminación de override (vuelve a herencia).
+- Se agregan campos opcionales en snapshot para disponibilidad efectiva: `availabilityReason`, `storeOverrideState`, `isInventoryTracked`, `stockOnHandQty`.
+- Nueva precedencia efectiva: disabled tenant/store > manual availability false > stock (cuando tracked) > default.

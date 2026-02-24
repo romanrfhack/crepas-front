@@ -101,3 +101,9 @@ La especificación de los nuevos endpoints de reportes POS se documenta en `docs
 
 - El contrato de snapshot de catálogo, caching con ETag y semántica `isActive`/`isAvailable` se documenta en `docs/pos-catalog.md`.
 - La creación de venta valida disponibilidad en servidor y devuelve `409 Conflict` cuando un item está temporalmente no disponible.
+
+## Release C availability validation
+
+CreateSale valida disponibilidad efectiva unificada para Product/Extra/OptionItem.
+
+`409` incluye `extensions.itemType`, `extensions.itemId`, `extensions.itemName`, `extensions.reason`.
