@@ -160,3 +160,19 @@ Snapshot POS mantiene compatibilidad backward agregando opcionales:
 - `unavailable-message`
 - `unavailable-item-name`
 - `refresh-catalog-unavailable`
+
+## Release C frontend admin UI (operable)
+
+- Ruta admin: `/app/admin/pos/overrides`.
+- Flujo mínimo:
+  - Capturar `storeId` (`data-testid="store-override-store-select"`).
+  - Renderizar filas para `Product`, `Extra`, `OptionItem`.
+  - Mostrar estado por fila: `Sin override`, `Enabled`, `Disabled` (`store-override-state-{type}-{id}`).
+  - Acciones por fila:
+    - `store-override-enable-{type}-{id}` → `PUT /api/v1/pos/admin/catalog/store-overrides` con `state=Enabled`.
+    - `store-override-disable-{type}-{id}` → `PUT ...` con `state=Disabled`.
+    - `store-override-clear-{type}-{id}` → `DELETE /api/v1/pos/admin/catalog/store-overrides?...`.
+- UX:
+  - loading por fila durante guardado,
+  - rollback visual si la mutación falla,
+  - errores por fila y mensaje global con copy estable.

@@ -76,3 +76,9 @@ No se removieron rutas ni campos existentes (compatibilidad Release A/B preserva
   - Release C: `/api/v1/pos/admin/catalog/inventory`.
   - Legacy: `/api/v1/pos/admin/inventory` (UI de inventario existente).
 - El cliente tipa campos opcionales de snapshot Release C (`availabilityReason`, `storeOverrideState`, `isInventoryTracked`, `stockOnHandQty`) sin volverlos obligatorios.
+
+## 2026-02-24 — Inventory admin fallback legado mantenido
+
+- El frontend de Inventory Lite usa por defecto Release C: `/api/v1/pos/admin/catalog/inventory`.
+- Se mantiene cliente legacy (`/api/v1/pos/admin/inventory`) solo para compatibilidad temporal en llamadas antiguas.
+- Motivo: despliegues graduales donde aún exista consumo histórico del endpoint legado.

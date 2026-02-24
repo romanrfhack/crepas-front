@@ -26,3 +26,21 @@ El stock nunca sobreescribe:
 - `ManualUnavailable`
 
 Solo después de esas reglas, para items inventariables, `stock<=0` => `OutOfStock`.
+
+## Release C frontend admin UI (Inventory Lite)
+
+- Ruta admin: `/app/admin/pos/inventory`.
+- Selector obligatorio de sucursal: `data-testid="inventory-store-select"`.
+- Endpoint preferido: `GET|PUT /api/v1/pos/admin/catalog/inventory`.
+- Renderiza solo tipos inventariables v1:
+  - `Product`
+  - `Extra`
+- `OptionItem` no se renderiza editable en Inventory Lite.
+- Test IDs estables por fila y acciones:
+  - `inventory-row-{type}-{id}`
+  - `inventory-stock-input-{type}-{id}`
+  - `inventory-save-{type}-{id}`
+- Guardado por fila:
+  - update optimista de `stockOnHandQty`,
+  - rollback visual si falla,
+  - manejo explícito de 400 para `OptionItem` con mensaje claro.
