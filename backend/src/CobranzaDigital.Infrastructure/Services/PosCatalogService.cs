@@ -787,14 +787,14 @@ public sealed class PosCatalogService : IPosCatalogService
 
     private async Task<string> ComputeVersionStampFromDataAsync(Guid tenantId, Guid storeId, Guid catalogTemplateId, CancellationToken ct)
     {
-        var categoryStamp = await _db.Categories.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
-        var productStamp = await _db.Products.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
-        var optionItemStamp = await _db.OptionItems.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
-        var extraStamp = await _db.Extras.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
-        var tenantOverrideStamp = await _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
-        var storeOverrideStamp = await _db.StoreCatalogOverrides.AsNoTracking().Where(x => x.StoreId == storeId && x.TenantId == tenantId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
-        var inventoryStamp = await _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.StoreId == storeId && x.TenantId == tenantId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
-        var settingsStamp = await _db.PosSettings.AsNoTracking().Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
+        var categoryStamp = await _db.Categories.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct).ConfigureAwait(false);
+        var productStamp = await _db.Products.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct).ConfigureAwait(false);
+        var optionItemStamp = await _db.OptionItems.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct).ConfigureAwait(false);
+        var extraStamp = await _db.Extras.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct).ConfigureAwait(false);
+        var tenantOverrideStamp = await _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct).ConfigureAwait(false);
+        var storeOverrideStamp = await _db.StoreCatalogOverrides.AsNoTracking().Where(x => x.StoreId == storeId && x.TenantId == tenantId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct).ConfigureAwait(false);
+        var inventoryStamp = await _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.StoreId == storeId && x.TenantId == tenantId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct).ConfigureAwait(false);
+        var settingsStamp = await _db.PosSettings.AsNoTracking().Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct).ConfigureAwait(false);
 
         return string.Join('|', categoryStamp.Ticks, productStamp.Ticks, optionItemStamp.Ticks, extraStamp.Ticks, tenantOverrideStamp.Ticks, storeOverrideStamp.Ticks, inventoryStamp.Ticks, settingsStamp.Ticks);
     }

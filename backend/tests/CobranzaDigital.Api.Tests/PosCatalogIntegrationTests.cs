@@ -363,8 +363,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         }
 
         var next = await GetSnapshotAsync(token);
-        var productRow = Assert.Single(next.Products.Where(x => x.Id == product.Id));
-        var extraRow = Assert.Single(next.Extras.Where(x => x.Id == extra.Id));
+        var productRow = Assert.Single(next.Products, x => x.Id == product.Id);
+        var extraRow = Assert.Single(next.Extras, x => x.Id == extra.Id);
 
         Assert.False(productRow.IsAvailable);
         Assert.Equal("DisabledByStore", productRow.AvailabilityReason);

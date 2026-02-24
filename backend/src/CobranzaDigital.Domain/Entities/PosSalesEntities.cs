@@ -101,6 +101,7 @@ public sealed class PosSettings : Entity
     public decimal CashDifferenceThreshold { get; set; } = 0m;
     public Guid DefaultStoreId { get; set; }
     public bool ShowOnlyInStock { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; }
 }
 
 public sealed class StoreInventory : Entity
