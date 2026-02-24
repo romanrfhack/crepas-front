@@ -133,7 +133,6 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(x => x.SubcategoryName).HasMaxLength(200);
         builder.Property(x => x.BasePrice).HasColumnType("decimal(18,2)");
         builder.Property(x => x.IsAvailable).HasDefaultValue(true);
-        builder.Property(x => x.IsInventoryTracked).HasDefaultValue(false);
         builder.Property(x => x.UpdatedAtUtc)
             .HasDefaultValueSql("SYSUTCDATETIME()");
         builder.HasIndex(x => x.ExternalCode).IsUnique();
@@ -164,7 +163,6 @@ public sealed class OptionItemConfiguration : IEntityTypeConfiguration<OptionIte
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.IsAvailable).HasDefaultValue(true);
-        builder.Property(x => x.IsInventoryTracked).HasDefaultValue(false);
         builder.Property(x => x.UpdatedAtUtc)
             .HasDefaultValueSql("SYSUTCDATETIME()");
         builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
