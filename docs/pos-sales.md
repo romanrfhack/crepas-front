@@ -107,3 +107,14 @@ La especificación de los nuevos endpoints de reportes POS se documenta en `docs
 CreateSale valida disponibilidad efectiva unificada para Product/Extra/OptionItem.
 
 `409` incluye `extensions.itemType`, `extensions.itemId`, `extensions.itemName`, `extensions.reason`.
+
+## Release C - validación de disponibilidad en CreateSale
+
+`POST /api/v1/pos/sales` usa el mismo motor de disponibilidad del snapshot.
+Cuando un item no está disponible retorna `409 Conflict` con `ProblemDetails` estable y extensiones:
+- `itemType`
+- `itemId`
+- `itemName` (vacío si no hay)
+- `reason` (`DisabledByTenant`, `DisabledByStore`, `ManualUnavailable`, `OutOfStock`)
+
+IDs inválidos o no existentes se mantienen como `400 BadRequest`.

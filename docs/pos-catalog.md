@@ -124,3 +124,20 @@ Composición:
 - Se agregan endpoints tenant-scoped para `store-overrides` con estados explícitos `Enabled|Disabled` y soporte de eliminación de override (vuelve a herencia).
 - Se agregan campos opcionales en snapshot para disponibilidad efectiva: `availabilityReason`, `storeOverrideState`, `isInventoryTracked`, `stockOnHandQty`.
 - Nueva precedencia efectiva: disabled tenant/store > manual availability false > stock (cuando tracked) > default.
+
+## Release C disponibilidad efectiva (store + inventory lite)
+
+Se resuelve con precedencia estable por tienda para `Product`, `Extra` y `OptionItem`:
+1. `DisabledByTenant`
+2. `DisabledByStore`
+3. `ManualUnavailable` (`IsAvailable=false`)
+4. `OutOfStock` (solo `Product` y `Extra` con `IsInventoryTracked=true` y `stock<=0`)
+5. disponible (`Available` o `EnabledByStore`)
+
+`GET /api/v1/pos/catalog/snapshot` agrega campos opcionales no rompientes por ítem:
+- `availabilityReason`
+- `storeOverrideState`
+- `isInventoryTracked` (Product/Extra)
+- `stockOnHandQty` (Product/Extra)
+
+El ETag del snapshot cambia también cuando cambian overrides tenant/store, inventario lite y disponibilidad manual base.

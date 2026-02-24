@@ -600,19 +600,20 @@ public sealed class PosCatalogService : IPosCatalogService
             throw new ValidationException(new Dictionary<string, string[]> { ["catalogTemplateId"] = ["Tenant catalog template is not configured."] });
         }
 
-        var disabledProducts = await _db.TenantCatalogOverrides.AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Product && !x.IsEnabled)
-            .Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
-        var disabledExtras = await _db.TenantCatalogOverrides.AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.Extra && !x.IsEnabled)
-            .Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
-        var disabledOptionItems = await _db.TenantCatalogOverrides.AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.ItemType == CatalogItemType.OptionItem && !x.IsEnabled)
-            .Select(x => x.ItemId).ToHashSetAsync(ct).ConfigureAwait(false);
+        var tenantDisabled = await _db.TenantCatalogOverrides.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && !x.IsEnabled)
+            .Select(x => new { x.ItemType, x.ItemId })
+            .ToHashSetAsync(ct)
+            .ConfigureAwait(false);
 
-        var availability = await _db.StoreCatalogAvailabilities.AsNoTracking()
-            .Where(x => x.StoreId == resolvedStoreId)
-            .ToDictionaryAsync(x => (x.ItemType, x.ItemId), x => x.IsAvailable, ct)
+        var storeOverrides = await _db.StoreCatalogOverrides.AsNoTracking()
+            .Where(x => x.StoreId == resolvedStoreId && x.TenantId == tenantId)
+            .ToDictionaryAsync(x => (x.ItemType, x.ItemId), x => (CatalogOverrideState?)x.OverrideState, ct)
+            .ConfigureAwait(false);
+
+        var inventoryByItem = await _db.CatalogInventoryBalances.AsNoTracking()
+            .Where(x => x.StoreId == resolvedStoreId && x.TenantId == tenantId)
+            .ToDictionaryAsync(x => (x.ItemType, x.ItemId), x => x.OnHandQty, ct)
             .ConfigureAwait(false);
 
         var categories = await _db.Categories.AsNoTracking()
@@ -623,7 +624,7 @@ public sealed class PosCatalogService : IPosCatalogService
 
         // --- Productos: primero traemos los datos necesarios desde la BD ---
         var productEntities = await _db.Products.AsNoTracking()
-            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledProducts.Contains(x.Id))
+            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId)
             .Select(x => new
             {
                 x.Id,
@@ -633,12 +634,12 @@ public sealed class PosCatalogService : IPosCatalogService
                 x.SubcategoryName,
                 x.BasePrice,
                 x.IsActive,
-                x.IsAvailable,      // disponibilidad por defecto
-                x.CustomizationSchemaId
+                x.IsAvailable,
+                x.CustomizationSchemaId,
+                x.IsInventoryTracked
             })
             .ToListAsync(ct).ConfigureAwait(false);
 
-        // Mapeamos a DTO usando el diccionario de disponibilidad (en memoria)
         var productCandidates = productEntities.Select(x => new ProductDto(
             x.Id,
             x.ExternalCode,
@@ -647,19 +648,24 @@ public sealed class PosCatalogService : IPosCatalogService
             x.SubcategoryName,
             x.BasePrice,
             x.IsActive,
-            availability.TryGetValue((CatalogItemType.Product, x.Id), out var available) ? available : x.IsAvailable,
-            x.CustomizationSchemaId
+            PosAvailabilityEngine.Resolve(new PosAvailabilityEngine.Input(
+                CatalogItemType.Product,
+                x.Id,
+                !tenantDisabled.Contains(new { ItemType = CatalogItemType.Product, ItemId = x.Id }),
+                storeOverrides.GetValueOrDefault((CatalogItemType.Product, x.Id)),
+                x.IsAvailable,
+                x.IsInventoryTracked,
+                inventoryByItem.GetValueOrDefault((CatalogItemType.Product, x.Id), 0m))).IsAvailableEffective,
+            x.CustomizationSchemaId,
+            x.IsInventoryTracked,
+            inventoryByItem.GetValueOrDefault((CatalogItemType.Product, x.Id), 0m),
+            PosAvailabilityEngine.Resolve(new PosAvailabilityEngine.Input(CatalogItemType.Product, x.Id, !tenantDisabled.Contains(new { ItemType = CatalogItemType.Product, ItemId = x.Id }), storeOverrides.GetValueOrDefault((CatalogItemType.Product, x.Id)), x.IsAvailable, x.IsInventoryTracked, inventoryByItem.GetValueOrDefault((CatalogItemType.Product, x.Id), 0m))).Reason,
+            storeOverrides.GetValueOrDefault((CatalogItemType.Product, x.Id))?.ToString()
         )).ToList();
-
-        // Stock por producto (se mantiene igual)
-        var stockByProduct = await _db.StoreInventories.AsNoTracking()
-            .Where(x => x.StoreId == resolvedStoreId)
-            .ToDictionaryAsync(x => x.ProductId, x => x.OnHand, ct)
-            .ConfigureAwait(false);
 
         // Filtro por stock según configuración
         var products = settings.ShowOnlyInStock
-            ? productCandidates.Where(x => x.IsAvailable && stockByProduct.GetValueOrDefault(x.Id, 0m) > 0m).ToList()
+            ? productCandidates.Where(x => x.IsAvailable).ToList()
             : productCandidates;
 
         // --- OptionSets (no dependen de availability, se mantiene igual) ---
@@ -670,7 +676,7 @@ public sealed class PosCatalogService : IPosCatalogService
 
         // --- OptionItems ---
         var optionItemEntities = await _db.OptionItems.AsNoTracking()
-            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledOptionItems.Contains(x.Id))
+            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId)
             .Select(x => new
             {
                 x.Id,
@@ -682,14 +688,19 @@ public sealed class PosCatalogService : IPosCatalogService
             })
             .ToListAsync(ct).ConfigureAwait(false);
 
-        var optionItems = optionItemEntities.Select(x => new OptionItemDto(
-            x.Id,
-            x.OptionSetId,
-            x.Name,
-            x.IsActive,
-            availability.TryGetValue((CatalogItemType.OptionItem, x.Id), out var avail) ? avail : x.IsAvailable,
-            x.SortOrder
-        )).ToList();
+        var optionItems = optionItemEntities.Select(x =>
+        {
+            var resolved = PosAvailabilityEngine.Resolve(new PosAvailabilityEngine.Input(
+                CatalogItemType.OptionItem,
+                x.Id,
+                !tenantDisabled.Contains(new { ItemType = CatalogItemType.OptionItem, ItemId = x.Id }),
+                storeOverrides.GetValueOrDefault((CatalogItemType.OptionItem, x.Id)),
+                x.IsAvailable,
+                false,
+                null));
+
+            return new OptionItemDto(x.Id, x.OptionSetId, x.Name, x.IsActive, resolved.IsAvailableEffective, x.SortOrder, resolved.Reason, resolved.StoreOverrideState?.ToString());
+        }).ToList();
 
         // --- Schemas (sin cambios) ---
         var schemas = await _db.CustomizationSchemas.AsNoTracking()
@@ -705,24 +716,31 @@ public sealed class PosCatalogService : IPosCatalogService
 
         // --- Extras ---
         var extraEntities = await _db.Extras.AsNoTracking()
-            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId && !disabledExtras.Contains(x.Id))
+            .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId)
             .Select(x => new
             {
                 x.Id,
                 x.Name,
                 x.Price,
                 x.IsActive,
-                x.IsAvailable
+                x.IsAvailable,
+                x.IsInventoryTracked
             })
             .ToListAsync(ct).ConfigureAwait(false);
 
-        var extras = extraEntities.Select(x => new ExtraDto(
-            x.Id,
-            x.Name,
-            x.Price,
-            x.IsActive,
-            availability.TryGetValue((CatalogItemType.Extra, x.Id), out var avail) ? avail : x.IsAvailable
-        )).ToList();
+        var extras = extraEntities.Select(x =>
+        {
+            var stock = inventoryByItem.GetValueOrDefault((CatalogItemType.Extra, x.Id), 0m);
+            var resolved = PosAvailabilityEngine.Resolve(new PosAvailabilityEngine.Input(
+                CatalogItemType.Extra,
+                x.Id,
+                !tenantDisabled.Contains(new { ItemType = CatalogItemType.Extra, ItemId = x.Id }),
+                storeOverrides.GetValueOrDefault((CatalogItemType.Extra, x.Id)),
+                x.IsAvailable,
+                x.IsInventoryTracked,
+                stock));
+            return new ExtraDto(x.Id, x.Name, x.Price, x.IsActive, resolved.IsAvailableEffective, x.IsInventoryTracked, stock, resolved.Reason, resolved.StoreOverrideState?.ToString());
+        }).ToList();
 
         // --- IncludedItems (depende de las listas ya en memoria, pero EF puede traducir el Contains a SQL) ---
         var included = await _db.IncludedItems.AsNoTracking()
@@ -757,11 +775,28 @@ public sealed class PosCatalogService : IPosCatalogService
 
     public async Task<string> ComputeCatalogEtagAsync(Guid? storeId, CancellationToken ct)
     {
-        var snapshot = await GetSnapshotAsync(storeId, ct).ConfigureAwait(false);
-        var sections = new[] { snapshot.VersionStamp, snapshot.StoreId.ToString("N"), snapshot.CatalogTemplateId.ToString("N") };
+        var tenantId = RequireTenantId();
+        var (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
+        var mapping = await _db.TenantCatalogTemplates.AsNoTracking().SingleAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
+        var stamp = await ComputeVersionStampFromDataAsync(tenantId, resolvedStoreId, mapping.CatalogTemplateId ?? Guid.Empty, ct).ConfigureAwait(false);
+        var sections = new[] { stamp, resolvedStoreId.ToString("N"), (mapping.CatalogTemplateId ?? Guid.Empty).ToString("N") };
         var etagSeed = string.Join('\n', sections);
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(etagSeed));
         return $"W/\"{Convert.ToHexString(bytes)}\"";
+    }
+
+    private async Task<string> ComputeVersionStampFromDataAsync(Guid tenantId, Guid storeId, Guid catalogTemplateId, CancellationToken ct)
+    {
+        var categoryStamp = await _db.Categories.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
+        var productStamp = await _db.Products.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
+        var optionItemStamp = await _db.OptionItems.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
+        var extraStamp = await _db.Extras.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
+        var tenantOverrideStamp = await _db.TenantCatalogOverrides.AsNoTracking().Where(x => x.TenantId == tenantId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
+        var storeOverrideStamp = await _db.StoreCatalogOverrides.AsNoTracking().Where(x => x.StoreId == storeId && x.TenantId == tenantId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
+        var inventoryStamp = await _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.StoreId == storeId && x.TenantId == tenantId).Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
+        var settingsStamp = await _db.PosSettings.AsNoTracking().Select(x => x.UpdatedAtUtc).DefaultIfEmpty().MaxAsync(ct);
+
+        return string.Join('|', categoryStamp.Ticks, productStamp.Ticks, optionItemStamp.Ticks, extraStamp.Ticks, tenantOverrideStamp.Ticks, storeOverrideStamp.Ticks, inventoryStamp.Ticks, settingsStamp.Ticks);
     }
 
     private sealed record CatalogItemTemplateDetail(string ItemName, string? ItemSku);

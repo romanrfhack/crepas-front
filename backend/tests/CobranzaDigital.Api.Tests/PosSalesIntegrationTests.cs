@@ -485,6 +485,35 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     }
 
     [Fact]
+    public async Task CreateSale_Returns_DisabledByStore_And_ManualUnavailable_Reasons()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"store-reason-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var pStore = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Store disabled", categoryId = category.Id, basePrice = 70m, isActive = true, isAvailable = true });
+        var pManual = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Manual unavailable", categoryId = category.Id, basePrice = 75m, isActive = true, isAvailable = false });
+        var snapshot = await GetSnapshotAsync(token);
+
+        using (var putOverride = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/store-overrides", token))
+        {
+            putOverride.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = pStore.Id, state = "Disabled" });
+            using var overrideResp = await _client.SendAsync(putOverride);
+            Assert.Equal(HttpStatusCode.OK, overrideResp.StatusCode);
+        }
+
+        using var disabledReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        disabledReq.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = pStore.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 70m } });
+        using var disabledResp = await _client.SendAsync(disabledReq);
+        await AssertItemUnavailableResponseAsync(disabledResp, "Product", pStore.Id, pStore.Name, "DisabledByStore");
+
+        using var manualReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        manualReq.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = pManual.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 75m } });
+        using var manualResp = await _client.SendAsync(manualReq);
+        await AssertItemUnavailableResponseAsync(manualResp, "Product", pManual.Id, pManual.Name, "ManualUnavailable");
+    }
+
+    [Fact]
     public async Task VoidSale_IsIdempotent_ByClientVoidId()
     {
         await CloseAnyOpenShiftAsync();
@@ -677,8 +706,8 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
 
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
     private sealed record CategoryResponse(Guid Id, string Name, int SortOrder, bool IsActive);
-    private sealed record ProductResponse(Guid Id, string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive, bool IsAvailable, Guid? CustomizationSchemaId);
-    private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive, bool IsAvailable);
+    private sealed record ProductResponse(Guid Id, string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive, bool IsAvailable, Guid? CustomizationSchemaId, bool? IsInventoryTracked = null);
+    private sealed record ExtraResponse(Guid Id, string Name, decimal Price, bool IsActive, bool IsAvailable, bool? IsInventoryTracked = null);
     private sealed record OptionSetResponse(Guid Id, string Name, bool IsActive);
     private sealed record OptionItemResponse(Guid Id, Guid OptionSetId, string Name, bool IsActive, bool IsAvailable, int SortOrder);
     private sealed record CreateSaleResponse(Guid SaleId, string Folio, DateTimeOffset OccurredAtUtc, decimal Total);
