@@ -24,7 +24,7 @@ describe('InventoryPage', () => {
         {
           provide: PosInventoryAdminApiService,
           useValue: {
-            listInventory: async (storeId: string, search?: string, onlyWithStock?: boolean) => {
+            listLegacyInventory: async (storeId: string, search?: string, onlyWithStock?: boolean) => {
               listCalls.push({ storeId, search, onlyWithStock });
               return [
                 {
@@ -49,7 +49,7 @@ describe('InventoryPage', () => {
                 },
               ];
             },
-            upsertInventory: async (payload: { storeId: string; productId: string; onHand: number }) => {
+            upsertLegacyInventory: async (payload: { storeId: string; productId: string; onHand: number }) => {
               upsertCalls.push(payload);
               return {
                 ...payload,
@@ -122,9 +122,9 @@ describe('InventoryPage', () => {
 
   it('shows tenant required message when backend returns 400', async () => {
     const api = TestBed.inject(PosInventoryAdminApiService) as unknown as {
-      listInventory: () => Promise<unknown>;
+      listLegacyInventory: () => Promise<unknown>;
     };
-    api.listInventory = async () => {
+    api.listLegacyInventory = async () => {
       throw new HttpErrorResponse({
         status: 400,
         error: { detail: 'tenantId required for this endpoint in platform mode' },

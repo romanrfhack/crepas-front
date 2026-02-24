@@ -148,7 +148,7 @@ export class InventoryPage {
 
     this.globalError.set(null);
     try {
-      const response = await this.api.listInventory(storeId, this.searchControl.value);
+      const response = await this.api.listLegacyInventory(storeId, this.searchControl.value);
       this.items.set(response);
       this.onHandDrafts.set(
         response.reduce<Record<string, number>>((acc, item) => {
@@ -189,7 +189,7 @@ export class InventoryPage {
 
     this.rowErrors.update((errors) => ({ ...errors, [item.productId]: '' }));
     try {
-      await this.api.upsertInventory({
+      await this.api.upsertLegacyInventory({
         storeId: this.storeIdControl.value.trim(),
         productId: item.productId,
         onHand: nextOnHand,

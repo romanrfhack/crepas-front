@@ -60,6 +60,7 @@
             <span class="option-label">{{ item.name }}</span>
             @if (unavailable) {
               <span [attr.data-testid]="'option-item-unavailable-' + item.id">Agotado</span>
+              <span [attr.data-testid]="'availability-badge-OptionItem-' + item.id">{{ item.availabilityReason ?? 'Unavailable' }}</span>
             }
           </label>
         }
@@ -105,6 +106,7 @@
                 </button>
                 @if (!extra.isAvailable) {
                   <span [attr.data-testid]="'extra-unavailable-' + extra.id">Agotado</span>
+                  <span [attr.data-testid]="'availability-badge-Extra-' + extra.id">{{ extra.availabilityReason ?? 'Unavailable' }}</span>
                 }
               </div>
             </div>

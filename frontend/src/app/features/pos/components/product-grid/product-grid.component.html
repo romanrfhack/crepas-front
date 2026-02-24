@@ -37,6 +37,9 @@
                 >
                   Agotado
                 </span>
+                <span [attr.data-testid]="'availability-badge-Product-' + product.id">
+                  {{ product.availabilityReason ?? 'Unavailable' }}
+                </span>
               }
             </div>
           </div>

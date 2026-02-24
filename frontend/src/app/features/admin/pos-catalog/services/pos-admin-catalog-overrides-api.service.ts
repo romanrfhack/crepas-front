@@ -5,29 +5,40 @@ import { ApiClient } from '../../../../core/services/api-client';
 export type CatalogItemType = 'Product' | 'Extra' | 'OptionItem';
 
 export interface CatalogItemOverrideDto {
+  storeId: string;
   itemType: string;
   itemId: string;
-  isEnabled: boolean;
+  state: 'Enabled' | 'Disabled';
   updatedAtUtc: string;
 }
 
-export interface UpsertCatalogItemOverrideRequest {
+export interface UpsertCatalogStoreOverrideRequest {
+  storeId: string;
   itemType: CatalogItemType;
   itemId: string;
-  isEnabled: boolean;
+  state: 'Enabled' | 'Disabled';
 }
 
 @Injectable({ providedIn: 'root' })
 export class PosAdminCatalogOverridesApiService {
   private readonly apiClient = inject(ApiClient);
-  private readonly path = '/v1/pos/admin/catalog/overrides';
+  private readonly path = '/v1/pos/admin/catalog/store-overrides';
 
-  listOverrides(type?: string) {
-    const query = type ? `?type=${encodeURIComponent(type)}` : '';
-    return firstValueFrom(this.apiClient.get<CatalogItemOverrideDto[]>(`${this.path}${query}`));
+  listOverrides(storeId: string, itemType?: string, onlyOverrides = true) {
+    const query = new URLSearchParams({ storeId, onlyOverrides: String(onlyOverrides) });
+    if (itemType?.trim()) {
+      query.set('itemType', itemType.trim());
+    }
+
+    return firstValueFrom(this.apiClient.get<CatalogItemOverrideDto[]>(`${this.path}?${query.toString()}`));
   }
 
-  upsertOverride(payload: UpsertCatalogItemOverrideRequest) {
+  upsertOverride(payload: UpsertCatalogStoreOverrideRequest) {
     return firstValueFrom(this.apiClient.put<CatalogItemOverrideDto>(this.path, payload));
+  }
+
+  deleteOverride(storeId: string, itemType: CatalogItemType, itemId: string) {
+    const query = new URLSearchParams({ storeId, itemType, itemId });
+    return firstValueFrom(this.apiClient.delete<void>(`${this.path}?${query.toString()}`));
   }
 }

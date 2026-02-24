@@ -808,7 +808,9 @@ export class ProductsPage {
     this.tenantRequiredError.set('');
 
     try {
-      await this.overridesApi.upsertOverride({ itemType: 'Product', itemId, isEnabled: checked });
+      const storeId = this.storeContext.getActiveStoreId();
+    if (!storeId) { return; }
+      await this.overridesApi.upsertOverride({ storeId, itemType: 'Product', itemId, state: checked ? 'Enabled' : 'Disabled' });
       this.overrideByItemId.update((current) => ({ ...current, [itemId]: checked }));
       this.snapshotService.invalidate();
       await this.loadSnapshotAvailability();
@@ -896,9 +898,14 @@ export class ProductsPage {
 
   private async loadOverrides() {
     try {
-      const overrides = await this.overridesApi.listOverrides('Product');
+      const storeId = this.storeContext.getActiveStoreId();
+      if (!storeId) {
+        this.overrideByItemId.set({});
+        return;
+      }
+      const overrides = await this.overridesApi.listOverrides(storeId, 'Product');
       this.overrideByItemId.set(
-        overrides.reduce<Record<string, boolean>>((acc, item) => ({ ...acc, [item.itemId]: item.isEnabled }), {}),
+        overrides.reduce<Record<string, boolean>>((acc, item) => ({ ...acc, [item.itemId]: item.state === 'Enabled' }), {}),
       );
     } catch {
       this.overrideByItemId.set({});
