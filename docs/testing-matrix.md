@@ -81,3 +81,11 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 | Inventory admin GET template coverage (Release C.1/C.1.1 DTO) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PosCatalogIntegrationTests.cs` (`Inventory_Get_Includes_Template_Products_Without_Row_With_Default_Zeroes`, `Inventory_Get_Filters_By_Search_Name_And_Sku`, `Inventory_Get_OnlyWithStock_Returns_Products_With_OnHand_Greater_Than_Zero`) + `backend/tests/CobranzaDigital.Api.Tests/TenantIsolationIntegrationTests.cs` (`Inventory_Get_Enforces_TenantOwnership_And_Allows_SuperAdmin_With_TenantHeader`). Frontend Unit/E2E: `frontend/src/app/features/admin/pos-catalog/pages/inventory/inventory.page.spec.ts`, `frontend/e2e/pos.inventory.releasec.contract.spec.ts`. | Verificar explícitamente que el payload JSON siempre incluya `hasInventoryRow` (required) y que `updatedAtUtc` pueda serializarse como `null` cuando no existe fila real de inventario; además mantener filtro local UI y ownership/superadmin del endpoint inventory. |
 
 | Release C store override + inventory lite | Backend integration (pendiente de ampliación): snapshot/create-sale/admin endpoints. | Cubrir precedencia unificada, tenant isolation y razones 409 estables. |
+
+
+### Release C backend (catalog availability + inventory lite)
+
+- Snapshot precedence por regla: tenant disabled, store disabled, manual unavailable, out-of-stock, in-stock.
+- CreateSale 409 reason estable para Product/Extra/OptionItem según precedencia.
+- Admin endpoints release C: store-overrides + inventory (incluye rechazo OptionItem 400 y tenant isolation).
+- Snapshot ETag: 200/304 y cambio al modificar override/inventory/manual availability.

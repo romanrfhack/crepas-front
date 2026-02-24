@@ -63,3 +63,9 @@ Este documento registra compatibilidades temporales agregadas para evitar romper
 - Nuevos endpoints admin:
   - `GET|PUT|DELETE /api/v1/pos/admin/catalog/store-overrides`
   - `GET|PUT /api/v1/pos/admin/catalog/inventory`
+
+
+## POS Release C (compat)
+
+Se agregan campos opcionales no rompientes en snapshot (`availabilityReason`, `storeOverrideState`, `isInventoryTracked`, `stockOnHandQty`).
+No se removieron rutas ni campos existentes (compatibilidad Release A/B preservada).
