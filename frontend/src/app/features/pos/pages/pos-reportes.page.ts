@@ -14,6 +14,7 @@ import {
   CashDifferencesShiftItemDto,
   DailySalesReportItemDto,
   HourlySalesReportItemDto,
+  InventoryReportRowDto,
   PaymentsByMethodSummaryDto,
   PosReportFilters,
   SalesMixByCategoryItemDto,
@@ -24,6 +25,8 @@ import {
 } from '../models/pos-reports.models';
 import { PosReportsApiService } from '../services/pos-reports-api.service';
 import { PosTimezoneService } from '../services/pos-timezone.service';
+import { AuthService } from '../../auth/services/auth.service';
+import { PlatformTenantContextService } from '../../platform/services/platform-tenant-context.service';
 
 type ReportSectionKey =
   | 'cashiers'
@@ -37,7 +40,10 @@ type ReportSectionKey =
   | 'mixProducts'
   | 'addonsExtras'
   | 'addonsOptions'
-  | 'cashDifferences';
+  | 'cashDifferences'
+  | 'inventoryCurrent'
+  | 'inventoryLow'
+  | 'inventoryOut';
 
 @Component({
   selector: 'app-pos-reportes-page',
@@ -49,12 +55,18 @@ type ReportSectionKey =
 export class PosReportesPage implements OnInit {
   private readonly reportsApi = inject(PosReportsApiService);
   readonly timezoneService = inject(PosTimezoneService);
+  private readonly authService = inject(AuthService);
+  private readonly tenantContext = inject(PlatformTenantContextService);
 
   readonly today = this.timezoneService.todayIsoDate();
   readonly from = signal(this.getDateDaysAgo(6));
   readonly to = signal(this.today);
   readonly selectedCashierUserId = signal('');
   readonly selectedShiftId = signal('');
+  readonly inventoryStoreId = signal('');
+  readonly inventoryItemType = signal<'Product' | 'Extra' | ''>('');
+  readonly inventorySearch = signal('');
+  readonly inventoryThreshold = signal(5);
 
   readonly loading = signal(false);
   readonly sectionLoading = signal<Record<ReportSectionKey, boolean>>({
@@ -70,6 +82,9 @@ export class PosReportesPage implements OnInit {
     addonsExtras: false,
     addonsOptions: false,
     cashDifferences: false,
+    inventoryCurrent: false,
+    inventoryLow: false,
+    inventoryOut: false,
   });
   readonly sectionErrors = signal<Partial<Record<ReportSectionKey, string>>>({});
 
@@ -86,6 +101,19 @@ export class PosReportesPage implements OnInit {
   readonly addonsExtras = signal<AddonsExtraUsageItemDto[]>([]);
   readonly addonsOptions = signal<AddonsOptionUsageItemDto[]>([]);
   readonly cashDifferenceShifts = signal<CashDifferencesShiftItemDto[]>([]);
+  readonly inventoryCurrentRows = signal<InventoryReportRowDto[]>([]);
+  readonly inventoryLowRows = signal<InventoryReportRowDto[]>([]);
+  readonly inventoryOutRows = signal<InventoryReportRowDto[]>([]);
+
+  readonly tenantRequiredError = computed(() => {
+    if (!this.authService.hasRole('SuperAdmin')) {
+      return '';
+    }
+
+    return this.tenantContext.getSelectedTenantId()
+      ? ''
+      : 'Selecciona Tenant en Plataforma para consultar reportes POS.';
+  });
 
   readonly paymentRows = computed(() => {
     const rows = this.paymentSummary()?.totals ?? [];
@@ -197,6 +225,20 @@ export class PosReportesPage implements OnInit {
         });
         this.cashDifferenceShifts.set(response.shifts);
       }),
+      this.loadSection('inventoryCurrent', async () => {
+        this.inventoryCurrentRows.set(await this.reportsApi.inventoryCurrent(this.buildInventoryFilters()));
+      }),
+      this.loadSection('inventoryLow', async () => {
+        this.inventoryLowRows.set(
+          await this.reportsApi.inventoryLowStock({
+            ...this.buildInventoryFilters(),
+            threshold: this.inventoryThreshold(),
+          }),
+        );
+      }),
+      this.loadSection('inventoryOut', async () => {
+        this.inventoryOutRows.set(await this.reportsApi.inventoryOutOfStock(this.buildInventoryFilters()));
+      }),
     ];
 
     await Promise.allSettled(promises);
@@ -261,6 +303,14 @@ export class PosReportesPage implements OnInit {
     return {
       dateFrom: this.from(),
       dateTo: this.to(),
+    };
+  }
+
+  private buildInventoryFilters() {
+    return {
+      storeId: this.inventoryStoreId() || undefined,
+      itemType: this.inventoryItemType() || undefined,
+      search: this.inventorySearch() || undefined,
     };
   }
 

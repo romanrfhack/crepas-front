@@ -18,6 +18,9 @@ describe('PosReportesPage', () => {
     getAddonsExtrasUsage: ReturnType<typeof vi.fn>;
     getAddonsOptionsUsage: ReturnType<typeof vi.fn>;
     getCashDifferencesControl: ReturnType<typeof vi.fn>;
+    inventoryCurrent: ReturnType<typeof vi.fn>;
+    inventoryLowStock: ReturnType<typeof vi.fn>;
+    inventoryOutOfStock: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -111,6 +114,23 @@ describe('PosReportesPage', () => {
           },
         ],
       }),
+      inventoryCurrent: vi.fn().mockResolvedValue([
+        {
+          itemType: 'Product',
+          itemId: 'prod-1',
+          itemName: 'Latte',
+          itemSku: 'LAT',
+          storeId: 'store-1',
+          stockOnHandQty: 8,
+          isInventoryTracked: true,
+          availabilityReason: null,
+          storeOverrideState: null,
+          updatedAtUtc: null,
+          lastAdjustmentAtUtc: null,
+        },
+      ]),
+      inventoryLowStock: vi.fn().mockResolvedValue([]),
+      inventoryOutOfStock: vi.fn().mockResolvedValue([]),
     };
 
     await TestBed.configureTestingModule({
@@ -208,5 +228,22 @@ describe('PosReportesPage', () => {
 
     const firstRowCells = compiled.querySelectorAll('[data-testid="cash-diff-row-0"] td');
     expect(firstRowCells.item(0).textContent).toContain('Cajero Demo');
+  });
+
+  it('passes threshold to low-stock inventory report', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    fixture.componentInstance.inventoryThreshold.set(3);
+    fixture.componentInstance.inventoryItemType.set('Product');
+    fixture.componentInstance.inventorySearch.set('latte');
+    await fixture.componentInstance.loadReports();
+
+    expect(apiMock.inventoryLowStock).toHaveBeenLastCalledWith({
+      itemType: 'Product',
+      search: 'latte',
+      storeId: undefined,
+      threshold: 3,
+    });
   });
 });

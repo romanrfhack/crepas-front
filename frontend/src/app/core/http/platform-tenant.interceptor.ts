@@ -4,6 +4,7 @@ import { AuthService } from '../../features/auth/services/auth.service';
 import { PlatformTenantContextService } from '../../features/platform/services/platform-tenant-context.service';
 
 const POS_ADMIN_PATH = '/api/v1/pos/admin/';
+const POS_REPORTS_PATH = '/api/v1/pos/reports/';
 const SNAPSHOT_PATH = '/api/v1/pos/catalog/snapshot';
 const PLATFORM_PATH = '/api/v1/platform/';
 
@@ -22,7 +23,8 @@ export const platformTenantInterceptor: HttpInterceptorFn = (req, next) => {
 
   const requestUrl = new URL(req.url, window.location.origin);
   const path = requestUrl.pathname;
-  const isPosAdminRequest = path.startsWith(POS_ADMIN_PATH) || path === SNAPSHOT_PATH;
+  const isPosAdminRequest =
+    path.startsWith(POS_ADMIN_PATH) || path.startsWith(POS_REPORTS_PATH) || path === SNAPSHOT_PATH;
   const isPlatformRequest = path.startsWith(PLATFORM_PATH);
 
   if (!isPosAdminRequest || isPlatformRequest) {

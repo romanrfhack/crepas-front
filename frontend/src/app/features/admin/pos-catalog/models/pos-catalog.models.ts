@@ -189,4 +189,44 @@ export interface UpsertCatalogInventoryRequest {
   reason?: string | null;
   reference?: string | null;
 }
+
+export type InventoryAdjustmentReason =
+  | 'InitialLoad'
+  | 'Purchase'
+  | 'Return'
+  | 'Waste'
+  | 'Damage'
+  | 'Correction'
+  | 'TransferIn'
+  | 'TransferOut'
+  | 'ManualCount';
+
+export interface CreateCatalogInventoryAdjustmentRequest {
+  storeId: string;
+  itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
+  itemId: string;
+  quantityDelta: number;
+  reason: InventoryAdjustmentReason;
+  reference?: string | null;
+  note?: string | null;
+  clientOperationId?: string | null;
+}
+
+export interface CatalogInventoryAdjustmentDto {
+  id: string;
+  storeId: string;
+  itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
+  itemId: string;
+  qtyBefore: number;
+  qtyDelta: number;
+  qtyAfter: number;
+  reason: InventoryAdjustmentReason;
+  reference?: string | null;
+  note?: string | null;
+  clientOperationId?: string | null;
+  createdAtUtc: string;
+  performedByUserId: string;
+  itemName?: string | null;
+  itemSku?: string | null;
+}
 export type CatalogItemType = 'Product' | 'Extra' | 'OptionItem';

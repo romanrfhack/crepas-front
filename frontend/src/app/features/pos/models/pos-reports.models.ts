@@ -6,6 +6,27 @@ export interface PosReportFilters {
   shiftId?: string;
 }
 
+export interface InventoryReportFilters {
+  storeId?: string;
+  itemType?: 'Product' | 'Extra';
+  search?: string;
+  threshold?: number;
+}
+
+export interface InventoryReportRowDto {
+  itemType: 'Product' | 'Extra';
+  itemId: string;
+  itemName: string;
+  itemSku: string | null;
+  storeId: string;
+  stockOnHandQty: number;
+  isInventoryTracked: boolean;
+  availabilityReason: string | null;
+  storeOverrideState: string | null;
+  updatedAtUtc: string | null;
+  lastAdjustmentAtUtc: string | null;
+}
+
 export interface DailySalesReportItemDto {
   businessDate: string;
   tickets: number;
