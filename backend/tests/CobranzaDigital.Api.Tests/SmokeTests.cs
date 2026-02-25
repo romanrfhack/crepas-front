@@ -376,7 +376,7 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
             Console.WriteLine($"[CobranzaDigitalApiFactory] InitializeAsync connection string: {MaskSqlPassword(dbContext.Database.GetConnectionString())}");
             Console.WriteLine($"[CobranzaDigitalApiFactory] InitializeAsync database name: {dbContext.Database.GetDbConnection().Database}");
 
-            await dbContext.Database.MigrateAsync();
+            await dbContext.Database.EnsureCreatedAsync();
 
 
             var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
