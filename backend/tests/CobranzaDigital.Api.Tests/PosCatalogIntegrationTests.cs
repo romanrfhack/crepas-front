@@ -150,9 +150,9 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             Assert.Equal(HttpStatusCode.OK, disableResp.StatusCode);
         }
 
-        using (var availabilityReq = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/availability", token))
+        using (var availabilityReq = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/store-overrides", token))
         {
-            availabilityReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = p1.Id, isAvailable = false });
+            availabilityReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = p1.Id, state = "Disabled" });
             using var availabilityResp = await _client.SendAsync(availabilityReq);
             Assert.Equal(HttpStatusCode.OK, availabilityResp.StatusCode);
         }
@@ -171,10 +171,9 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         _ = await ToggleAvailabilityAndAssertEtagChangedAsync(token, changed, async () =>
         {
-            using var availabilityReq = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/availability", token);
-            availabilityReq.Content = JsonContent.Create(new { storeId = filteredSnapshot.StoreId, itemType = "Product", itemId = p1.Id, isAvailable = true });
+            using var availabilityReq = CreateAuthorizedRequest(HttpMethod.Delete, $"/api/v1/pos/admin/catalog/store-overrides?storeId={filteredSnapshot.StoreId:D}&itemType=Product&itemId={p1.Id:D}", token);
             using var availabilityResp = await _client.SendAsync(availabilityReq);
-            Assert.Equal(HttpStatusCode.OK, availabilityResp.StatusCode);
+            Assert.True(availabilityResp.StatusCode is HttpStatusCode.OK or HttpStatusCode.NoContent);
         });
     }
 
