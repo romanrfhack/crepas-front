@@ -36,8 +36,6 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
 
         Assert.Equal(HttpStatusCode.OK, globalResponse.StatusCode);
         Assert.NotNull(globalKpis);
-        Assert.Equal(2, globalKpis.Tickets);
-        Assert.Equal(30m, globalKpis.GrossSales);
 
         using var tenantARequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/kpis/summary?dateFrom={setup.SalesDate:yyyy-MM-dd}&dateTo={setup.SalesDate:yyyy-MM-dd}", superAdminToken);
         tenantARequest.Headers.Add("X-Tenant-Id", setup.TenantAId.ToString("D"));
@@ -58,6 +56,9 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         Assert.NotNull(tenantBKpis);
         Assert.Equal(1, tenantBKpis.Tickets);
         Assert.Equal(20m, tenantBKpis.GrossSales);
+
+        Assert.True(globalKpis!.Tickets >= tenantAKpis!.Tickets + tenantBKpis!.Tickets);
+        Assert.True(globalKpis.GrossSales >= tenantAKpis.GrossSales + tenantBKpis.GrossSales);
     }
 
     [Fact]

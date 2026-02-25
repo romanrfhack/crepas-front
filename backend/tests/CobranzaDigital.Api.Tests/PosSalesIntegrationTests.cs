@@ -96,6 +96,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         await CloseAnyOpenShiftAsync();
 
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await UpdateInventorySettingsAsync(token, false);
 
         using var openReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/shifts/open", token);
         openReq.Content = JsonContent.Create(new
@@ -109,7 +110,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Assert.Equal(HttpStatusCode.OK, openResp.StatusCode);
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = "Cierre POS", sortOrder = 1, isActive = true });
-        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Americano", categoryId = category.Id, basePrice = 50m, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Americano", categoryId = category.Id, basePrice = 50m, isActive = true, isInventoryTracked = false });
 
         await CreateSaleAsync(token, product.Id, quantity: 1, total: 50m);
 
@@ -460,7 +461,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         request.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 1, selections = new[] { new { groupKey = "x", optionItemId = optionItem.Id } }, extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 80m } });
         using var response = await _client.SendAsync(request);
 
-        await AssertItemUnavailableResponseAsync(response, "OptionItem", optionItem.Id, optionItem.Name);
+        await AssertItemUnavailableResponseAsync(response, "OptionItem", optionItem.Id, optionItem.Name, "ManualUnavailable");
     }
 
     [Fact]
@@ -476,7 +477,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         using var extraRequest = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
         extraRequest.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = new[] { new { extraId = extra.Id, quantity = 1 } } } }, payment = new { method = "Cash", amount = 85m } });
         using var extraResponse = await _client.SendAsync(extraRequest);
-        await AssertItemUnavailableResponseAsync(extraResponse, "Extra", extra.Id, extra.Name);
+        await AssertItemUnavailableResponseAsync(extraResponse, "Extra", extra.Id, extra.Name, "ManualUnavailable");
 
         using var invalidIdsRequest = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
         invalidIdsRequest.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = Guid.NewGuid(), quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 1m } });
