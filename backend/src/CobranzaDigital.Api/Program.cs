@@ -169,15 +169,23 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+var isTestingEnvironment = app.Environment.IsEnvironment("Testing");
 var applyMigrationsOnStartup =
-    app.Environment.IsEnvironment("Testing") ||
     string.Equals(app.Configuration["APPLY_MIGRATIONS_ON_STARTUP"], "1", StringComparison.Ordinal);
 
-if (applyMigrationsOnStartup)
+if (isTestingEnvironment || applyMigrationsOnStartup)
 {
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
-    await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+
+    if (isTestingEnvironment)
+    {
+        await dbContext.Database.EnsureCreatedAsync().ConfigureAwait(false);
+    }
+    else
+    {
+        await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+    }
 }
 
 var jwtLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("JwtStartup");
