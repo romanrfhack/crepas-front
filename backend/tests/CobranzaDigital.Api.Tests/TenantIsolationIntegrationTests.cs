@@ -245,6 +245,12 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         db.Stores.AddRange(storeA, storeB);
         await db.SaveChangesAsync();
 
+        var posSettings = await db.PosSettings.OrderBy(x => x.Id).FirstOrDefaultAsync();
+        if (posSettings is not null)
+        {
+            posSettings.MultiStoreEnabled = true;
+        }
+
         tenantA.DefaultStoreId = storeA.Id;
         tenantB.DefaultStoreId = storeB.Id;
         await db.SaveChangesAsync();
