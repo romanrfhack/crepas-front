@@ -83,8 +83,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"stock-cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
-        var p1 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock P1", categoryId = category.Id, basePrice = 55m, isActive = true, isAvailable = true });
-        var p2 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock P2", categoryId = category.Id, basePrice = 65m, isActive = true, isAvailable = true });
+        var p1 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock P1", categoryId = category.Id, basePrice = 55m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var p2 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock P2", categoryId = category.Id, basePrice = 65m, isActive = true, isAvailable = true, isInventoryTracked = true });
 
         var snapshot = await GetSnapshotAsync(token);
 
@@ -156,7 +156,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         }
 
         var filteredSnapshot = await GetSnapshotAsync(token);
-        Assert.DoesNotContain(filteredSnapshot.Products, x => x.Id == p2.Id);
+        Assert.Contains(filteredSnapshot.Products, x => x.Id == p2.Id && x.IsAvailable == false && x.AvailabilityReason == "DisabledByTenant");
         Assert.Contains(filteredSnapshot.Products, x => x.Id == p1.Id && x.IsAvailable == false);
 
         var changed = await ToggleAvailabilityAndAssertEtagChangedAsync(token, etag, async () =>
