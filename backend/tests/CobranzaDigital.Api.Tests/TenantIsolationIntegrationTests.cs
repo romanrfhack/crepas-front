@@ -37,7 +37,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         Assert.Equal(HttpStatusCode.OK, globalResponse.StatusCode);
         Assert.NotNull(globalKpis);
 
-        using var tenantARequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/kpis/summary?dateFrom={setup.SalesDate:yyyy-MM-dd}&dateTo={setup.SalesDate:yyyy-MM-dd}", superAdminToken);
+        using var tenantARequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/kpis/summary?dateFrom={setup.SalesDate:yyyy-MM-dd}&dateTo={setup.SalesDate:yyyy-MM-dd}&storeId={setup.StoreAId:D}", superAdminToken);
         tenantARequest.Headers.Add("X-Tenant-Id", setup.TenantAId.ToString("D"));
         using var tenantAResponse = await _client.SendAsync(tenantARequest);
         var tenantAKpis = await tenantAResponse.Content.ReadFromJsonAsync<PosKpisSummaryDto>();
@@ -47,7 +47,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         Assert.Equal(1, tenantAKpis.Tickets);
         Assert.Equal(10m, tenantAKpis.GrossSales);
 
-        using var tenantBRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/kpis/summary?dateFrom={setup.SalesDate:yyyy-MM-dd}&dateTo={setup.SalesDate:yyyy-MM-dd}", superAdminToken);
+        using var tenantBRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/kpis/summary?dateFrom={setup.SalesDate:yyyy-MM-dd}&dateTo={setup.SalesDate:yyyy-MM-dd}&storeId={setup.StoreBId:D}", superAdminToken);
         tenantBRequest.Headers.Add("X-Tenant-Id", setup.TenantBId.ToString("D"));
         using var tenantBResponse = await _client.SendAsync(tenantBRequest);
         var tenantBKpis = await tenantBResponse.Content.ReadFromJsonAsync<PosKpisSummaryDto>();

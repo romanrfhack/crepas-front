@@ -92,8 +92,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         try
         {
-            await UpsertInventoryAsync(token, snapshot.StoreId, p1.Id, 5m);
-            await UpsertInventoryAsync(token, snapshot.StoreId, p2.Id, 0m);
+            await UpsertCatalogInventoryAsync(token, snapshot.StoreId, p1.Id, 5m);
+            await UpsertCatalogInventoryAsync(token, snapshot.StoreId, p2.Id, 0m);
 
             var etag = await GetSnapshotEtagAsync(token);
 
@@ -101,7 +101,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             Assert.Contains(stockFilteredSnapshot.Products, x => x.Id == p1.Id);
             Assert.DoesNotContain(stockFilteredSnapshot.Products, x => x.Id == p2.Id);
 
-            await UpsertInventoryAsync(token, snapshot.StoreId, p2.Id, 3m);
+            await UpsertCatalogInventoryAsync(token, snapshot.StoreId, p2.Id, 3m);
             var changedEtag = await ToggleAvailabilityAndAssertEtagChangedAsync(token, etag, () => Task.CompletedTask);
             Assert.NotEqual(etag, changedEtag);
 
@@ -137,6 +137,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"etag-cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
         var p1 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "P1", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true });
         var p2 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "P2", categoryId = category.Id, basePrice = 11m, isActive = true, isAvailable = true });
+
+        await UpdateInventorySettingsAsync(token, false);
 
         var snapshot = await GetSnapshotAsync(token);
         var etag = await GetSnapshotEtagAsync(token);
@@ -586,6 +588,14 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     {
         using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory", token);
         request.Content = JsonContent.Create(new { storeId, productId, onHand });
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private async Task UpsertCatalogInventoryAsync(string token, Guid storeId, Guid productId, decimal onHandQty)
+    {
+        using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/inventory", token);
+        request.Content = JsonContent.Create(new { storeId, itemType = "Product", itemId = productId, onHandQty, reason = "Correction" });
         using var response = await _client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
