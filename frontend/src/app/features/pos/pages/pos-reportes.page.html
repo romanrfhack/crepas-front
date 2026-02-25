@@ -6,6 +6,9 @@
   </header>
 
   <section class="card filters-card" aria-label="Filtros de reportes">
+    @if (tenantRequiredError(); as tenantError) {
+      <p class="error" role="alert" data-testid="report-tenant-required">{{ tenantError }}</p>
+    }
     <div class="filters-grid">
       <label>
         Desde
@@ -24,6 +27,44 @@
           type="date"
           [ngModel]="to()"
           (ngModelChange)="to.set($event)"
+        />
+      </label>
+
+      <label>
+        StoreId inventario
+        <input
+          data-testid="report-inventory-filter-store"
+          [ngModel]="inventoryStoreId()"
+          (ngModelChange)="inventoryStoreId.set($event)"
+        />
+      </label>
+
+      <label>
+        Buscar inventario
+        <input
+          data-testid="report-inventory-filter-search"
+          [ngModel]="inventorySearch()"
+          (ngModelChange)="inventorySearch.set($event)"
+        />
+      </label>
+
+      <label>
+        Tipo inventario
+        <select [ngModel]="inventoryItemType()" (ngModelChange)="inventoryItemType.set($event)">
+          <option value="">Todos</option>
+          <option value="Product">Product</option>
+          <option value="Extra">Extra</option>
+        </select>
+      </label>
+
+      <label>
+        Threshold low-stock
+        <input
+          type="number"
+          min="1"
+          data-testid="report-inventory-filter-threshold"
+          [ngModel]="inventoryThreshold()"
+          (ngModelChange)="inventoryThreshold.set(+$event || 1)"
         />
       </label>
 
@@ -69,6 +110,63 @@
         }
       </button>
     </div>
+  </section>
+
+  <section class="card" data-testid="report-inventory-current">
+    <h3>Inventario: Stock actual</h3>
+    @if (getSectionError('inventoryCurrent')) {
+      <p class="error" role="alert" data-testid="report-error-inventory-current">
+        {{ getSectionError('inventoryCurrent') }}
+      </p>
+    }
+    <table>
+      <tbody>
+        @for (row of inventoryCurrentRows(); track row.itemType + '-' + row.itemId) {
+          <tr [attr.data-testid]="'report-inventory-current-row-' + row.itemType + '-' + row.itemId">
+            <td>{{ row.itemName }}</td>
+            <td>{{ row.stockOnHandQty }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card" data-testid="report-inventory-low">
+    <h3>Inventario: Stock bajo</h3>
+    @if (getSectionError('inventoryLow')) {
+      <p class="error" role="alert" data-testid="report-error-inventory-low">
+        {{ getSectionError('inventoryLow') }}
+      </p>
+    }
+    <table>
+      <tbody>
+        @for (row of inventoryLowRows(); track row.itemType + '-' + row.itemId) {
+          <tr [attr.data-testid]="'report-inventory-low-row-' + row.itemType + '-' + row.itemId">
+            <td>{{ row.itemName }}</td>
+            <td>{{ row.stockOnHandQty }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card" data-testid="report-inventory-out">
+    <h3>Inventario: Sin stock</h3>
+    @if (getSectionError('inventoryOut')) {
+      <p class="error" role="alert" data-testid="report-error-inventory-out">
+        {{ getSectionError('inventoryOut') }}
+      </p>
+    }
+    <table>
+      <tbody>
+        @for (row of inventoryOutRows(); track row.itemType + '-' + row.itemId) {
+          <tr [attr.data-testid]="'report-inventory-out-row-' + row.itemType + '-' + row.itemId">
+            <td>{{ row.itemName }}</td>
+            <td>{{ row.stockOnHandQty }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
   </section>
 
   <section class="card">

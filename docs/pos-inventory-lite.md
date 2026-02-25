@@ -45,3 +45,11 @@ Campos por fila:
 - Tenant-scoped estricto por `storeId`.
 - `SuperAdmin` puede operar con tenant efectivo vía `X-Tenant-Id`.
 - `Cashier` no tiene permisos de admin/reportes de inventario.
+
+
+## Frontend usage C.1
+- Pantalla admin: `/app/admin/pos/inventory` incluye formulario `Nuevo ajuste` (`data-testid=inventory-adjust-*`) y tabla de historial (`inventory-history-*`).
+- El submit manda `clientOperationId` UUID para idempotencia y maneja conflictos `409` con reason code estable (`InventoryNotTracked`, `NegativeStockNotAllowed`) en `inventory-adjust-error`.
+- Filtros de historial FE: `storeId` (requerido), `itemType`, `itemId`, `fromUtc`, `toUtc`; la consulta usa `GET /api/v1/pos/admin/catalog/inventory/adjustments`.
+- Pantalla reportes: `/app/pos/reportes` agrega bloques `report-inventory-current`, `report-inventory-low` y `report-inventory-out` con filtros `storeId`, `itemType`, `search` y `threshold` (solo low-stock).
+- Cada bloque tiene error aislado (`report-error-inventory-current|low|out`) para no bloquear toda la pantalla.

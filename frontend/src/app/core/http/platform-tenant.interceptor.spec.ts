@@ -35,6 +35,11 @@ describe('platformTenantInterceptor', () => {
     expect(req.headers.get('X-Tenant-Id')).toBe('tenant-1');
   });
 
+  it('adds X-Tenant-Id for super admin pos report requests', () => {
+    const req = run('/api/v1/pos/reports/inventory/current', ['SuperAdmin'], 'tenant-1') as unknown as HttpRequest<unknown>;
+    expect(req.headers.get('X-Tenant-Id')).toBe('tenant-1');
+  });
+
   it('does not add header for platform requests', () => {
     const req = run('/api/v1/platform/catalog-templates', ['SuperAdmin'], 'tenant-1') as unknown as HttpRequest<unknown>;
     expect(req.headers.has('X-Tenant-Id')).toBe(false);

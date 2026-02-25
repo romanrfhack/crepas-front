@@ -160,4 +160,34 @@ describe('PosReportsApiService', () => {
       '/v1/pos/reports/kpis/summary?dateFrom=2026-03-01T00%3A00%3A00.000Z&dateTo=2026-03-07T23%3A59%3A59.999Z',
     );
   });
+
+  it('builds inventory report routes with threshold and contextual store', async () => {
+    const getSpy = vi.fn().mockReturnValue(of([]));
+
+    TestBed.configureTestingModule({
+      providers: [
+        PosReportsApiService,
+        { provide: ApiClient, useValue: { get: getSpy } },
+        { provide: StoreContextService, useValue: { getActiveStoreId: () => 'store-context' } },
+      ],
+    });
+
+    const service = TestBed.inject(PosReportsApiService);
+    await service.inventoryCurrent({ itemType: 'Product', search: 'latte' });
+    await service.inventoryLowStock({ itemType: 'Extra', search: 'shot', threshold: 3 });
+    await service.inventoryOutOfStock({ storeId: 'store-explicit', itemType: 'Product' });
+
+    expect(getSpy).toHaveBeenNthCalledWith(
+      1,
+      '/v1/pos/reports/inventory/current?itemType=Product&search=latte&storeId=store-context',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      2,
+      '/v1/pos/reports/inventory/low-stock?itemType=Extra&search=shot&threshold=3&storeId=store-context',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      3,
+      '/v1/pos/reports/inventory/out-of-stock?storeId=store-explicit&itemType=Product',
+    );
+  });
 });

@@ -8,6 +8,8 @@ import {
   CashierSalesReportItemDto,
   DailySalesReportItemDto,
   HourlySalesReportItemDto,
+  InventoryReportFilters,
+  InventoryReportRowDto,
   KpisSummaryDto,
   PaymentsByMethodSummaryDto,
   PosReportFilters,
@@ -130,6 +132,30 @@ export class PosReportsApiService {
     return firstValueFrom(
       this.apiClient.get<CashDifferencesControlDto>(
         this.buildPath('/v1/pos/reports/control/cash-differences', params),
+      ),
+    );
+  }
+
+  inventoryCurrent(params: InventoryReportFilters) {
+    return firstValueFrom(
+      this.apiClient.get<InventoryReportRowDto[]>(
+        this.buildPath('/v1/pos/reports/inventory/current', params),
+      ),
+    );
+  }
+
+  inventoryLowStock(params: InventoryReportFilters) {
+    return firstValueFrom(
+      this.apiClient.get<InventoryReportRowDto[]>(
+        this.buildPath('/v1/pos/reports/inventory/low-stock', params),
+      ),
+    );
+  }
+
+  inventoryOutOfStock(params: InventoryReportFilters) {
+    return firstValueFrom(
+      this.apiClient.get<InventoryReportRowDto[]>(
+        this.buildPath('/v1/pos/reports/inventory/out-of-stock', params),
       ),
     );
   }
