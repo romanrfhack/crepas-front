@@ -79,8 +79,16 @@ test('tenant overrides and availability send expected payloads', async ({ page }
   });
 
   await page.goto('/app/admin/pos/catalog/products');
-  await page.getByTestId('override-toggle-Product-product-1').click();
-  await page.getByTestId('availability-toggle-Product-product-1').click();
+  const overrideToggle = page.getByTestId('override-toggle-Product-product-1');
+  const availabilityToggle = page.getByTestId('availability-toggle-Product-product-1');
+
+  await expect(overrideToggle).toBeVisible();
+  await expect(overrideToggle).toBeEnabled();
+  await overrideToggle.click();
+
+  await expect(availabilityToggle).toBeVisible();
+  await expect(availabilityToggle).toBeEnabled();
+  await availabilityToggle.click();
 
   expect(overrideBodies[0]).toEqual({ itemType: 'Product', itemId: 'product-1', isEnabled: false });
   expect((availabilityBodies[0] as { itemType: string; itemId: string }).itemType).toBe('Product');
