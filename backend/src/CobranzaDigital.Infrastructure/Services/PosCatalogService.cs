@@ -12,6 +12,7 @@ using CobranzaDigital.Infrastructure.Persistence;
 
 using FluentValidation;
 
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -31,6 +32,7 @@ public sealed class PosCatalogService : IPosCatalogService
     private readonly IValidator<OverrideUpsertRequest> _overrideValidator;
     private readonly PosStoreContextService _storeContext;
     private readonly ITenantContext _tenantContext;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
     public PosCatalogService(CobranzaDigitalDbContext db, IAuditLogger auditLogger, ILogger<PosCatalogService> logger,
         IValidator<UpsertSelectionGroupRequest> groupValidator,
@@ -39,8 +41,9 @@ public sealed class PosCatalogService : IPosCatalogService
         IValidator<ReplaceIncludedItemsRequest> includedValidator,
         IValidator<OverrideUpsertRequest> overrideValidator,
         PosStoreContextService storeContext,
-        ITenantContext tenantContext)
-    { _db = db; _auditLogger = auditLogger; _logger = logger; _groupValidator = groupValidator; _productValidator = productValidator; _extraValidator = extraValidator; _includedValidator = includedValidator; _overrideValidator = overrideValidator; _storeContext = storeContext; _tenantContext = tenantContext; }
+        ITenantContext tenantContext,
+        IHttpContextAccessor httpContextAccessor)
+    { _db = db; _auditLogger = auditLogger; _logger = logger; _groupValidator = groupValidator; _productValidator = productValidator; _extraValidator = extraValidator; _includedValidator = includedValidator; _overrideValidator = overrideValidator; _storeContext = storeContext; _tenantContext = tenantContext; _httpContextAccessor = httpContextAccessor; }
 
     public async Task<IReadOnlyList<CategoryDto>> GetCategoriesAsync(bool includeInactive, CancellationToken ct)
     {
@@ -458,14 +461,17 @@ public sealed class PosCatalogService : IPosCatalogService
     {
         var tenantId = RequireTenantId();
         await EnsureStoreBelongsToTenantAsync(request.StoreId, tenantId, ct).ConfigureAwait(false);
-        if (!Enum.TryParse<CatalogItemType>(request.ItemType, true, out var itemType) || itemType == CatalogItemType.OptionItem)
-        {
-            throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["itemType must be Product or Extra."] });
-        }
+        var itemType = ParseInventoryTrackableItemType(request.ItemType);
+        _ = await EnsureInventoryItemTrackableAsync(itemType, request.ItemId, ct).ConfigureAwait(false);
 
         var now = DateTimeOffset.UtcNow;
         var row = await _db.CatalogInventoryBalances.SingleOrDefaultAsync(x => x.StoreId == request.StoreId && x.ItemType == itemType && x.ItemId == request.ItemId, ct).ConfigureAwait(false);
         var previousQty = row?.OnHandQty ?? 0m;
+        if (request.OnHandQty < 0m)
+        {
+            throw new InventoryAdjustmentConflictException("NegativeStockNotAllowed", "Inventory quantity cannot be negative.");
+        }
+
         if (row is null)
         {
             row = new CatalogInventoryBalance { Id = Guid.NewGuid(), TenantId = tenantId, StoreId = request.StoreId, ItemType = itemType, ItemId = request.ItemId, OnHandQty = request.OnHandQty, UpdatedAtUtc = now };
@@ -477,15 +483,149 @@ public sealed class PosCatalogService : IPosCatalogService
             row.UpdatedAtUtc = now;
         }
 
+        var userId = GetCurrentUserId();
         _db.CatalogInventoryAdjustments.Add(new CatalogInventoryAdjustment
         {
             Id = Guid.NewGuid(), TenantId = tenantId, StoreId = request.StoreId, ItemType = itemType, ItemId = request.ItemId,
-            DeltaQty = request.OnHandQty - previousQty, ResultingOnHandQty = request.OnHandQty,
-            Reason = request.Reason ?? "SetOnHand", Reference = request.Reference, CreatedAtUtc = now
+            QtyBefore = previousQty, DeltaQty = request.OnHandQty - previousQty, ResultingOnHandQty = request.OnHandQty,
+            Reason = request.Reason ?? "SetOnHand", Reference = request.Reference, CreatedAtUtc = now, CreatedByUserId = userId
         });
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await AuditAsync("CatalogInventoryBalance", AuditActions.SetInventoryBalance, row.Id, new { StoreId = request.StoreId, ItemType = itemType.ToString(), ItemId = request.ItemId, QtyBefore = previousQty }, new { QtyAfter = request.OnHandQty }, ct).ConfigureAwait(false);
         return new CatalogInventoryItemDto(row.StoreId, row.ItemType.ToString(), row.ItemId, row.OnHandQty, row.UpdatedAtUtc);
+    }
+
+    public async Task<CatalogInventoryAdjustmentDto> CreateCatalogInventoryAdjustmentAsync(CreateCatalogInventoryAdjustmentRequest request, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(request.StoreId, tenantId, ct).ConfigureAwait(false);
+        var itemType = ParseInventoryTrackableItemType(request.ItemType);
+        var itemDetail = await EnsureInventoryItemTrackableAsync(itemType, request.ItemId, ct).ConfigureAwait(false);
+        if (request.QuantityDelta == 0m)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["quantityDelta"] = ["quantityDelta must be different from zero."] });
+        }
+
+        if (!Enum.TryParse<InventoryAdjustmentReason>(request.Reason, true, out _))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["reason"] = ["reason is invalid."] });
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var userId = GetCurrentUserId();
+
+        var row = await _db.CatalogInventoryBalances.SingleOrDefaultAsync(x => x.StoreId == request.StoreId && x.TenantId == tenantId && x.ItemType == itemType && x.ItemId == request.ItemId, ct).ConfigureAwait(false);
+        var qtyBefore = row?.OnHandQty ?? 0m;
+        var qtyAfter = qtyBefore + request.QuantityDelta;
+        if (qtyAfter < 0m)
+        {
+            throw new InventoryAdjustmentConflictException("NegativeStockNotAllowed", "Resulting stock cannot be negative.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ClientOperationId))
+        {
+            var duplicated = await _db.CatalogInventoryAdjustments.AsNoTracking()
+                .Where(x => x.TenantId == tenantId && x.StoreId == request.StoreId && x.ClientOperationId == request.ClientOperationId)
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            if (duplicated is not null)
+            {
+                return MapAdjustment(duplicated, itemDetail.Name, itemDetail.Sku);
+            }
+        }
+
+        if (row is null)
+        {
+            row = new CatalogInventoryBalance
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                StoreId = request.StoreId,
+                ItemType = itemType,
+                ItemId = request.ItemId,
+                OnHandQty = qtyAfter,
+                UpdatedAtUtc = now
+            };
+            _db.CatalogInventoryBalances.Add(row);
+        }
+        else
+        {
+            row.OnHandQty = qtyAfter;
+            row.UpdatedAtUtc = now;
+        }
+
+        var adjustment = new CatalogInventoryAdjustment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            StoreId = request.StoreId,
+            ItemType = itemType,
+            ItemId = request.ItemId,
+            QtyBefore = qtyBefore,
+            DeltaQty = request.QuantityDelta,
+            ResultingOnHandQty = qtyAfter,
+            Reason = Enum.Parse<InventoryAdjustmentReason>(request.Reason, true).ToString(),
+            Reference = request.Reference,
+            Note = request.Note,
+            ClientOperationId = string.IsNullOrWhiteSpace(request.ClientOperationId) ? null : request.ClientOperationId,
+            CreatedAtUtc = now,
+            CreatedByUserId = userId
+        };
+
+        _db.CatalogInventoryAdjustments.Add(adjustment);
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        await AuditAsync(
+            "CatalogInventoryAdjustment",
+            AuditActions.AdjustInventory,
+            adjustment.Id,
+            new { request.StoreId, ItemType = itemType.ToString(), request.ItemId, QtyBefore = qtyBefore },
+            new { QtyDelta = request.QuantityDelta, QtyAfter = qtyAfter, adjustment.Reason, request.Reference, request.Note, adjustment.CreatedByUserId },
+            ct).ConfigureAwait(false);
+
+        return MapAdjustment(adjustment, itemDetail.Name, itemDetail.Sku);
+    }
+
+    public async Task<IReadOnlyList<CatalogInventoryAdjustmentDto>> GetCatalogInventoryAdjustmentsAsync(Guid storeId, string? itemType, Guid? itemId, DateTimeOffset? fromUtc, DateTimeOffset? toUtc, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(storeId, tenantId, ct).ConfigureAwait(false);
+
+        CatalogItemType? parsedType = null;
+        if (!string.IsNullOrWhiteSpace(itemType))
+        {
+            parsedType = ParseInventoryTrackableItemType(itemType);
+        }
+
+        var query = _db.CatalogInventoryAdjustments.AsNoTracking().Where(x => x.TenantId == tenantId && x.StoreId == storeId);
+        if (parsedType.HasValue)
+        {
+            query = query.Where(x => x.ItemType == parsedType.Value);
+        }
+        if (itemId.HasValue)
+        {
+            query = query.Where(x => x.ItemId == itemId.Value);
+        }
+        if (fromUtc.HasValue)
+        {
+            query = query.Where(x => x.CreatedAtUtc >= fromUtc.Value);
+        }
+        if (toUtc.HasValue)
+        {
+            query = query.Where(x => x.CreatedAtUtc <= toUtc.Value);
+        }
+
+        var rows = await query.OrderByDescending(x => x.CreatedAtUtc).ToListAsync(ct).ConfigureAwait(false);
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var itemLookup = await BuildTemplateItemLookupAsync(catalogTemplateId, ct).ConfigureAwait(false);
+
+        return rows.Select(x =>
+        {
+            var has = itemLookup.TryGetValue((x.ItemType, x.ItemId), out var detail);
+            return new CatalogInventoryAdjustmentDto(x.Id, x.StoreId, x.ItemType.ToString(), x.ItemId, x.QtyBefore, x.DeltaQty, x.ResultingOnHandQty, x.Reason, x.Reference, x.Note, x.ClientOperationId, x.CreatedAtUtc, x.CreatedByUserId, has ? detail!.ItemName : null, has ? detail!.ItemSku : null);
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<StoreInventoryItemDto>> GetInventoryAsync(Guid storeId, string? search, bool onlyWithStock, CancellationToken ct)
@@ -846,6 +986,140 @@ public sealed class PosCatalogService : IPosCatalogService
         }
 
         return lookup;
+    }
+
+    public Task<IReadOnlyList<InventoryReportRowDto>> GetInventoryCurrentReportAsync(Guid storeId, string? itemType, string? search, CancellationToken ct) =>
+        GetInventoryReportRowsAsync(storeId, itemType, search, row => true, ct);
+
+    public Task<IReadOnlyList<InventoryReportRowDto>> GetInventoryLowStockReportAsync(Guid storeId, decimal threshold, string? itemType, string? search, CancellationToken ct)
+    {
+        if (threshold <= 0m)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["threshold"] = ["threshold must be greater than zero."] });
+        }
+
+        return GetInventoryReportRowsAsync(storeId, itemType, search, row => row.StockOnHandQty > 0m && row.StockOnHandQty <= threshold, ct);
+    }
+
+    public Task<IReadOnlyList<InventoryReportRowDto>> GetInventoryOutOfStockReportAsync(Guid storeId, string? itemType, string? search, CancellationToken ct) =>
+        GetInventoryReportRowsAsync(storeId, itemType, search, row => row.StockOnHandQty <= 0m, ct);
+
+    private async Task<IReadOnlyList<InventoryReportRowDto>> GetInventoryReportRowsAsync(Guid storeId, string? itemType, string? search, Func<InventoryReportRowDto, bool> filter, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(storeId, tenantId, ct).ConfigureAwait(false);
+
+        CatalogItemType? parsed = null;
+        if (!string.IsNullOrWhiteSpace(itemType))
+        {
+            parsed = ParseInventoryTrackableItemType(itemType);
+        }
+
+        var snapshot = await GetSnapshotAsync(storeId, ct).ConfigureAwait(false);
+        var products = snapshot.Products
+            .Where(x => x.IsInventoryTracked == true)
+            .Where(x => !parsed.HasValue || parsed == CatalogItemType.Product)
+            .Select(x => new InventoryReportRowDto("Product", x.Id, x.Name, x.ExternalCode, storeId, x.StockOnHandQty ?? 0m, true, x.AvailabilityReason ?? "Available", x.StoreOverrideState, null, null));
+        var extras = snapshot.Extras
+            .Where(x => x.IsInventoryTracked == true)
+            .Where(x => !parsed.HasValue || parsed == CatalogItemType.Extra)
+            .Select(x => new InventoryReportRowDto("Extra", x.Id, x.Name, null, storeId, x.StockOnHandQty ?? 0m, true, x.AvailabilityReason ?? "Available", x.StoreOverrideState, null, null));
+
+        var rows = products.Concat(extras).ToList();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            rows = rows.Where(x => x.ItemName.Contains(term, StringComparison.OrdinalIgnoreCase) || (x.ItemSku?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+        }
+
+        var updatedByItem = await _db.CatalogInventoryBalances.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.StoreId == storeId)
+            .ToDictionaryAsync(x => (x.ItemType.ToString(), x.ItemId), x => x.UpdatedAtUtc, ct)
+            .ConfigureAwait(false);
+
+        var adjustmentsByItem = await _db.CatalogInventoryAdjustments.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.StoreId == storeId)
+            .GroupBy(x => new { x.ItemType, x.ItemId })
+            .Select(x => new { x.Key.ItemType, x.Key.ItemId, LastAdjustmentAtUtc = x.Max(y => y.CreatedAtUtc) })
+            .ToDictionaryAsync(x => (x.ItemType.ToString(), x.ItemId), x => (DateTimeOffset?)x.LastAdjustmentAtUtc, ct)
+            .ConfigureAwait(false);
+
+        return rows
+            .Select(x => x with
+            {
+                UpdatedAtUtc = updatedByItem.GetValueOrDefault((x.ItemType, x.ItemId)),
+                LastAdjustmentAtUtc = adjustmentsByItem.GetValueOrDefault((x.ItemType, x.ItemId))
+            })
+            .Where(filter)
+            .OrderBy(x => x.ItemType)
+            .ThenBy(x => x.ItemName)
+            .ToList();
+    }
+
+    private static CatalogInventoryAdjustmentDto MapAdjustment(CatalogInventoryAdjustment adjustment, string? itemName, string? itemSku) =>
+        new(adjustment.Id, adjustment.StoreId, adjustment.ItemType.ToString(), adjustment.ItemId, adjustment.QtyBefore, adjustment.DeltaQty, adjustment.ResultingOnHandQty, adjustment.Reason, adjustment.Reference, adjustment.Note, adjustment.ClientOperationId, adjustment.CreatedAtUtc, adjustment.CreatedByUserId, itemName, itemSku);
+
+    private static CatalogItemType ParseInventoryTrackableItemType(string itemType)
+    {
+        if (!Enum.TryParse<CatalogItemType>(itemType, true, out var parsed) || parsed == CatalogItemType.OptionItem)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["itemType must be Product or Extra."] });
+        }
+
+        return parsed;
+    }
+
+    private async Task<(string Name, string? Sku)> EnsureInventoryItemTrackableAsync(CatalogItemType itemType, Guid itemId, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        if (itemType == CatalogItemType.Product)
+        {
+            var product = await _db.Products.AsNoTracking()
+                .Where(x => x.Id == itemId && x.CatalogTemplateId == catalogTemplateId)
+                .Select(x => new { x.Name, x.ExternalCode, x.IsInventoryTracked })
+                .SingleOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            if (product is null)
+            {
+                throw new ValidationException(new Dictionary<string, string[]> { ["itemId"] = ["Product not found in tenant catalog template."] });
+            }
+
+            if (!product.IsInventoryTracked)
+            {
+                throw new InventoryAdjustmentConflictException("InventoryNotTracked", "Item inventory tracking is disabled.");
+            }
+
+            return (product.Name, product.ExternalCode);
+        }
+
+        if (itemType == CatalogItemType.Extra)
+        {
+            var extra = await _db.Extras.AsNoTracking()
+                .Where(x => x.Id == itemId && x.CatalogTemplateId == catalogTemplateId)
+                .Select(x => new { x.Name, x.IsInventoryTracked })
+                .SingleOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+            if (extra is null)
+            {
+                throw new ValidationException(new Dictionary<string, string[]> { ["itemId"] = ["Extra not found in tenant catalog template."] });
+            }
+
+            if (!extra.IsInventoryTracked)
+            {
+                throw new InventoryAdjustmentConflictException("InventoryNotTracked", "Item inventory tracking is disabled.");
+            }
+
+            return (extra.Name, null);
+        }
+
+        throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["itemType must be Product or Extra."] });
+    }
+
+    private Guid? GetCurrentUserId()
+    {
+        var raw = _httpContextAccessor.HttpContext?.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(raw, out var parsed) ? parsed : null;
     }
 
     private static ProductDto Map(Product x) => new(x.Id, x.ExternalCode, x.Name, x.CategoryId, x.SubcategoryName, x.BasePrice, x.IsActive, x.IsAvailable, x.CustomizationSchemaId, x.IsInventoryTracked);

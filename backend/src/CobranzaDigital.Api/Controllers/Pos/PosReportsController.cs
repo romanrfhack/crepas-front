@@ -1,7 +1,9 @@
 using Asp.Versioning;
 
+using CobranzaDigital.Application.Contracts.PosCatalog;
 using CobranzaDigital.Application.Contracts.PosSales;
 using CobranzaDigital.Application.Interfaces;
+using CobranzaDigital.Application.Interfaces.PosCatalog;
 using CobranzaDigital.Application.Interfaces.PosSales;
 
 using Microsoft.AspNetCore.Authorization;
@@ -17,11 +19,13 @@ namespace CobranzaDigital.Api.Controllers.Pos;
 public sealed class PosReportsController : ControllerBase
 {
     private readonly IPosSalesService _service;
+    private readonly IPosCatalogService _catalogService;
     private readonly ITenantContext _tenantContext;
 
-    public PosReportsController(IPosSalesService service, ITenantContext tenantContext)
+    public PosReportsController(IPosSalesService service, IPosCatalogService catalogService, ITenantContext tenantContext)
     {
         _service = service;
+        _catalogService = catalogService;
         _tenantContext = tenantContext;
     }
 
@@ -87,6 +91,18 @@ public sealed class PosReportsController : ControllerBase
     [HttpGet("control/cash-differences")]
     public Task<PosCashDifferencesResponseDto> GetControlCashDifferences([FromQuery] DateOnly dateFrom, [FromQuery] DateOnly dateTo, [FromQuery] Guid? storeId, [FromQuery] Guid? cashierUserId, CancellationToken ct) =>
         _service.GetCashDifferencesControlAsync(dateFrom, dateTo, storeId, cashierUserId, ct);
+
+    [HttpGet("inventory/current")]
+    public Task<ActionResult<IReadOnlyList<InventoryReportRowDto>>> GetInventoryCurrent([FromQuery] Guid storeId, [FromQuery] string? itemType, [FromQuery] string? search, CancellationToken ct) =>
+        ExecuteTenantScopedAsync(() => _catalogService.GetInventoryCurrentReportAsync(storeId, itemType, search, ct));
+
+    [HttpGet("inventory/low-stock")]
+    public Task<ActionResult<IReadOnlyList<InventoryReportRowDto>>> GetInventoryLowStock([FromQuery] Guid storeId, [FromQuery] decimal threshold = 5m, [FromQuery] string? itemType = null, [FromQuery] string? search = null, CancellationToken ct = default) =>
+        ExecuteTenantScopedAsync(() => _catalogService.GetInventoryLowStockReportAsync(storeId, threshold, itemType, search, ct));
+
+    [HttpGet("inventory/out-of-stock")]
+    public Task<ActionResult<IReadOnlyList<InventoryReportRowDto>>> GetInventoryOutOfStock([FromQuery] Guid storeId, [FromQuery] string? itemType, [FromQuery] string? search, CancellationToken ct) =>
+        ExecuteTenantScopedAsync(() => _catalogService.GetInventoryOutOfStockReportAsync(storeId, itemType, search, ct));
 
     private async Task<ActionResult<T>> ExecuteTenantScopedAsync<T>(Func<Task<T>> action)
     {

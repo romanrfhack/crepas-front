@@ -386,6 +386,117 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     }
 
     [Fact]
+    public async Task CatalogInventory_Adjustment_For_Product_Updates_Balance_And_Creates_History_With_Audit()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"adj-prod-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Tracked product adj", categoryId = category.Id, basePrice = 25m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", token);
+        request.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = product.Id, quantityDelta = 5m, reason = "Purchase", note = "restock" });
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var historyRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/admin/catalog/inventory/adjustments?storeId={snapshot.StoreId:D}&itemType=Product&itemId={product.Id:D}", token);
+        using var historyResponse = await _client.SendAsync(historyRequest);
+        Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
+        var history = (await historyResponse.Content.ReadFromJsonAsync<List<CatalogInventoryAdjustmentResponse>>())!;
+        var row = Assert.Single(history);
+        Assert.Equal(0m, row.QtyBefore);
+        Assert.Equal(5m, row.QtyDelta);
+        Assert.Equal(5m, row.QtyAfter);
+        Assert.Equal("Purchase", row.Reason);
+
+        using var currentRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/inventory/current?storeId={snapshot.StoreId:D}&itemType=Product", token);
+        using var currentResponse = await _client.SendAsync(currentRequest);
+        Assert.Equal(HttpStatusCode.OK, currentResponse.StatusCode);
+        var rows = (await currentResponse.Content.ReadFromJsonAsync<List<InventoryReportRowResponse>>())!;
+        Assert.Contains(rows, x => x.ItemId == product.Id && x.StockOnHandQty == 5m);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        Assert.Contains(await db.AuditLogs.AsNoTracking().ToListAsync(), x => x.Action == "AdjustInventory");
+    }
+
+    [Fact]
+    public async Task CatalogInventory_Adjustment_Validates_OptionItem_Reason_Delta_And_NegativeStock()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var snapshot = await GetSnapshotAsync(token);
+
+        using (var optionReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", token))
+        {
+            optionReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "OptionItem", itemId = Guid.NewGuid(), quantityDelta = 1m, reason = "Purchase" });
+            using var optionResp = await _client.SendAsync(optionReq);
+            Assert.Equal(HttpStatusCode.BadRequest, optionResp.StatusCode);
+        }
+
+        using (var badReasonReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", token))
+        {
+            badReasonReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = Guid.NewGuid(), quantityDelta = 1m, reason = "Invalid" });
+            using var badReasonResp = await _client.SendAsync(badReasonReq);
+            Assert.Equal(HttpStatusCode.BadRequest, badReasonResp.StatusCode);
+        }
+
+        using (var zeroReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", token))
+        {
+            zeroReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = Guid.NewGuid(), quantityDelta = 0m, reason = "Correction" });
+            using var zeroResp = await _client.SendAsync(zeroReq);
+            Assert.Equal(HttpStatusCode.BadRequest, zeroResp.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task CatalogInventory_Adjustment_Rejects_Item_When_Not_Tracked_And_Negative_Result()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"adj-nottracked-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var notTracked = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Not tracked", categoryId = category.Id, basePrice = 15m, isActive = true, isAvailable = true, isInventoryTracked = false });
+        var tracked = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Tracked", categoryId = category.Id, basePrice = 18m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        using (var notTrackedReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", token))
+        {
+            notTrackedReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = notTracked.Id, quantityDelta = 1m, reason = "Purchase" });
+            using var notTrackedResp = await _client.SendAsync(notTrackedReq);
+            Assert.Equal(HttpStatusCode.Conflict, notTrackedResp.StatusCode);
+        }
+
+        using (var negativeReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", token))
+        {
+            negativeReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = tracked.Id, quantityDelta = -1m, reason = "Waste" });
+            using var negativeResp = await _client.SendAsync(negativeReq);
+            Assert.Equal(HttpStatusCode.Conflict, negativeResp.StatusCode);
+            var payload = await negativeResp.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal("NegativeStockNotAllowed", payload.GetProperty("reason").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task Inventory_Reports_Low_And_Out_Of_Stock_Work_With_Threshold()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"reports-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var p1 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Low stock", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var p2 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Out stock", categoryId = category.Id, basePrice = 12m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        await AdjustInventoryAsync(token, snapshot.StoreId, "Product", p1.Id, 2m, "Purchase");
+        await AdjustInventoryAsync(token, snapshot.StoreId, "Product", p2.Id, 0m, "Correction", expectStatus: HttpStatusCode.BadRequest);
+
+        using var lowReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/inventory/low-stock?storeId={snapshot.StoreId:D}&threshold=3", token);
+        using var lowResp = await _client.SendAsync(lowReq);
+        Assert.Equal(HttpStatusCode.OK, lowResp.StatusCode);
+        var lowRows = (await lowResp.Content.ReadFromJsonAsync<List<InventoryReportRowResponse>>())!;
+        Assert.Contains(lowRows, x => x.ItemId == p1.Id);
+
+        using var outReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/inventory/out-of-stock?storeId={snapshot.StoreId:D}", token);
+        using var outResp = await _client.SendAsync(outReq);
+        Assert.Equal(HttpStatusCode.OK, outResp.StatusCode);
+    }
+
+    [Fact]
     public async Task Snapshot_Denies_User_Without_Allowed_Role()
     {
         var userToken = await RegisterAndGetAccessTokenAsync($"user.snapshot.{Guid.NewGuid():N}@test.local", "User1234!");
@@ -472,6 +583,14 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         request.Content = JsonContent.Create(new { storeId, productId, onHand });
         using var response = await _client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private async Task AdjustInventoryAsync(string token, Guid storeId, string itemType, Guid itemId, decimal quantityDelta, string reason, HttpStatusCode expectStatus = HttpStatusCode.OK)
+    {
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", token);
+        request.Content = JsonContent.Create(new { storeId, itemType, itemId, quantityDelta, reason });
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(expectStatus, response.StatusCode);
     }
 
     private async Task UpdateProductAsync(string token, ProductResponse product)
@@ -584,6 +703,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record CatalogItemOverrideResponse(string ItemType, Guid ItemId, bool IsEnabled, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku, Guid? CatalogTemplateId);
     private sealed record CatalogStoreAvailabilityResponse(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku);
     private sealed record StoreInventoryItemResponse(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset? UpdatedAtUtc, bool HasInventoryRow);
+    private sealed record CatalogInventoryAdjustmentResponse(Guid Id, Guid StoreId, string ItemType, Guid ItemId, decimal QtyBefore, decimal QtyDelta, decimal QtyAfter, string Reason, string? Reference, string? Note, string? ClientOperationId, DateTimeOffset CreatedAtUtc, Guid? PerformedByUserId, string? ItemName = null, string? ItemSku = null);
+    private sealed record InventoryReportRowResponse(string ItemType, Guid ItemId, string ItemName, string? ItemSku, Guid StoreId, decimal StockOnHandQty, bool IsInventoryTracked, string AvailabilityReason, string? StoreOverrideState, DateTimeOffset? UpdatedAtUtc, DateTimeOffset? LastAdjustmentAtUtc);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
     private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<OptionItemResponse> OptionItems, List<ExtraResponse> Extras, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record PagedResponse(List<UserListItem> Items);

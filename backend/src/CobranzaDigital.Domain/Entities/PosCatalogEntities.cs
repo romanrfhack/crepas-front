@@ -24,6 +24,19 @@ public enum CatalogOverrideState
     Disabled = 1
 }
 
+public enum InventoryAdjustmentReason
+{
+    InitialLoad = 0,
+    Purchase = 1,
+    Return = 2,
+    Waste = 3,
+    Damage = 4,
+    Correction = 5,
+    TransferIn = 6,
+    TransferOut = 7,
+    ManualCount = 8
+}
+
 public sealed class CatalogTemplate : Entity
 {
     public Guid VerticalId { get; set; }
@@ -86,10 +99,13 @@ public sealed class CatalogInventoryAdjustment : Entity
     public Guid StoreId { get; set; }
     public CatalogItemType ItemType { get; set; }
     public Guid ItemId { get; set; }
+    public decimal QtyBefore { get; set; }
     public decimal DeltaQty { get; set; }
     public decimal ResultingOnHandQty { get; set; }
     public string Reason { get; set; } = string.Empty;
     public string? Reference { get; set; }
+    public string? Note { get; set; }
+    public string? ClientOperationId { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public Guid? CreatedByUserId { get; set; }
 }

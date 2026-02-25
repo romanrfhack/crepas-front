@@ -92,6 +92,11 @@ public sealed partial class ExceptionHandlingMiddleware
             }
         }
 
+        if (exception is InventoryAdjustmentConflictException inventoryConflictException)
+        {
+            problemDetails.Extensions["reason"] = inventoryConflictException.Reason;
+        }
+
         problemDetails.Extensions["traceId"] = Activity.Current?.Id ?? context.TraceIdentifier;
         problemDetails.Extensions["correlationId"] = correlationId;
 

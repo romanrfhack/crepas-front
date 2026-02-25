@@ -6,4 +6,6 @@ public static class AuditActions
     public const string UnlockUser = "UnlockUser";
     public const string CreateRole = "CreateRole";
     public const string DeleteRole = "DeleteRole";
+    public const string AdjustInventory = "AdjustInventory";
+    public const string SetInventoryBalance = "SetInventoryBalance";
 }
