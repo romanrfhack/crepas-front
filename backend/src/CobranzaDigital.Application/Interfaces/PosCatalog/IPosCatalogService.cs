@@ -54,6 +54,11 @@ public interface IPosCatalogService
     Task<StoreInventoryItemDto> UpsertInventoryAsync(UpsertStoreInventoryRequest request, CancellationToken ct);
     Task<IReadOnlyList<CatalogInventoryItemDto>> GetCatalogInventoryAsync(Guid storeId, string? itemType, Guid? itemId, bool onlyTracked, CancellationToken ct);
     Task<CatalogInventoryItemDto> UpsertCatalogInventoryAsync(UpsertCatalogInventoryRequest request, CancellationToken ct);
+    Task<CatalogInventoryAdjustmentDto> CreateCatalogInventoryAdjustmentAsync(CreateCatalogInventoryAdjustmentRequest request, CancellationToken ct);
+    Task<IReadOnlyList<CatalogInventoryAdjustmentDto>> GetCatalogInventoryAdjustmentsAsync(Guid storeId, string? itemType, Guid? itemId, DateTimeOffset? fromUtc, DateTimeOffset? toUtc, CancellationToken ct);
+    Task<IReadOnlyList<InventoryReportRowDto>> GetInventoryCurrentReportAsync(Guid storeId, string? itemType, string? search, CancellationToken ct);
+    Task<IReadOnlyList<InventoryReportRowDto>> GetInventoryLowStockReportAsync(Guid storeId, decimal threshold, string? itemType, string? search, CancellationToken ct);
+    Task<IReadOnlyList<InventoryReportRowDto>> GetInventoryOutOfStockReportAsync(Guid storeId, string? itemType, string? search, CancellationToken ct);
     Task<PosInventorySettingsDto> UpdateInventorySettingsAsync(UpdatePosInventorySettingsRequest request, CancellationToken ct);
     Task<CatalogSnapshotDto> GetSnapshotAsync(Guid? storeId, CancellationToken ct);
     Task<string> ComputeCatalogEtagAsync(Guid? storeId, CancellationToken ct);

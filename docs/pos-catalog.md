@@ -176,3 +176,8 @@ Snapshot POS mantiene compatibilidad backward agregando opcionales:
   - loading por fila durante guardado,
   - rollback visual si la mutación falla,
   - errores por fila y mensaje global con copy estable.
+
+
+## Referencias Release C.1
+- `docs/pos-inventory-lite.md`
+- `docs/release-c1-inventory-contract-sheet.md`

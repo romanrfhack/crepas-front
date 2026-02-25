@@ -1,46 +1,47 @@
-# POS Inventory Lite v1
+# POS Inventory Lite v1 / Release C.1
 
-Alcance v1:
-- Product ✅
-- Extra ✅
-- OptionItem ❌ (sin inventario)
+## Alcance
+- Inventariable: `Product` y `Extra` con `IsInventoryTracked=true`.
+- `OptionItem` no inventariable (rechazo estable 400).
+- Persistencia operativa:
+  - `CatalogInventoryBalances` (saldo actual)
+  - `CatalogInventoryAdjustments` (historial de movimientos)
 
-Precedencia:
-1. DisabledByTenant/DisabledByStore
-2. ManualUnavailableInStore
-3. OutOfStock (tracked + stock <= 0)
-4. Available (tracked + stock > 0)
-5. Available (not tracked)
+## Ajustes operativos
 
-## Reglas v1 inventariable
+### Endpoint
+- `POST /api/v1/pos/admin/catalog/inventory/adjustments`
 
-- Inventariable v1: `Product` y `Extra` cuando `IsInventoryTracked=true`.
-- `OptionItem` no inventariable v1.
-- Endpoints `/api/v1/pos/admin/catalog/inventory` rechazan `OptionItem` con `400` estable.
+### Motivos soportados (estables)
+- `InitialLoad`, `Purchase`, `Return`, `Waste`, `Damage`, `Correction`, `TransferIn`, `TransferOut`, `ManualCount`.
 
-## Precedencia integrada con availability
+### Reglas
+1. `itemType` permitido: `Product|Extra`.
+2. `itemId` debe existir dentro del template efectivo del tenant.
+3. `IsInventoryTracked=true` (si no: `409` con `reason=InventoryNotTracked`).
+4. `quantityDelta != 0`.
+5. `reason` requerido y válido.
+6. No se permite stock negativo (`409` con `reason=NegativeStockNotAllowed`).
+7. `clientOperationId` opcional con idempotencia por `tenantId+storeId+clientOperationId`.
 
-El stock nunca sobreescribe:
-- `DisabledByTenant`
-- `DisabledByStore`
-- `ManualUnavailable`
+### Auditoría
+- Acción: `AdjustInventory`.
+- Metadata: tenant/store/item/qtyBefore/qtyDelta/qtyAfter/reason y usuario.
 
-Solo después de esas reglas, para items inventariables, `stock<=0` => `OutOfStock`.
+## Historial de movimientos
+- `GET /api/v1/pos/admin/catalog/inventory/adjustments`
+- Filtros: `storeId` (req), `itemType?`, `itemId?`, `fromUtc?`, `toUtc?`.
 
-## Release C frontend admin UI (Inventory Lite)
+## Reportes de inventory
 
-- Ruta admin: `/app/admin/pos/inventory`.
-- Selector obligatorio de sucursal: `data-testid="inventory-store-select"`.
-- Endpoint preferido: `GET|PUT /api/v1/pos/admin/catalog/inventory`.
-- Renderiza solo tipos inventariables v1:
-  - `Product`
-  - `Extra`
-- `OptionItem` no se renderiza editable en Inventory Lite.
-- Test IDs estables por fila y acciones:
-  - `inventory-row-{type}-{id}`
-  - `inventory-stock-input-{type}-{id}`
-  - `inventory-save-{type}-{id}`
-- Guardado por fila:
-  - update optimista de `stockOnHandQty`,
-  - rollback visual si falla,
-  - manejo explícito de 400 para `OptionItem` con mensaje claro.
+- `GET /api/v1/pos/reports/inventory/current`
+- `GET /api/v1/pos/reports/inventory/low-stock?threshold=5`
+- `GET /api/v1/pos/reports/inventory/out-of-stock`
+
+Campos por fila:
+`itemType, itemId, itemName, itemSku, storeId, stockOnHandQty, isInventoryTracked, availabilityReason, storeOverrideState, updatedAtUtc, lastAdjustmentAtUtc`.
+
+## Multi-tenant / SuperAdmin
+- Tenant-scoped estricto por `storeId`.
+- `SuperAdmin` puede operar con tenant efectivo vía `X-Tenant-Id`.
+- `Cashier` no tiene permisos de admin/reportes de inventario.

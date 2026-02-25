@@ -127,6 +127,14 @@ public sealed class PosAdminCatalogController : ControllerBase
     public Task DeleteStoreOverride([FromQuery] Guid storeId, [FromQuery] string itemType, [FromQuery] Guid itemId, CancellationToken ct) =>
         _service.DeleteStoreOverrideAsync(storeId, itemType, itemId, ct);
 
+    [HttpPost("catalog/inventory/adjustments")]
+    public Task<CatalogInventoryAdjustmentDto> CreateCatalogInventoryAdjustment([FromBody] CreateCatalogInventoryAdjustmentRequest request, CancellationToken ct) =>
+        _service.CreateCatalogInventoryAdjustmentAsync(request, ct);
+
+    [HttpGet("catalog/inventory/adjustments")]
+    public Task<IReadOnlyList<CatalogInventoryAdjustmentDto>> GetCatalogInventoryAdjustments([FromQuery] Guid storeId, [FromQuery] string? itemType, [FromQuery] Guid? itemId, [FromQuery] DateTimeOffset? fromUtc, [FromQuery] DateTimeOffset? toUtc, CancellationToken ct = default) =>
+        _service.GetCatalogInventoryAdjustmentsAsync(storeId, itemType, itemId, fromUtc, toUtc, ct);
+
     [HttpGet("catalog/inventory")]
     public Task<IReadOnlyList<CatalogInventoryItemDto>> GetCatalogInventory([FromQuery] Guid storeId, [FromQuery] string? itemType, [FromQuery] Guid? itemId, [FromQuery] bool onlyTracked = false, CancellationToken ct = default) =>
         _service.GetCatalogInventoryAsync(storeId, itemType, itemId, onlyTracked, ct);

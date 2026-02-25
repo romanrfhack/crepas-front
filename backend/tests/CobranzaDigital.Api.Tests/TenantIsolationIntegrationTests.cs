@@ -173,6 +173,38 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     }
 
     [Fact]
+    public async Task Inventory_Adjustments_Enforce_Tenant_Isolation_And_SuperAdmin_TenantHeader()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var managerAToken = await LoginAndGetAccessTokenAsync(setup.ManagerAEmail, setup.Password);
+        var superAdminToken = await LoginAndGetAccessTokenAsync(setup.SuperAdminEmail, setup.Password);
+
+        using (var forbiddenRequest = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", managerAToken))
+        {
+            forbiddenRequest.Content = JsonContent.Create(new { storeId = setup.StoreBId, itemType = "Product", itemId = setup.TenantBProductId, quantityDelta = 1m, reason = "Purchase" });
+            using var forbiddenResponse = await _client.SendAsync(forbiddenRequest);
+            Assert.Equal(HttpStatusCode.Forbidden, forbiddenResponse.StatusCode);
+        }
+
+        using var superRequest = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", superAdminToken);
+        superRequest.Headers.Add("X-Tenant-Id", setup.TenantBId.ToString("D"));
+        superRequest.Content = JsonContent.Create(new { storeId = setup.StoreBId, itemType = "Product", itemId = setup.TenantBProductId, quantityDelta = 2m, reason = "Purchase" });
+        using var superResponse = await _client.SendAsync(superRequest);
+        Assert.Equal(HttpStatusCode.OK, superResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Inventory_Reports_Reject_Cashier_With_Forbidden()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var cashierToken = await LoginAndGetAccessTokenAsync(setup.CashierAEmail, setup.Password);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/inventory/current?storeId={setup.StoreAId:D}", cashierToken);
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task PlatformEndpoints_AccessControl_WorksByRole()
     {
         var setup = await SeedIsolationDataAsync();
@@ -287,6 +319,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
             BasePrice = 15m,
             IsActive = true,
             IsAvailable = true,
+            IsInventoryTracked = true,
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
 
