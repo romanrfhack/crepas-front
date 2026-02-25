@@ -14,6 +14,7 @@ test.beforeEach(async ({ page }) => {
       localStorage.setItem('access_token', token);
       localStorage.setItem('refresh_token', 'refresh-e2e');
       localStorage.setItem('pos_active_store_id', 'store-e2e');
+      localStorage.setItem('platform_selected_tenant_id', 'tenant-e2e');
     },
     buildJwt(['SuperAdmin', 'Admin', 'Manager', 'TenantAdmin']),
   );
@@ -135,14 +136,14 @@ test('tenant overrides and availability send expected payloads', async ({ page }
         body: JSON.stringify([]),
       });
     }
-    if (pathname.endsWith('/catalog/overrides') && route.request().method() === 'GET') {
+    if (pathname.endsWith('/catalog/store-overrides') && route.request().method() === 'GET') {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([]),
       });
     }
-    if (pathname.endsWith('/catalog/overrides') && route.request().method() === 'PUT') {
+    if (pathname.endsWith('/catalog/store-overrides') && route.request().method() === 'PUT') {
       overrideBodies.push(route.request().postDataJSON());
       return route.fulfill({
         status: 200,
@@ -181,8 +182,8 @@ test('tenant overrides and availability send expected payloads', async ({ page }
   await availabilityToggle.click();
 
   expect(overrideBodies).toEqual([
-    { itemType: 'Product', itemId: 'product-1', isEnabled: false },
-    { itemType: 'Product', itemId: 'product-1', isEnabled: true },
+    { storeId: 'store-e2e', itemType: 'Product', itemId: 'product-1', state: 'Disabled' },
+    { storeId: 'store-e2e', itemType: 'Product', itemId: 'product-1', state: 'Enabled' },
   ]);
   expect((availabilityBodies[0] as { itemType: string; itemId: string }).itemType).toBe('Product');
   expect((availabilityBodies[0] as { itemType: string; itemId: string }).itemId).toBe('product-1');

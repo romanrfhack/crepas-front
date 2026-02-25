@@ -123,7 +123,7 @@ test('store overrides UI can disable and clear explicit override by store', asyn
     return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
 
-  await page.goto('/app/admin/pos/overrides');
+  await page.goto('/app/admin/pos/catalog/overrides');
   await expect(page.getByTestId('store-overrides-page')).toBeVisible();
   const storeSelect = page.getByTestId('store-override-store-select');
   await expect(storeSelect).toBeVisible();
