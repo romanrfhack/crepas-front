@@ -64,10 +64,14 @@ test('store overrides UI can disable and clear explicit override by store', asyn
   await page.getByRole('button', { name: 'Cargar' }).click();
 
   await expect(page.getByTestId('store-override-state-Product-product-1')).toContainText('Enabled');
-  await page.getByTestId('store-override-disable-Product-product-1').click();
+  const disableOverrideButton = page.getByTestId('store-override-disable-Product-product-1');
+  await expect(disableOverrideButton).toBeEnabled();
+  await disableOverrideButton.click();
   await expect(page.getByTestId('store-override-state-Product-product-1')).toContainText('Disabled');
 
-  await page.getByTestId('store-override-clear-Product-product-1').click();
+  const clearOverrideButton = page.getByTestId('store-override-clear-Product-product-1');
+  await expect(clearOverrideButton).toBeEnabled();
+  await clearOverrideButton.click();
   await expect(page.getByTestId('store-override-state-Product-product-1')).toContainText('Sin override');
 
   expect(putPayloads[0]).toEqual({ storeId: 'store-e2e', itemType: 'Product', itemId: 'product-1', state: 'Disabled' });
