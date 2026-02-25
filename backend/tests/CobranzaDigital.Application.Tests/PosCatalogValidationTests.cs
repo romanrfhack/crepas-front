@@ -89,6 +89,7 @@ public sealed class PosCatalogValidationTests
             new ReplaceIncludedItemsRequestValidator(),
             new OverrideUpsertRequestValidator(),
             null!,
+            null!,
             null!);
     }
 
