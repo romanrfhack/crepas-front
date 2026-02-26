@@ -53,3 +53,25 @@ Campos por fila:
 - Filtros de historial FE: `storeId` (requerido), `itemType`, `itemId`, `fromUtc`, `toUtc`; la consulta usa `GET /api/v1/pos/admin/catalog/inventory/adjustments`.
 - Pantalla reportes: `/app/pos/reportes` agrega bloques `report-inventory-current`, `report-inventory-low` y `report-inventory-out` con filtros `storeId`, `itemType`, `search` y `threshold` (solo low-stock).
 - Cada bloque tiene error aislado (`report-error-inventory-current|low|out`) para no bloquear toda la pantalla.
+
+## Release C.2 — consumo automático por venta + reversa por void
+
+### Nuevos reasons en historial
+
+- `SaleConsumption`: movimiento automático negativo al confirmar venta.
+- `VoidReversal`: movimiento automático positivo al anular (void) una venta.
+
+### Reglas de consumo
+
+- Solo consumen inventario:
+  - `Product` tracked (`IsInventoryTracked=true`)
+  - `Extra` tracked (`IsInventoryTracked=true`)
+- `OptionItem` no consume inventario en C.2.
+- Extras: se consume `SaleItemExtra.Quantity` (cantidad explícita del extra en la línea de venta).
+
+### Idempotencia y referencias
+
+- Los movimientos automáticos registran referencia estable:
+  - consumo: `ReferenceType=Sale`, `ReferenceId={saleId}`
+  - reversa: `ReferenceType=SaleVoid`, `ReferenceId={saleId}`
+- Se agrega unicidad para evitar duplicados por reintentos en venta/void por item de inventario.

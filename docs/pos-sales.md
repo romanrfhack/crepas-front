@@ -118,3 +118,11 @@ Cuando un item no está disponible retorna `409 Conflict` con `ProblemDetails` e
 - `reason` (`DisabledByTenant`, `DisabledByStore`, `ManualUnavailable`, `OutOfStock`)
 
 IDs inválidos o no existentes se mantienen como `400 BadRequest`.
+
+## Release C.2 — impacto de ventas en inventario tracked
+
+- Al crear una venta exitosa, POS consume inventario automáticamente para:
+  - `Product` con `IsInventoryTracked=true`.
+  - `Extra` con `IsInventoryTracked=true`.
+- Al hacer void de una venta, POS revierte inventario automáticamente (`VoidReversal`) usando los movimientos `SaleConsumption` previamente registrados de esa venta.
+- Regla de extras: se usa `SaleItemExtra.Quantity` (cantidad explícita del extra por línea) como consumo inventariable en C.2.
