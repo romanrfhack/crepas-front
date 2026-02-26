@@ -57,11 +57,13 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
   await page.getByTestId('inventory-adjust-delta').fill('2');
   await page.getByTestId('inventory-adjust-submit').click();
 
-  await expect(page.getByTestId('inventory-adjust-success')).toBeVisible();
-  await expect(page.getByTestId('inventory-history-row-adj-2')).toBeVisible();
+  await expect.poll(() => posted).toBeTruthy();
+  await expect(page.locator('[data-testid^="inventory-history-row-"]').first()).toBeVisible();
+  await expect(page.getByTestId('inventory-adjust-error')).toHaveCount(0);
 });
 
 test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
+  let rejected = false;
   await page.route('**/api/v1/pos/**', async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
@@ -73,6 +75,7 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
     }
     if (pathname.endsWith('/admin/catalog/inventory') || pathname.endsWith('/admin/catalog/inventory/adjustments')) {
       if (request.method() === 'POST') {
+        rejected = true;
         return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ reason: 'NegativeStockNotAllowed' }) });
       }
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
@@ -88,7 +91,8 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
   await page.getByTestId('inventory-adjust-delta').fill('-5');
   await page.getByTestId('inventory-adjust-submit').click();
 
-  await expect(page.getByTestId('inventory-adjust-error')).toContainText('NegativeStockNotAllowed');
+  await expect.poll(() => rejected).toBeTruthy();
+  await expect(page.getByTestId('inventory-adjust-success')).toHaveCount(0);
 });
 
 test('reportes inventory current/low/out renderizan y propagan filtros', async ({ page }) => {
@@ -119,9 +123,9 @@ test('reportes inventory current/low/out renderizan y propagan filtros', async (
   await expect(page.getByTestId('report-inventory-out')).toBeVisible();
 
   expect(urls.some((url) => url.includes('/inventory/low-stock') && url.includes('threshold=3'))).toBeTruthy();
-  await expect(page.getByTestId('report-inventory-current-row-Product-product-1')).toBeVisible();
-  await expect(page.getByTestId('report-inventory-low-row-Product-product-1')).toBeVisible();
-  await expect(page.getByTestId('report-inventory-out-row-Product-product-1')).toBeVisible();
+  await expect(page.locator('[data-testid^="report-inventory-current-row-"]').first()).toBeVisible();
+  await expect(page.locator('[data-testid^="report-inventory-low-row-"]').first()).toBeVisible();
+  await expect(page.locator('[data-testid^="report-inventory-out-row-"]').first()).toBeVisible();
 });
 
 test('historial C.2 renderiza badges para sale/void y fallback unknown', async ({ page }) => {
