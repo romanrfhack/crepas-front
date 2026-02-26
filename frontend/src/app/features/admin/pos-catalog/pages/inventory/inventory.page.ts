@@ -463,10 +463,6 @@ export class InventoryPage {
   }
 
   getReferenceText(row: CatalogInventoryAdjustmentDto) {
-    if (row.referenceType && row.referenceId) {
-      return `${row.referenceType}:${row.referenceId}`;
-    }
-
     return row.reference || '—';
   }
 
