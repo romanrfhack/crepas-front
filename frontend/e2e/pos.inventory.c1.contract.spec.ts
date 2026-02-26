@@ -123,3 +123,89 @@ test('reportes inventory current/low/out renderizan y propagan filtros', async (
   await expect(page.getByTestId('report-inventory-low-row-Product-product-1')).toBeVisible();
   await expect(page.getByTestId('report-inventory-out-row-Product-product-1')).toBeVisible();
 });
+
+test('historial C.2 renderiza badges para sale/void y fallback unknown', async ({ page }) => {
+  await page.route('**/api/v1/pos/**', async (route) => {
+    const request = route.request();
+    const { pathname } = new URL(request.url());
+
+    if (pathname.endsWith('/admin/products')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'product-1', name: 'Latte', externalCode: 'LAT', categoryId: 'c1', subcategoryName: null, basePrice: 1, isActive: true, isAvailable: true, customizationSchemaId: null }]) });
+    }
+
+    if (pathname.endsWith('/admin/extras')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+    }
+
+    if (pathname.endsWith('/admin/catalog/inventory') && request.method() === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ storeId: 'store-e2e', itemType: 'Product', itemId: 'product-1', itemName: 'Latte', onHandQty: 3, updatedAtUtc: '2026-01-01T00:00:00Z', isInventoryTracked: true }]) });
+    }
+
+    if (pathname.endsWith('/admin/catalog/inventory/adjustments') && request.method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'adj-sale',
+            storeId: 'store-e2e',
+            itemType: 'Product',
+            itemId: 'product-1',
+            itemName: 'Latte',
+            qtyBefore: 5,
+            qtyDelta: -1,
+            qtyAfter: 4,
+            reason: 'SaleConsumption',
+            referenceType: 'Sale',
+            referenceId: 'sale-100',
+            createdAtUtc: '2026-01-01T00:00:01Z',
+            performedByUserId: 'admin',
+          },
+          {
+            id: 'adj-void',
+            storeId: 'store-e2e',
+            itemType: 'Product',
+            itemId: 'product-1',
+            itemName: 'Latte',
+            qtyBefore: 4,
+            qtyDelta: 1,
+            qtyAfter: 5,
+            reason: 'VoidReversal',
+            createdAtUtc: '2026-01-01T00:00:02Z',
+            performedByUserId: 'admin',
+          },
+          {
+            id: 'adj-unknown',
+            storeId: 'store-e2e',
+            itemType: 'Product',
+            itemId: 'product-1',
+            itemName: 'Latte',
+            qtyBefore: 5,
+            qtyDelta: 0,
+            qtyAfter: 5,
+            reason: 'FutureReason',
+            createdAtUtc: '2026-01-01T00:00:03Z',
+            performedByUserId: 'admin',
+          },
+        ]),
+      });
+    }
+
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+
+  await page.goto('/app/admin/pos/inventory');
+  await page.getByTestId('inventory-store-select').fill('store-e2e');
+  await page.getByRole('button', { name: 'Cargar' }).click();
+  await page.getByTestId('inventory-history-filter-submit').click();
+
+  await expect(page.getByTestId('inventory-history-row-adj-sale')).toBeVisible();
+  await expect(page.getByTestId('inventory-history-row-adj-void')).toBeVisible();
+  await expect(page.getByTestId('inventory-history-row-adj-unknown')).toBeVisible();
+  await expect(page.getByTestId('inventory-reason-badge-adj-sale')).toBeVisible();
+  await expect(page.getByTestId('inventory-reason-badge-adj-void')).toBeVisible();
+  await expect(page.getByTestId('inventory-reason-badge-adj-unknown')).toBeVisible();
+  await expect(page.getByTestId('inventory-reason-sale-consumption')).toBeVisible();
+  await expect(page.getByTestId('inventory-reason-void-reversal')).toBeVisible();
+  await expect(page.getByTestId('inventory-reason-unknown')).toBeVisible();
+});

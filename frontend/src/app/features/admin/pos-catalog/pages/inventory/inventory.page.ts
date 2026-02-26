@@ -14,6 +14,7 @@ import {
   ListCatalogInventoryAdjustmentsQuery,
   PosInventoryAdjustmentsApiService,
 } from '../../services/pos-inventory-adjustments-api.service';
+import { toInventoryAdjustmentReasonUi } from './inventory-adjustment-reason.util';
 import { AuthService } from '../../../../auth/services/auth.service';
 import { PlatformTenantContextService } from '../../../../platform/services/platform-tenant-context.service';
 
@@ -166,6 +167,12 @@ interface ItemOption {
             [formControl]="historyItemIdControl"
             data-testid="inventory-history-filter-itemId"
           />
+          <select [formControl]="historyReasonControl" data-testid="inventory-history-filter-reason">
+            <option value="">Todos motivos</option>
+            @for (reason of adjustmentReasons; track reason) {
+              <option [value]="reason">{{ toReasonUi(reason).label }}</option>
+            }
+          </select>
           <input type="datetime-local" [formControl]="historyFromUtcControl" data-testid="inventory-history-filter-fromUtc" />
           <input type="datetime-local" [formControl]="historyToUtcControl" data-testid="inventory-history-filter-toUtc" />
           <button type="button" (click)="loadHistory()" data-testid="inventory-history-filter-submit">Filtrar</button>
@@ -180,6 +187,7 @@ interface ItemOption {
               <th>Delta</th>
               <th>Después</th>
               <th>Motivo</th>
+              <th>Referencia</th>
               <th>Nota</th>
               <th>Usuario</th>
             </tr>
@@ -192,13 +200,23 @@ interface ItemOption {
                 <td>{{ row.qtyBefore }}</td>
                 <td>{{ row.qtyDelta }}</td>
                 <td>{{ row.qtyAfter }}</td>
-                <td>{{ row.reason }}</td>
+                <td>
+                  <span [attr.data-testid]="'inventory-reason-badge-' + row.id">{{ toReasonUi(row.reason).label }}</span>
+                  @if (toReasonUi(row.reason).badgeKind === 'sale-consumption') {
+                    <span data-testid="inventory-reason-sale-consumption" class="reason-badge sale">Venta</span>
+                  } @else if (toReasonUi(row.reason).badgeKind === 'void-reversal') {
+                    <span data-testid="inventory-reason-void-reversal" class="reason-badge void">Void</span>
+                  } @else if (toReasonUi(row.reason).badgeKind === 'unknown') {
+                    <span data-testid="inventory-reason-unknown" class="reason-badge unknown">Otro</span>
+                  }
+                </td>
+                <td>{{ getReferenceText(row) }}</td>
                 <td>{{ row.note ?? '—' }}</td>
                 <td>{{ row.performedByUserId }}</td>
               </tr>
             } @empty {
               <tr>
-                <td colspan="8">Sin movimientos.</td>
+                <td colspan="9">Sin movimientos.</td>
               </tr>
             }
           </tbody>
@@ -212,6 +230,10 @@ interface ItemOption {
     .error { color: #b91c1c; }
     .success { color: #15803d; }
     .filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+    .reason-badge { margin-left: 0.5rem; border-radius: 999px; padding: 0.1rem 0.4rem; font-size: 0.75rem; }
+    .reason-badge.sale { background: #e0f2fe; color: #075985; }
+    .reason-badge.void { background: #dcfce7; color: #166534; }
+    .reason-badge.unknown { background: #f1f5f9; color: #334155; }
     table { width: 100%; border-collapse: collapse; }
     td, th { border-bottom: 1px solid #e2e8f0; padding: 0.5rem; text-align: left; }
   `,
@@ -234,6 +256,8 @@ export class InventoryPage {
     'TransferIn',
     'TransferOut',
     'ManualCount',
+    'SaleConsumption',
+    'VoidReversal',
   ];
 
   readonly items = signal<InventoryRow[]>([]);
@@ -264,6 +288,7 @@ export class InventoryPage {
   readonly historyItemIdControl = new FormControl('', { nonNullable: true });
   readonly historyFromUtcControl = new FormControl('', { nonNullable: true });
   readonly historyToUtcControl = new FormControl('', { nonNullable: true });
+  readonly historyReasonControl = new FormControl('', { nonNullable: true });
 
   readonly tenantRequiredError = computed(() => {
     if (!this.authService.hasRole('SuperAdmin')) {
@@ -393,6 +418,7 @@ export class InventoryPage {
       itemId: this.historyItemIdControl.value.trim() || undefined,
       fromUtc: this.historyFromUtcControl.value.trim() || undefined,
       toUtc: this.historyToUtcControl.value.trim() || undefined,
+      reason: this.historyReasonControl.value.trim() || undefined,
     };
 
     try {
@@ -430,6 +456,18 @@ export class InventoryPage {
 
   private getRowKey(row: InventoryRow) {
     return `${row.itemType}-${row.itemId}`;
+  }
+
+  toReasonUi(reason: string | null | undefined) {
+    return toInventoryAdjustmentReasonUi(reason);
+  }
+
+  getReferenceText(row: CatalogInventoryAdjustmentDto) {
+    if (row.referenceType && row.referenceId) {
+      return `${row.referenceType}:${row.referenceId}`;
+    }
+
+    return row.reference || '—';
   }
 
   private toUiError(error: unknown) {
