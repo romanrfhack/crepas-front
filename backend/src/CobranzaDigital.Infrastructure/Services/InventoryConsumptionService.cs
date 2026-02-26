@@ -54,7 +54,7 @@ public sealed class InventoryConsumptionService
                 !tenantDisabled.Contains((movement.ItemType, movement.ItemId)),
                 storeOverrides.GetValueOrDefault((movement.ItemType, movement.ItemId)),
                 movement.IsManualAvailable,
-                enforceStockForAllItems,
+                movement.IsInventoryTracked,
                 balances.TryGetValue((movement.ItemType, movement.ItemId), out var row) ? row.OnHandQty : 0m,
                 movement.ItemName));
 
@@ -66,7 +66,7 @@ public sealed class InventoryConsumptionService
             var balance = balances.GetValueOrDefault((movement.ItemType, movement.ItemId));
             var qtyBefore = balance?.OnHandQty ?? 0m;
             var qtyAfter = qtyBefore - movement.Quantity;
-            if (enforceStockForAllItems && qtyAfter < 0m)
+            if (movement.IsInventoryTracked && qtyAfter < 0m)
             {
                 throw new ItemUnavailableException(movement.ItemType.ToString(), movement.ItemId, movement.ItemName, "OutOfStock", qtyBefore);
             }
@@ -234,7 +234,7 @@ public sealed class InventoryConsumptionService
             var product = products[item.ProductId];
             if (product.IsInventoryTracked || enforceStockForAllItems)
             {
-                Add(aggregated, CatalogItemType.Product, product.Id, item.Quantity, product.Name, product.IsAvailable);
+                Add(aggregated, CatalogItemType.Product, product.Id, item.Quantity, product.Name, product.IsAvailable, product.IsInventoryTracked || enforceStockForAllItems);
             }
 
             foreach (var extraLine in item.Extras ?? [])
@@ -245,13 +245,13 @@ public sealed class InventoryConsumptionService
                     continue;
                 }
 
-                Add(aggregated, CatalogItemType.Extra, extra.Id, extraLine.Quantity, extra.Name, extra.IsAvailable);
+                Add(aggregated, CatalogItemType.Extra, extra.Id, extraLine.Quantity, extra.Name, extra.IsAvailable, extra.IsInventoryTracked || enforceStockForAllItems);
             }
         }
 
         return aggregated.Values.ToList();
 
-        static void Add(Dictionary<(CatalogItemType ItemType, Guid ItemId), InventoryMovement> map, CatalogItemType itemType, Guid itemId, int qty, string name, bool isManualAvailable)
+        static void Add(Dictionary<(CatalogItemType ItemType, Guid ItemId), InventoryMovement> map, CatalogItemType itemType, Guid itemId, int qty, string name, bool isManualAvailable, bool isInventoryTracked)
         {
             var key = (itemType, itemId);
             if (map.TryGetValue(key, out var current))
@@ -260,9 +260,9 @@ public sealed class InventoryConsumptionService
                 return;
             }
 
-            map[key] = new InventoryMovement(itemType, itemId, qty, name, isManualAvailable);
+            map[key] = new InventoryMovement(itemType, itemId, qty, name, isManualAvailable, isInventoryTracked);
         }
     }
 
-    private sealed record InventoryMovement(CatalogItemType ItemType, Guid ItemId, int Quantity, string ItemName, bool IsManualAvailable);
+    private sealed record InventoryMovement(CatalogItemType ItemType, Guid ItemId, int Quantity, string ItemName, bool IsManualAvailable, bool IsInventoryTracked);
 }
