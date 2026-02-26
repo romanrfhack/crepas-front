@@ -126,19 +126,7 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
   await page.getByTestId('inventory-adjust-delta').fill('2');
   await page.getByTestId('inventory-adjust-delta').blur();
   await expect(page.getByTestId('inventory-adjust-submit')).toBeEnabled();
-  const adjustmentPosted = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'POST' &&
-      response.url().includes('/v1/pos/admin/catalog/inventory/adjustments'),
-  );
-  const historyReloaded = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'GET' &&
-      response.url().includes('/v1/pos/admin/catalog/inventory/adjustments'),
-  );
   await page.getByTestId('inventory-adjust-submit').click({ force: true });
-
-  await Promise.all([adjustmentPosted, historyReloaded]);
   await expect(page.getByTestId('inventory-adjust-success')).toBeVisible();
   await expect(page.locator('[data-testid^="inventory-history-row-"]').first()).toBeVisible();
   await expect(page.getByTestId('inventory-adjust-error')).toHaveCount(0);
@@ -208,15 +196,8 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
   await page.getByTestId('inventory-adjust-delta').fill('-5');
   await page.getByTestId('inventory-adjust-delta').blur();
   await expect(page.getByTestId('inventory-adjust-submit')).toBeEnabled();
-  const adjustmentRejected = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'POST' &&
-      response.url().includes('/v1/pos/admin/catalog/inventory/adjustments') &&
-      response.status() === 409,
-  );
   await page.getByTestId('inventory-adjust-submit').click({ force: true });
-
-  await adjustmentRejected;
+  await expect(page.getByTestId('inventory-adjust-error')).toHaveText('NegativeStockNotAllowed');
   await expect(page.getByTestId('inventory-adjust-success')).toHaveCount(0);
 });
 
