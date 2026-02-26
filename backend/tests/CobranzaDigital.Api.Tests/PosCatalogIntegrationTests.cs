@@ -425,6 +425,88 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Contains(await db.AuditLogs.AsNoTracking().ToListAsync(), x => x.Action == "AdjustInventory");
     }
 
+
+    [Fact]
+    public async Task CatalogInventory_Adjustment_History_Exposes_Reference_Metadata_When_Present()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"adj-meta-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Tracked product meta", categoryId = category.Id, basePrice = 25m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        using (var manualReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", token))
+        {
+            manualReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = product.Id, quantityDelta = 5m, reason = "Purchase", note = "manual restock" });
+            using var manualResp = await _client.SendAsync(manualReq);
+            Assert.Equal(HttpStatusCode.OK, manualResp.StatusCode);
+        }
+
+        var saleId = Guid.NewGuid();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+            var tenantId = snapshot.TenantId;
+            var storeId = snapshot.StoreId;
+            var itemType = CobranzaDigital.Domain.Entities.CatalogItemType.Product;
+
+            db.CatalogInventoryAdjustments.Add(new CobranzaDigital.Domain.Entities.CatalogInventoryAdjustment
+            {
+                TenantId = tenantId,
+                StoreId = storeId,
+                ItemType = itemType,
+                ItemId = product.Id,
+                QtyBefore = 5m,
+                DeltaQty = -2m,
+                ResultingOnHandQty = 3m,
+                Reason = "SaleConsumption",
+                Reference = "sale consumption",
+                ReferenceType = "Sale",
+                ReferenceId = saleId.ToString("D"),
+                MovementKind = "SaleConsumption",
+                CreatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(1)
+            });
+
+            db.CatalogInventoryAdjustments.Add(new CobranzaDigital.Domain.Entities.CatalogInventoryAdjustment
+            {
+                TenantId = tenantId,
+                StoreId = storeId,
+                ItemType = itemType,
+                ItemId = product.Id,
+                QtyBefore = 3m,
+                DeltaQty = 2m,
+                ResultingOnHandQty = 5m,
+                Reason = "VoidReversal",
+                Reference = "sale void reversal",
+                ReferenceType = "SaleVoid",
+                ReferenceId = saleId.ToString("D"),
+                MovementKind = "VoidReversal",
+                CreatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(2)
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        using var historyRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/admin/catalog/inventory/adjustments?storeId={snapshot.StoreId:D}&itemType=Product&itemId={product.Id:D}", token);
+        using var historyResponse = await _client.SendAsync(historyRequest);
+        Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
+        var history = (await historyResponse.Content.ReadFromJsonAsync<List<CatalogInventoryAdjustmentResponse>>())!;
+
+        var manualRow = Assert.Single(history.Where(x => x.Reason == "Purchase"));
+        Assert.Null(manualRow.ReferenceType);
+        Assert.Null(manualRow.ReferenceId);
+        Assert.Null(manualRow.MovementKind);
+
+        var saleRow = Assert.Single(history.Where(x => x.Reason == "SaleConsumption"));
+        Assert.Equal("Sale", saleRow.ReferenceType);
+        Assert.Equal(saleId, saleRow.ReferenceId);
+        Assert.Equal("SaleConsumption", saleRow.MovementKind);
+
+        var voidRow = Assert.Single(history.Where(x => x.Reason == "VoidReversal"));
+        Assert.Equal("SaleVoid", voidRow.ReferenceType);
+        Assert.Equal(saleId, voidRow.ReferenceId);
+        Assert.Equal("VoidReversal", voidRow.MovementKind);
+    }
+
     [Fact]
     public async Task CatalogInventory_Adjustment_Validates_OptionItem_Reason_Delta_And_NegativeStock()
     {
@@ -717,7 +799,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record CatalogItemOverrideResponse(string ItemType, Guid ItemId, bool IsEnabled, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku, Guid? CatalogTemplateId);
     private sealed record CatalogStoreAvailabilityResponse(Guid StoreId, string ItemType, Guid ItemId, bool IsAvailable, DateTimeOffset UpdatedAtUtc, string ItemName, string? ItemSku);
     private sealed record StoreInventoryItemResponse(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset? UpdatedAtUtc, bool HasInventoryRow);
-    private sealed record CatalogInventoryAdjustmentResponse(Guid Id, Guid StoreId, string ItemType, Guid ItemId, decimal QtyBefore, decimal QtyDelta, decimal QtyAfter, string Reason, string? Reference, string? Note, string? ClientOperationId, DateTimeOffset CreatedAtUtc, Guid? PerformedByUserId, string? ItemName = null, string? ItemSku = null);
+    private sealed record CatalogInventoryAdjustmentResponse(Guid Id, Guid StoreId, string ItemType, Guid ItemId, decimal QtyBefore, decimal QtyDelta, decimal QtyAfter, string Reason, string? Reference, string? Note, string? ClientOperationId, DateTimeOffset CreatedAtUtc, Guid? PerformedByUserId, string? ItemName = null, string? ItemSku = null, string? ReferenceType = null, Guid? ReferenceId = null, string? MovementKind = null);
     private sealed record InventoryReportRowResponse(string ItemType, Guid ItemId, string ItemName, string? ItemSku, Guid StoreId, decimal StockOnHandQty, bool IsInventoryTracked, string AvailabilityReason, string? StoreOverrideState, DateTimeOffset? UpdatedAtUtc, DateTimeOffset? LastAdjustmentAtUtc);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
     private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<OptionItemResponse> OptionItems, List<ExtraResponse> Extras, List<SnapshotOverride> Overrides, string VersionStamp);

@@ -28,6 +28,7 @@ Response (`200`): `CatalogInventoryAdjustmentDto`
 - `reason, reference, note, clientOperationId`
 - `createdAtUtc, performedByUserId`
 - `itemName?, itemSku?`
+- `referenceType?, referenceId?, movementKind?` (opcionales, Release C.2.1; backward-compatible)
 
 ## GET adjustments history
 
@@ -36,6 +37,8 @@ Query:
 - `itemType?`, `itemId?`, `fromUtc?`, `toUtc?`
 
 Response (`200`): `CatalogInventoryAdjustmentDto[]` sorted desc by `createdAtUtc`.
+
+Compatibilidad C.2.1: `referenceType`, `referenceId` (guid nullable) y `movementKind` son opcionales; clientes existentes pueden ignorarlos sin romperse.
 
 ## Reports
 
