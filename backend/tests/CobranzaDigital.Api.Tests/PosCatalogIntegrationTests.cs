@@ -749,7 +749,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         }
 
         var content = response.Content is null ? string.Empty : await response.Content.ReadAsStringAsync();
-        Assert.True(false, $"Expected HTTP {(int)expectedStatus} ({expectedStatus}) but got {(int)response.StatusCode} ({response.StatusCode}). Body: {content}");
+        Assert.Fail($"Expected HTTP {(int)expectedStatus} ({expectedStatus}) but got {(int)response.StatusCode} ({response.StatusCode}). Body: {content}");
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
