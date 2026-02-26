@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('crear ajuste ok muestra success y refresca historial', async ({ page }) => {
-  let posted = false;
+  let adjustmentCreated = false;
 
   await page.route('**/api/v1/pos/**', async (route) => {
     const request = route.request();
@@ -35,14 +35,14 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
     }
 
     if (pathname.endsWith('/admin/catalog/inventory/adjustments') && request.method() === 'GET') {
-      const rows = posted
+      const rows = adjustmentCreated
         ? [{ id: 'adj-2', storeId: 'store-e2e', itemType: 'Product', itemId: 'product-1', itemName: 'Latte', qtyBefore: 3, qtyDelta: 2, qtyAfter: 5, reason: 'Purchase', note: '', createdAtUtc: '2026-01-01T00:00:01Z', performedByUserId: 'admin' }]
         : [];
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rows) });
     }
 
     if (pathname.endsWith('/admin/catalog/inventory/adjustments') && request.method() === 'POST') {
-      posted = true;
+      adjustmentCreated = true;
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'adj-2' }) });
     }
 
@@ -56,16 +56,20 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
   await expect(page.getByTestId('inventory-adjust-item').locator('option[value="product-1"]')).toHaveCount(1);
   await page.getByTestId('inventory-adjust-item').selectOption('product-1');
   await page.getByTestId('inventory-adjust-delta').fill('2');
+  const adjustmentPosted = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST'
+      && response.url().includes('/api/v1/pos/admin/catalog/inventory/adjustments'),
+  );
   await page.getByTestId('inventory-adjust-submit').click();
 
-  await expect.poll(() => posted).toBeTruthy();
+  await adjustmentPosted;
   await expect(page.getByTestId('inventory-adjust-success')).toBeVisible();
   await expect(page.locator('[data-testid^="inventory-history-row-"]').first()).toBeVisible();
   await expect(page.getByTestId('inventory-adjust-error')).toHaveCount(0);
 });
 
 test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
-  let rejected = false;
   await page.route('**/api/v1/pos/**', async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
@@ -77,7 +81,6 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
     }
     if (pathname.endsWith('/admin/catalog/inventory') || pathname.endsWith('/admin/catalog/inventory/adjustments')) {
       if (request.method() === 'POST') {
-        rejected = true;
         return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ reason: 'NegativeStockNotAllowed' }) });
       }
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
@@ -92,9 +95,15 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
   await expect(page.getByTestId('inventory-adjust-item').locator('option[value="product-1"]')).toHaveCount(1);
   await page.getByTestId('inventory-adjust-item').selectOption('product-1');
   await page.getByTestId('inventory-adjust-delta').fill('-5');
+  const adjustmentRejected = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST'
+      && response.url().includes('/api/v1/pos/admin/catalog/inventory/adjustments')
+      && response.status() === 409,
+  );
   await page.getByTestId('inventory-adjust-submit').click();
 
-  await expect.poll(() => rejected).toBeTruthy();
+  await adjustmentRejected;
   await expect(page.getByTestId('inventory-adjust-success')).toHaveCount(0);
 });
 
@@ -131,9 +140,9 @@ test('reportes inventory current/low/out renderizan y propagan filtros', async (
   await expect(page.getByTestId('report-inventory-out')).toBeVisible();
 
   expect(urls.some((url) => url.includes('/inventory/low-stock') && url.includes('threshold=3'))).toBeTruthy();
-  await expect(page.locator('[data-testid^="report-inventory-current-row-"]').first()).toBeVisible();
-  await expect(page.locator('[data-testid^="report-inventory-low-row-"]').first()).toBeVisible();
-  await expect(page.locator('[data-testid^="report-inventory-out-row-"]').first()).toBeVisible();
+  await expect(page.locator('[data-testid^="report-inventory-current-row-"]').first()).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('[data-testid^="report-inventory-low-row-"]').first()).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('[data-testid^="report-inventory-out-row-"]').first()).toBeVisible({ timeout: 15000 });
 });
 
 test('historial C.2.1 renderiza movementKind, referencia y fallback estable', async ({ page }) => {

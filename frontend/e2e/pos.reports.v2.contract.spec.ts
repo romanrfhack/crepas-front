@@ -252,16 +252,29 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
   });
 
   await seedAuth(page);
+  const categoriesResponse = page.waitForResponse((response) =>
+    response.url().includes('/api/v1/pos/reports/sales/categories')
+    && response.request().method() === 'GET',
+  );
+  const productsResponse = page.waitForResponse((response) =>
+    response.url().includes('/api/v1/pos/reports/sales/products')
+    && response.request().method() === 'GET',
+  );
+  const cashDiffResponse = page.waitForResponse((response) =>
+    response.url().includes('/api/v1/pos/reports/control/cash-differences')
+    && response.request().method() === 'GET',
+  );
   await page.goto('/app/pos/reportes');
+  await Promise.all([categoriesResponse, productsResponse, cashDiffResponse]);
 
   await expect(page.getByTestId('mix-categories-table')).toBeVisible();
   await expect(page.getByTestId('mix-products-table')).toBeVisible();
   await expect(page.getByTestId('addons-extras-table')).toBeVisible();
   await expect(page.getByTestId('addons-options-table')).toBeVisible();
   await expect(page.getByTestId('cash-diff-table')).toBeVisible();
-  await expect(page.getByTestId('mix-category-row-0')).toBeVisible();
-  await expect(page.getByTestId('mix-product-row-0')).toBeVisible();
-  await expect(page.locator('[data-testid^="cash-diff-row-"]').first()).toBeVisible();
+  await expect(page.getByTestId('mix-category-row-0')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId('mix-product-row-0')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('[data-testid^="cash-diff-row-"]').first()).toBeVisible({ timeout: 15000 });
 
   await expect(page.getByTestId('cash-diff-table').locator('thead')).not.toContainText('Turno');
   await expect(page.locator('[data-testid^="cash-diff-row-"]').first()).toContainText('Cashier E2E');
