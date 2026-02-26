@@ -3,7 +3,6 @@ using System.Security.Claims;
 using CobranzaDigital.Application.Common.Exceptions;
 using CobranzaDigital.Application.Contracts.Admin;
 using CobranzaDigital.Application.Interfaces;
-using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
 
 using Microsoft.AspNetCore.Http;
@@ -193,7 +192,7 @@ public sealed class UserAdminService : IUserAdminService
         EnsureIdentitySuccess(await _roleManager.DeleteAsync(role).ConfigureAwait(false), $"Failed to delete role '{normalizedRoleName}'.");
     }
 
-    private IQueryable<ApplicationUser> ApplyScope(IQueryable<ApplicationUser> query, ActorScope actor)
+    private static IQueryable<ApplicationUser> ApplyScope(IQueryable<ApplicationUser> query, ActorScope actor)
     {
         if (actor.IsSuperAdmin)
         {
@@ -223,7 +222,7 @@ public sealed class UserAdminService : IUserAdminService
         throw new ForbiddenException("You do not have access to user administration.");
     }
 
-    private void EnsureInScope(ApplicationUser target, ActorScope actor)
+    private static void EnsureInScope(ApplicationUser target, ActorScope actor)
     {
         if (actor.IsSuperAdmin)
         {
