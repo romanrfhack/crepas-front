@@ -5,7 +5,7 @@ import {
   CatalogInventoryAdjustmentDto,
   CatalogItemType,
   CreateCatalogInventoryAdjustmentRequest,
-  InventoryAdjustmentReason,
+  InventoryAdjustmentReasonValue,
 } from '../models/pos-catalog.models';
 
 interface ListCatalogInventoryAdjustmentsQuery {
@@ -14,7 +14,7 @@ interface ListCatalogInventoryAdjustmentsQuery {
   itemId?: string;
   fromUtc?: string;
   toUtc?: string;
-  reason?: InventoryAdjustmentReason;
+  reason?: InventoryAdjustmentReasonValue;
 }
 
 @Injectable({ providedIn: 'root' })

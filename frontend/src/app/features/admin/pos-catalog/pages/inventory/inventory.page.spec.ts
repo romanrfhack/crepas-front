@@ -21,10 +21,38 @@ describe('InventoryPage', () => {
         itemId: 'product-1',
         itemName: 'Latte',
         qtyBefore: 5,
-        qtyDelta: 2,
-        qtyAfter: 7,
-        reason: 'Purchase',
+        qtyDelta: -1,
+        qtyAfter: 4,
+        reason: 'SaleConsumption',
+        referenceType: 'Sale',
+        referenceId: 'sale-1',
         createdAtUtc: '2026-05-01T00:00:00Z',
+        performedByUserId: 'admin-1',
+      },
+      {
+        id: 'adj-2',
+        storeId: 'store-1',
+        itemType: 'Product',
+        itemId: 'product-1',
+        itemName: 'Latte',
+        qtyBefore: 4,
+        qtyDelta: 1,
+        qtyAfter: 5,
+        reason: 'VoidReversal',
+        createdAtUtc: '2026-05-01T00:05:00Z',
+        performedByUserId: 'admin-1',
+      },
+      {
+        id: 'adj-3',
+        storeId: 'store-1',
+        itemType: 'Product',
+        itemId: 'product-1',
+        itemName: 'Latte',
+        qtyBefore: 5,
+        qtyDelta: 0,
+        qtyAfter: 5,
+        reason: 'FutureReason',
+        createdAtUtc: '2026-05-01T00:10:00Z',
         performedByUserId: 'admin-1',
       },
     ]);
@@ -99,18 +127,38 @@ describe('InventoryPage', () => {
     expect(error?.textContent).toContain('NegativeStockNotAllowed');
   });
 
+
+  it('historial renderiza badges para C.2 y fallback unknown', async () => {
+    await fixture.componentInstance.loadHistory();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="inventory-reason-badge-adj-1"]')?.textContent).toContain(
+      'Consumo por venta',
+    );
+    expect(fixture.nativeElement.querySelector('[data-testid="inventory-reason-sale-consumption"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="inventory-reason-void-reversal"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="inventory-reason-unknown"]')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Sale:sale-1');
+  });
+
   it('historial renderiza filas y filtros disparan consulta', async () => {
     fixture.componentInstance.historyItemTypeControl.setValue('Product');
     fixture.componentInstance.historyItemIdControl.setValue('product-1');
+    fixture.componentInstance.historyReasonControl.setValue('VoidReversal');
 
     await fixture.componentInstance.loadHistory();
     fixture.detectChanges();
 
     expect(listAdjustments).toHaveBeenLastCalledWith(
-      expect.objectContaining({ storeId: 'store-1', itemType: 'Product', itemId: 'product-1' }),
+      expect.objectContaining({
+        storeId: 'store-1',
+        itemType: 'Product',
+        itemId: 'product-1',
+        reason: 'VoidReversal',
+      }),
     );
 
-    const row = fixture.nativeElement.querySelector('[data-testid="inventory-history-row-adj-1"]');
+    const row = fixture.nativeElement.querySelector('[data-testid="inventory-history-row-adj-2"]');
     expect(row).not.toBeNull();
   });
 });
