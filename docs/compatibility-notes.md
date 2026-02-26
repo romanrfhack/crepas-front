@@ -92,3 +92,12 @@ No se removieron rutas ni campos existentes (compatibilidad Release A/B preserva
 
 - Inventory history UI (`/app/admin/pos/inventory`) ahora soporta `SaleConsumption` y `VoidReversal` con etiquetas amigables.
 - Compatibilidad: si backend envía un `reason` desconocido en ajustes, frontend renderiza fallback seguro `Otro (<reason>)` sin romper la pantalla.
+
+
+## 2026-02-26 — POS inventory Release C.2.1 history metadata (backward-compatible)
+
+- `CatalogInventoryAdjustmentDto` agrega campos opcionales: `referenceType`, `referenceId` (`Guid?`), `movementKind`.
+- Endpoint impactado: `GET /api/v1/pos/admin/catalog/inventory/adjustments`.
+- Fuente de datos: columnas persistidas en `CatalogInventoryAdjustments` (`ReferenceType`, `ReferenceId`, `MovementKind`).
+- Compatibilidad: los 3 campos son nullable y se agregaron al final del DTO; clientes legacy pueden ignorarlos.
+- Limitación explícita: ajustes manuales históricos o filas sin metadata persistida seguirán devolviendo `null` en estos campos.

@@ -624,7 +624,13 @@ public sealed class PosCatalogService : IPosCatalogService
         return rows.Select(x =>
         {
             var has = itemLookup.TryGetValue((x.ItemType, x.ItemId), out var detail);
-            return new CatalogInventoryAdjustmentDto(x.Id, x.StoreId, x.ItemType.ToString(), x.ItemId, x.QtyBefore, x.DeltaQty, x.ResultingOnHandQty, x.Reason, x.Reference, x.Note, x.ClientOperationId, x.CreatedAtUtc, x.CreatedByUserId, has ? detail!.ItemName : null, has ? detail!.ItemSku : null);
+            Guid? referenceId = null;
+            if (Guid.TryParse(x.ReferenceId, out var parsedReferenceId))
+            {
+                referenceId = parsedReferenceId;
+            }
+
+            return new CatalogInventoryAdjustmentDto(x.Id, x.StoreId, x.ItemType.ToString(), x.ItemId, x.QtyBefore, x.DeltaQty, x.ResultingOnHandQty, x.Reason, x.Reference, x.Note, x.ClientOperationId, x.CreatedAtUtc, x.CreatedByUserId, has ? detail!.ItemName : null, has ? detail!.ItemSku : null, x.ReferenceType, referenceId, x.MovementKind);
         }).ToList();
     }
 
@@ -1058,7 +1064,7 @@ public sealed class PosCatalogService : IPosCatalogService
     }
 
     private static CatalogInventoryAdjustmentDto MapAdjustment(CatalogInventoryAdjustment adjustment, string? itemName, string? itemSku) =>
-        new(adjustment.Id, adjustment.StoreId, adjustment.ItemType.ToString(), adjustment.ItemId, adjustment.QtyBefore, adjustment.DeltaQty, adjustment.ResultingOnHandQty, adjustment.Reason, adjustment.Reference, adjustment.Note, adjustment.ClientOperationId, adjustment.CreatedAtUtc, adjustment.CreatedByUserId, itemName, itemSku);
+        new(adjustment.Id, adjustment.StoreId, adjustment.ItemType.ToString(), adjustment.ItemId, adjustment.QtyBefore, adjustment.DeltaQty, adjustment.ResultingOnHandQty, adjustment.Reason, adjustment.Reference, adjustment.Note, adjustment.ClientOperationId, adjustment.CreatedAtUtc, adjustment.CreatedByUserId, itemName, itemSku, adjustment.ReferenceType, Guid.TryParse(adjustment.ReferenceId, out var referenceId) ? referenceId : null, adjustment.MovementKind);
 
     private static CatalogItemType ParseInventoryTrackableItemType(string itemType)
     {

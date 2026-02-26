@@ -31,6 +31,11 @@
 ## Historial de movimientos
 - `GET /api/v1/pos/admin/catalog/inventory/adjustments`
 - Filtros: `storeId` (req), `itemType?`, `itemId?`, `fromUtc?`, `toUtc?`.
+- DTO historial (C.2.1) agrega metadata opcional/backward-compatible: `referenceType?`, `referenceId?`, `movementKind?`.
+- Origen de metadata:
+  - Movimientos manuales (`Purchase`, `Correction`, etc.): normalmente `null` en los 3 campos.
+  - Movimientos automáticos `SaleConsumption`: `referenceType=Sale`, `referenceId=<saleId>`, `movementKind=SaleConsumption`.
+  - Movimientos automáticos `VoidReversal`: `referenceType=SaleVoid`, `referenceId=<saleId>`, `movementKind=VoidReversal`.
 
 ## Reportes de inventory
 
@@ -76,5 +81,5 @@ Campos por fila:
 - Los movimientos automáticos registran referencia estable internamente:
   - consumo: `ReferenceType=Sale`, `ReferenceId={saleId}`
   - reversa: `ReferenceType=SaleVoid`, `ReferenceId={saleId}`
-- **Contrato DTO actual (GET/POST adjustments):** expone `reference` (string opcional), pero no expone `referenceType`, `referenceId` ni `movementKind`.
+- **Contrato DTO C.2.1 (GET/POST adjustments):** mantiene `reference` y además expone opcionalmente `referenceType`, `referenceId` y `movementKind` (backward-compatible).
 - Se agrega unicidad para evitar duplicados por reintentos en venta/void por item de inventario.
