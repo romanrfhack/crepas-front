@@ -57,25 +57,7 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
       });
     }
 
-    if (pathname.endsWith('/admin/catalog/inventory') && request.method() === 'GET') {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([
-          {
-            storeId: 'store-e2e',
-            itemType: 'Product',
-            itemId: 'product-1',
-            itemName: 'Latte',
-            onHandQty: 3,
-            updatedAtUtc: '2026-01-01T00:00:00Z',
-            isInventoryTracked: true,
-          },
-        ]),
-      });
-    }
-
-    if (pathname.endsWith('/admin/catalog/inventory/adjustments') && request.method() === 'GET') {
+    if (pathname.includes('/admin/catalog/inventory/adjustments') && request.method() === 'GET') {
       const rows = adjustmentCreated
         ? [
             {
@@ -101,7 +83,25 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
       });
     }
 
-    if (pathname.endsWith('/admin/catalog/inventory/adjustments') && request.method() === 'POST') {
+    if (pathname.includes('/admin/catalog/inventory') && request.method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            storeId: 'store-e2e',
+            itemType: 'Product',
+            itemId: 'product-1',
+            itemName: 'Latte',
+            onHandQty: 3,
+            updatedAtUtc: '2026-01-01T00:00:00Z',
+            isInventoryTracked: true,
+          },
+        ]),
+      });
+    }
+
+    if (pathname.includes('/admin/catalog/inventory/adjustments') && request.method() === 'POST') {
       adjustmentCreated = true;
       return route.fulfill({
         status: 200,
@@ -127,9 +127,14 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
       response.request().method() === 'POST' &&
       response.url().includes('/v1/pos/admin/catalog/inventory/adjustments'),
   );
+  const historyReloaded = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      response.url().includes('/v1/pos/admin/catalog/inventory/adjustments'),
+  );
   await page.getByTestId('inventory-adjust-submit').click();
 
-  await adjustmentPosted;
+  await Promise.all([adjustmentPosted, historyReloaded]);
   await expect(page.getByTestId('inventory-adjust-success')).toBeVisible();
   await expect(page.locator('[data-testid^="inventory-history-row-"]').first()).toBeVisible();
   await expect(page.getByTestId('inventory-adjust-error')).toHaveCount(0);
@@ -166,8 +171,8 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
       });
     }
     if (
-      pathname.endsWith('/admin/catalog/inventory') ||
-      pathname.endsWith('/admin/catalog/inventory/adjustments')
+      pathname.includes('/admin/catalog/inventory') ||
+      pathname.includes('/admin/catalog/inventory/adjustments')
     ) {
       if (request.method() === 'POST') {
         return route.fulfill({
@@ -213,36 +218,83 @@ test('reportes inventory current/low/out renderizan y propagan filtros', async (
     const { pathname } = new URL(request.url());
     urls.push(request.url());
 
-    if (pathname.includes('/reports/') && request.method() === 'GET') {
-      if (
-        pathname.endsWith('/inventory/current') ||
-        pathname.endsWith('/inventory/low-stock') ||
-        pathname.endsWith('/inventory/out-of-stock')
-      ) {
-        return route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([
-            {
-              itemType: 'Product',
-              itemId: 'product-1',
-              itemName: 'Latte',
-              itemSku: 'LAT',
-              storeId: 'store-e2e',
-              stockOnHandQty: 1,
-              isInventoryTracked: true,
-              availabilityReason: null,
-              storeOverrideState: null,
-              updatedAtUtc: null,
-              lastAdjustmentAtUtc: null,
-            },
-          ]),
-        });
-      }
+    if (pathname.includes('/reports/inventory/') && request.method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            itemType: 'Product',
+            itemId: 'product-1',
+            itemName: 'Latte',
+            itemSku: 'LAT',
+            storeId: 'store-e2e',
+            stockOnHandQty: 1,
+            isInventoryTracked: true,
+            availabilityReason: null,
+            storeOverrideState: null,
+            updatedAtUtc: null,
+            lastAdjustmentAtUtc: null,
+          },
+        ]),
+      });
+    }
+
+    if (pathname.endsWith('/reports/sales/cashiers')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{ cashierUserId: 'cashier-e2e', tickets: 1, totalSales: 10 }]),
+      });
+    }
+
+    if (pathname.endsWith('/reports/shifts/summary')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{ shiftId: 'shift-e2e', cashierUserId: 'cashier-e2e' }]),
+      });
+    }
+
+    if (
+      pathname.endsWith('/reports/sales/daily') ||
+      pathname.endsWith('/reports/sales/hourly') ||
+      pathname.endsWith('/reports/top-products') ||
+      pathname.endsWith('/reports/voids/reasons')
+    ) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify([]),
+      });
+    }
+
+    if (pathname.endsWith('/reports/payments/methods')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ dateFrom: '2026-01-01', dateTo: '2026-01-01', totals: [] }),
+      });
+    }
+
+    if (
+      pathname.endsWith('/reports/sales/categories') ||
+      pathname.endsWith('/reports/sales/products') ||
+      pathname.endsWith('/reports/sales/addons/extras') ||
+      pathname.endsWith('/reports/sales/addons/options')
+    ) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [] }),
+      });
+    }
+
+    if (pathname.endsWith('/reports/control/cash-differences')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ daily: [], shifts: [] }),
       });
     }
 
@@ -295,7 +347,7 @@ test('historial C.2.1 renderiza movementKind, referencia y fallback estable', as
     const request = route.request();
     const { pathname } = new URL(request.url());
 
-    if (pathname.endsWith('/admin/products')) {
+    if (pathname.includes('/admin/products')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -315,7 +367,7 @@ test('historial C.2.1 renderiza movementKind, referencia y fallback estable', as
       });
     }
 
-    if (pathname.endsWith('/admin/extras')) {
+    if (pathname.includes('/admin/extras')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -323,25 +375,7 @@ test('historial C.2.1 renderiza movementKind, referencia y fallback estable', as
       });
     }
 
-    if (pathname.endsWith('/admin/catalog/inventory') && request.method() === 'GET') {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify([
-          {
-            storeId: 'store-e2e',
-            itemType: 'Product',
-            itemId: 'product-1',
-            itemName: 'Latte',
-            onHandQty: 3,
-            updatedAtUtc: '2026-01-01T00:00:00Z',
-            isInventoryTracked: true,
-          },
-        ]),
-      });
-    }
-
-    if (pathname.endsWith('/admin/catalog/inventory/adjustments') && request.method() === 'GET') {
+    if (pathname.includes('/admin/catalog/inventory/adjustments') && request.method() === 'GET') {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -407,6 +441,24 @@ test('historial C.2.1 renderiza movementKind, referencia y fallback estable', as
             movementKind: 'FutureMovement',
             createdAtUtc: '2026-01-01T00:00:03Z',
             performedByUserId: 'admin',
+          },
+        ]),
+      });
+    }
+
+    if (pathname.includes('/admin/catalog/inventory') && request.method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            storeId: 'store-e2e',
+            itemType: 'Product',
+            itemId: 'product-1',
+            itemName: 'Latte',
+            onHandQty: 3,
+            updatedAtUtc: '2026-01-01T00:00:00Z',
+            isInventoryTracked: true,
           },
         ]),
       });
