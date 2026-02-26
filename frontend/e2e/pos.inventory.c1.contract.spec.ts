@@ -53,11 +53,13 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
   await page.getByTestId('inventory-store-select').fill('store-e2e');
   await page.getByRole('button', { name: 'Cargar' }).click();
   await page.getByTestId('inventory-adjust-store').fill('store-e2e');
+  await expect(page.getByTestId('inventory-adjust-item').locator('option[value="product-1"]')).toHaveCount(1);
   await page.getByTestId('inventory-adjust-item').selectOption('product-1');
   await page.getByTestId('inventory-adjust-delta').fill('2');
   await page.getByTestId('inventory-adjust-submit').click();
 
   await expect.poll(() => posted).toBeTruthy();
+  await expect(page.getByTestId('inventory-adjust-success')).toBeVisible();
   await expect(page.locator('[data-testid^="inventory-history-row-"]').first()).toBeVisible();
   await expect(page.getByTestId('inventory-adjust-error')).toHaveCount(0);
 });
@@ -87,6 +89,7 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
   await page.getByTestId('inventory-store-select').fill('store-e2e');
   await page.getByRole('button', { name: 'Cargar' }).click();
   await page.getByTestId('inventory-adjust-store').fill('store-e2e');
+  await expect(page.getByTestId('inventory-adjust-item').locator('option[value="product-1"]')).toHaveCount(1);
   await page.getByTestId('inventory-adjust-item').selectOption('product-1');
   await page.getByTestId('inventory-adjust-delta').fill('-5');
   await page.getByTestId('inventory-adjust-submit').click();
@@ -116,7 +119,12 @@ test('reportes inventory current/low/out renderizan y propagan filtros', async (
   await page.getByTestId('report-inventory-filter-store').fill('store-e2e');
   await page.getByTestId('report-inventory-filter-search').fill('latte');
   await page.getByTestId('report-inventory-filter-threshold').fill('3');
+
+  const inventoryCurrentResponse = page.waitForResponse((response) => response.url().includes('/reports/inventory/current') && response.request().method() === 'GET');
+  const inventoryLowResponse = page.waitForResponse((response) => response.url().includes('/reports/inventory/low-stock') && response.request().method() === 'GET');
+  const inventoryOutResponse = page.waitForResponse((response) => response.url().includes('/reports/inventory/out-of-stock') && response.request().method() === 'GET');
   await page.getByTestId('reports-refresh').click();
+  await Promise.all([inventoryCurrentResponse, inventoryLowResponse, inventoryOutResponse]);
 
   await expect(page.getByTestId('report-inventory-current')).toBeVisible();
   await expect(page.getByTestId('report-inventory-low')).toBeVisible();
