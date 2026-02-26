@@ -146,7 +146,7 @@ public sealed class PosSalesService : IPosSalesService
                     !tenantDisabled.Contains(new { ItemType = CatalogItemType.Product, ItemId = x.Id }),
                     storeOverrides.GetValueOrDefault((CatalogItemType.Product, x.Id)),
                     x.IsAvailable,
-                    settings.ShowOnlyInStock || x.IsInventoryTracked,
+                    settings.ShowOnlyInStock,
                     productStock.GetValueOrDefault(x.Id, 0m),
                     x.Name));
                 return !resolved.IsAvailableEffective;
@@ -159,7 +159,7 @@ public sealed class PosSalesService : IPosSalesService
                     !tenantDisabled.Contains(new { ItemType = CatalogItemType.Product, ItemId = unavailableProduct.Id }),
                     storeOverrides.GetValueOrDefault((CatalogItemType.Product, unavailableProduct.Id)),
                     unavailableProduct.IsAvailable,
-                    settings.ShowOnlyInStock || unavailableProduct.IsInventoryTracked,
+                    settings.ShowOnlyInStock,
                     productStock.GetValueOrDefault(unavailableProduct.Id, 0m),
                     unavailableProduct.Name));
                 throw new ItemUnavailableException("Product", unavailableProduct.Id, unavailableProduct.Name, resolved.Reason, resolved.AvailableQuantity);
@@ -230,14 +230,14 @@ public sealed class PosSalesService : IPosSalesService
                     !tenantDisabled.Contains(new { ItemType = CatalogItemType.Extra, ItemId = x.Id }),
                     storeOverrides.GetValueOrDefault((CatalogItemType.Extra, x.Id)),
                     x.IsAvailable,
-                    settings.ShowOnlyInStock || x.IsInventoryTracked,
+                    settings.ShowOnlyInStock,
                     extraStock.GetValueOrDefault(x.Id, 0m),
                     x.Name));
                 return !resolved.IsAvailableEffective;
             });
             if (unavailableExtra is not null)
             {
-                var resolved = PosAvailabilityEngine.Resolve(new PosAvailabilityEngine.Input(CatalogItemType.Extra, unavailableExtra.Id, !tenantDisabled.Contains(new { ItemType = CatalogItemType.Extra, ItemId = unavailableExtra.Id }), storeOverrides.GetValueOrDefault((CatalogItemType.Extra, unavailableExtra.Id)), unavailableExtra.IsAvailable, settings.ShowOnlyInStock || unavailableExtra.IsInventoryTracked, extraStock.GetValueOrDefault(unavailableExtra.Id, 0m), unavailableExtra.Name));
+                var resolved = PosAvailabilityEngine.Resolve(new PosAvailabilityEngine.Input(CatalogItemType.Extra, unavailableExtra.Id, !tenantDisabled.Contains(new { ItemType = CatalogItemType.Extra, ItemId = unavailableExtra.Id }), storeOverrides.GetValueOrDefault((CatalogItemType.Extra, unavailableExtra.Id)), unavailableExtra.IsAvailable, settings.ShowOnlyInStock, extraStock.GetValueOrDefault(unavailableExtra.Id, 0m), unavailableExtra.Name));
                 throw new ItemUnavailableException("Extra", unavailableExtra.Id, unavailableExtra.Name, resolved.Reason, resolved.AvailableQuantity);
             }
 

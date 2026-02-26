@@ -54,7 +54,7 @@ public sealed class InventoryConsumptionService
                 !tenantDisabled.Contains((movement.ItemType, movement.ItemId)),
                 storeOverrides.GetValueOrDefault((movement.ItemType, movement.ItemId)),
                 movement.IsManualAvailable,
-                true,
+                enforceStockForAllItems,
                 balances.TryGetValue((movement.ItemType, movement.ItemId), out var row) ? row.OnHandQty : 0m,
                 movement.ItemName));
 
@@ -66,7 +66,7 @@ public sealed class InventoryConsumptionService
             var balance = balances.GetValueOrDefault((movement.ItemType, movement.ItemId));
             var qtyBefore = balance?.OnHandQty ?? 0m;
             var qtyAfter = qtyBefore - movement.Quantity;
-            if (qtyAfter < 0m)
+            if (enforceStockForAllItems && qtyAfter < 0m)
             {
                 throw new ItemUnavailableException(movement.ItemType.ToString(), movement.ItemId, movement.ItemName, "OutOfStock", qtyBefore);
             }
