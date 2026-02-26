@@ -381,6 +381,7 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
 
             var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
             await IdentitySeeder.SeedAsync(scope.ServiceProvider, config);
+            await EnsureSeededAdminScopeAsync(scope.ServiceProvider);
 
             var jwtOptions = scope.ServiceProvider.GetRequiredService<IOptions<JwtOptions>>().Value;
             var schemeProvider = scope.ServiceProvider.GetRequiredService<IAuthenticationSchemeProvider>();
@@ -442,6 +443,66 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
         finally
         {
             _initializationLock.Release();
+        }
+    }
+
+    private static async Task EnsureSeededAdminScopeAsync(IServiceProvider serviceProvider)
+    {
+        var dbContext = serviceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        var adminUser = await userManager.FindByEmailAsync("admin@test.local").ConfigureAwait(false);
+        if (adminUser is null)
+        {
+            return;
+        }
+
+        var defaultTenantId = await dbContext.Tenants.AsNoTracking().OrderBy(x => x.Name).Select(x => (Guid?)x.Id).FirstOrDefaultAsync().ConfigureAwait(false);
+        var defaultStoreId = defaultTenantId.HasValue
+            ? await dbContext.Stores.AsNoTracking().Where(x => x.TenantId == defaultTenantId.Value).OrderBy(x => x.Name).Select(x => (Guid?)x.Id).FirstOrDefaultAsync().ConfigureAwait(false)
+            : null;
+
+        var requiresUpdate = false;
+        if (!adminUser.TenantId.HasValue && defaultTenantId.HasValue)
+        {
+            adminUser.TenantId = defaultTenantId;
+            requiresUpdate = true;
+        }
+
+        if (!adminUser.StoreId.HasValue && defaultStoreId.HasValue)
+        {
+            adminUser.StoreId = defaultStoreId;
+            requiresUpdate = true;
+        }
+
+        if (requiresUpdate)
+        {
+            var updateResult = await userManager.UpdateAsync(adminUser).ConfigureAwait(false);
+            if (!updateResult.Succeeded)
+            {
+                var errors = string.Join("; ", updateResult.Errors.Select(x => x.Description));
+                throw new InvalidOperationException($"Failed to update seeded admin scope for tests: {errors}");
+            }
+        }
+
+        if (!await userManager.IsInRoleAsync(adminUser, "AdminStore").ConfigureAwait(false))
+        {
+            var addAdminStoreResult = await userManager.AddToRoleAsync(adminUser, "AdminStore").ConfigureAwait(false);
+            if (!addAdminStoreResult.Succeeded)
+            {
+                var errors = string.Join("; ", addAdminStoreResult.Errors.Select(x => x.Description));
+                throw new InvalidOperationException($"Failed to grant AdminStore role to seeded admin for tests: {errors}");
+            }
+        }
+
+        if (!await userManager.IsInRoleAsync(adminUser, "SuperAdmin").ConfigureAwait(false))
+        {
+            var addSuperAdminResult = await userManager.AddToRoleAsync(adminUser, "SuperAdmin").ConfigureAwait(false);
+            if (!addSuperAdminResult.Succeeded)
+            {
+                var errors = string.Join("; ", addSuperAdminResult.Errors.Select(x => x.Description));
+                throw new InvalidOperationException($"Failed to grant SuperAdmin role to seeded admin for tests: {errors}");
+            }
         }
     }
 
@@ -615,7 +676,7 @@ public sealed partial class SmokeTests : IClassFixture<CobranzaDigitalApiFactory
     public async Task AdminUsersWithAdminTokenReturnsOk()
     {
         var accessToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
-        AssertTokenHasRole(accessToken, "Admin");
+        AssertTokenHasRole(accessToken, "AdminStore");
 
         var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken);
 
@@ -627,7 +688,7 @@ public sealed partial class SmokeTests : IClassFixture<CobranzaDigitalApiFactory
     {
         var _ = await RegisterAndGetAccessTokenAsync("role.check@test.local", "User1234!");
         var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
-        AssertTokenHasRole(adminToken, "Admin");
+        AssertTokenHasRole(adminToken, "AdminStore");
 
         var response = await GetWithBearerTokenAsync("/api/v1/admin/users?search=role.check@test.local", adminToken);
         var payload = await response.Content.ReadFromJsonAsync<PagedResponse>();
@@ -645,7 +706,7 @@ public sealed partial class SmokeTests : IClassFixture<CobranzaDigitalApiFactory
         Assert.False(string.IsNullOrWhiteSpace(userToken));
 
         var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
-        AssertTokenHasRole(adminToken, "Admin");
+        AssertTokenHasRole(adminToken, "AdminStore");
         var userId = await GetUserIdByEmailAsync(adminToken, "empty.roles@test.local");
 
         using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/admin/users/{userId}/roles")
