@@ -252,10 +252,34 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
+    if (matchesReportPath(url.pathname, '/reports/inventory/current')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    }
+
+    if (matchesReportPath(url.pathname, '/reports/inventory/low-stock')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    }
+
+    if (matchesReportPath(url.pathname, '/reports/inventory/out-of-stock')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    }
+
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({}),
+      body: JSON.stringify([]),
     });
   });
 

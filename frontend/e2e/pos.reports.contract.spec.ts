@@ -30,7 +30,7 @@ test('POS reports UI-contract renders sections and propagates selected filters',
   const hasReportsPath = (url: string, endpoint: string) =>
     new URL(url).pathname.includes(endpoint);
 
-  await page.route('**/api/v1/pos/**', async (route) => {
+  await page.route('**/v1/pos/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     seenUrls.push(url.toString());
@@ -236,10 +236,34 @@ test('POS reports UI-contract renders sections and propagates selected filters',
       });
     }
 
+    if (url.pathname.endsWith('/reports/inventory/current')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    }
+
+    if (url.pathname.endsWith('/reports/inventory/low-stock')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    }
+
+    if (url.pathname.endsWith('/reports/inventory/out-of-stock')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    }
+
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({}),
+      body: JSON.stringify([]),
     });
   });
 
