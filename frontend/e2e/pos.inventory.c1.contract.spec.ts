@@ -22,11 +22,11 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
     const request = route.request();
     const { pathname } = new URL(request.url());
 
-    if (pathname.endsWith('/admin/products')) {
+    if (pathname.includes('/admin/products')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'product-1', name: 'Latte', externalCode: 'LAT', categoryId: 'c1', subcategoryName: null, basePrice: 1, isActive: true, isAvailable: true, customizationSchemaId: null }]) });
     }
 
-    if (pathname.endsWith('/admin/extras')) {
+    if (pathname.includes('/admin/extras')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'extra-1', name: 'Shot', price: 1, isActive: true, isAvailable: true }]) });
     }
 
@@ -67,10 +67,10 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
   await page.route('**/api/v1/pos/**', async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
-    if (pathname.endsWith('/admin/products')) {
+    if (pathname.includes('/admin/products')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'product-1', name: 'Latte', externalCode: 'LAT', categoryId: 'c1', subcategoryName: null, basePrice: 1, isActive: true, isAvailable: true, customizationSchemaId: null }]) });
     }
-    if (pathname.endsWith('/admin/extras')) {
+    if (pathname.includes('/admin/extras')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
     }
     if (pathname.endsWith('/admin/catalog/inventory') || pathname.endsWith('/admin/catalog/inventory/adjustments')) {

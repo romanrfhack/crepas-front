@@ -408,7 +408,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     }
 
     [Fact]
-    public async Task CreateSale_Allows_StockZero_When_ShowOnlyInStock_Disabled()
+    public async Task CreateSale_Returns_OutOfStock_When_InventoryTracked_Even_When_ShowOnlyInStock_Disabled()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         await EnsureOpenShiftAsync(token, "admin@test.local");
@@ -420,7 +420,28 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         await UpdateInventorySettingsAsync(token, false);
         await UpsertInventoryAsync(token, snapshot.StoreId, product.Id, 0m);
 
-        await CreateSaleAsync(token, product.Id, 1, 20m);
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        request.Content = JsonContent.Create(new
+        {
+            clientSaleId = Guid.NewGuid(),
+            items = new[]
+            {
+                new
+                {
+                    productId = product.Id,
+                    quantity = 1,
+                    selections = Array.Empty<object>(),
+                    extras = Array.Empty<object>(),
+                },
+            },
+            payment = new { method = "Cash", amount = 20m },
+        });
+        using var response = await _client.SendAsync(request);
+
+        var payload = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("OutOfStock", payload!["reason"]!.GetValue<string>());
+        Assert.Equal(0m, payload["availableQty"]!.GetValue<decimal>());
     }
 
     [Fact]
