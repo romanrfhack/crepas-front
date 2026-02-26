@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CobranzaDigital.Infrastructure.Services;
 
-internal sealed class InventoryConsumptionService
+public sealed class InventoryConsumptionService
 {
     private const string SaleReferenceType = "Sale";
     private const string SaleVoidReferenceType = "SaleVoid";
