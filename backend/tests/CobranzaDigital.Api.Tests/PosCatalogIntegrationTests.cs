@@ -491,17 +491,17 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
         var history = (await historyResponse.Content.ReadFromJsonAsync<List<CatalogInventoryAdjustmentResponse>>())!;
 
-        var manualRow = Assert.Single(history.Where(x => x.Reason == "Purchase"));
+        var manualRow = Assert.Single(history, x => x.Reason == "Purchase");
         Assert.Null(manualRow.ReferenceType);
         Assert.Null(manualRow.ReferenceId);
         Assert.Null(manualRow.MovementKind);
 
-        var saleRow = Assert.Single(history.Where(x => x.Reason == "SaleConsumption"));
+        var saleRow = Assert.Single(history, x => x.Reason == "SaleConsumption");
         Assert.Equal("Sale", saleRow.ReferenceType);
         Assert.Equal(saleId, saleRow.ReferenceId);
         Assert.Equal("SaleConsumption", saleRow.MovementKind);
 
-        var voidRow = Assert.Single(history.Where(x => x.Reason == "VoidReversal"));
+        var voidRow = Assert.Single(history, x => x.Reason == "VoidReversal");
         Assert.Equal("SaleVoid", voidRow.ReferenceType);
         Assert.Equal(saleId, voidRow.ReferenceId);
         Assert.Equal("VoidReversal", voidRow.MovementKind);
