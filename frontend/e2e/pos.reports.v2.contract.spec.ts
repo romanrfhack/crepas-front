@@ -28,7 +28,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
   const hasReportsPath = (url: string, endpoint: string) =>
     new URL(url).pathname.includes(endpoint);
 
-  await page.route('**/api/v1/pos/**', async (route) => {
+  await page.route('**/v1/pos/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     seenUrls.push(url.toString());

@@ -126,11 +126,6 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
   await page.getByTestId('inventory-adjust-delta').fill('2');
   await page.getByTestId('inventory-adjust-delta').blur();
   await expect(page.getByTestId('inventory-adjust-submit')).toBeEnabled();
-  const adjustmentPostedRequest = page.waitForRequest(
-    (request) =>
-      request.method() === 'POST' &&
-      request.url().includes('/v1/pos/admin/catalog/inventory/adjustments'),
-  );
   const adjustmentPosted = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
@@ -143,7 +138,7 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
   );
   await page.getByTestId('inventory-adjust-submit').click({ force: true });
 
-  await Promise.all([adjustmentPostedRequest, adjustmentPosted, historyReloaded]);
+  await Promise.all([adjustmentPosted, historyReloaded]);
   await expect(page.getByTestId('inventory-adjust-success')).toBeVisible();
   await expect(page.locator('[data-testid^="inventory-history-row-"]').first()).toBeVisible();
   await expect(page.getByTestId('inventory-adjust-error')).toHaveCount(0);
@@ -213,11 +208,6 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
   await page.getByTestId('inventory-adjust-delta').fill('-5');
   await page.getByTestId('inventory-adjust-delta').blur();
   await expect(page.getByTestId('inventory-adjust-submit')).toBeEnabled();
-  const adjustmentRejectedRequest = page.waitForRequest(
-    (request) =>
-      request.method() === 'POST' &&
-      request.url().includes('/v1/pos/admin/catalog/inventory/adjustments'),
-  );
   const adjustmentRejected = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
@@ -226,7 +216,7 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
   );
   await page.getByTestId('inventory-adjust-submit').click({ force: true });
 
-  await Promise.all([adjustmentRejectedRequest, adjustmentRejected]);
+  await adjustmentRejected;
   await expect(page.getByTestId('inventory-adjust-success')).toHaveCount(0);
 });
 
