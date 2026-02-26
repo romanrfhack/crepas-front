@@ -45,6 +45,17 @@ describe('platformTenantInterceptor', () => {
     expect(req.headers.has('X-Tenant-Id')).toBe(false);
   });
 
+
+  it('does not add header for platform tenants requests', () => {
+    const req = run('/api/v1/platform/tenants', ['SuperAdmin'], 'tenant-1') as unknown as HttpRequest<unknown>;
+    expect(req.headers.has('X-Tenant-Id')).toBe(false);
+  });
+
+  it('does not add header for platform verticals requests', () => {
+    const req = run('/api/v1/platform/verticals', ['SuperAdmin'], 'tenant-1') as unknown as HttpRequest<unknown>;
+    expect(req.headers.has('X-Tenant-Id')).toBe(false);
+  });
+
   it('does not add header when user is not super admin', () => {
     const req = run('/api/v1/pos/admin/catalog/overrides', ['Admin'], 'tenant-1') as unknown as HttpRequest<unknown>;
     expect(req.headers.has('X-Tenant-Id')).toBe(false);

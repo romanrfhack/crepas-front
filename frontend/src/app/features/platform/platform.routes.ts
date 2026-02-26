@@ -21,6 +21,20 @@ export const platformRoutes: Routes = [
       ),
   },
   {
+    path: 'verticals',
+    canMatch: [roleGuard(['SuperAdmin'])],
+    canActivate: [roleGuard(['SuperAdmin'])],
+    data: { roles: ['SuperAdmin'] },
+    loadComponent: () => import('./pages/verticals/verticals.page').then((m) => m.VerticalsPage),
+  },
+  {
+    path: 'tenants',
+    canMatch: [roleGuard(['SuperAdmin'])],
+    canActivate: [roleGuard(['SuperAdmin'])],
+    data: { roles: ['SuperAdmin'] },
+    loadComponent: () => import('./pages/tenants/tenants.page').then((m) => m.TenantsPage),
+  },
+  {
     path: 'tenant-context',
     canMatch: [roleGuard(['SuperAdmin'])],
     canActivate: [roleGuard(['SuperAdmin'])],

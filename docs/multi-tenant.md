@@ -36,3 +36,9 @@ Notas:
 - **SuperAdmin**: acceso a `/api/v1/platform/*` (`PlatformOnly`).
 - **TenantAdmin / Manager / Admin**: operación y reportes POS dentro de su tenant.
 - **Cashier**: operación POS, sin acceso a plataforma.
+
+
+## Plataforma UI (SuperAdmin)
+- La sección `/app/platform` permite CRUD de verticals y tenants usando `/api/v1/platform/verticals` y `/api/v1/platform/tenants`.
+- Desde la tabla de tenants se puede activar "Usar este tenant" para setear `platform_selected_tenant_id` (tenant-context usado por endpoints POS operativos).
+- Si se elimina el tenant activo desde Plataforma, el frontend limpia tenant-context para evitar headers `X-Tenant-Id` inválidos.
