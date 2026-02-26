@@ -597,13 +597,13 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         var sale = await saleResp.Content.ReadFromJsonAsync<CreateSaleResponse>();
         Assert.Equal(HttpStatusCode.OK, saleResp.StatusCode);
 
-        Assert.Equal(2m, await GetCatalogStockAsync(storeId, "Extra", extra.Id));
+        Assert.Equal(7m, await GetCatalogStockAsync(storeId, "Extra", extra.Id));
 
         using var saleRetryReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
         saleRetryReq.Content = JsonContent.Create(new { clientSaleId, items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = new[] { new { extraId = extra.Id, quantity = 3 } } } }, payment = new { method = "Cash", amount = 30m } });
         using var saleRetryResp = await _client.SendAsync(saleRetryReq);
         Assert.Equal(HttpStatusCode.OK, saleRetryResp.StatusCode);
-        Assert.Equal(2m, await GetCatalogStockAsync(storeId, "Extra", extra.Id));
+        Assert.Equal(7m, await GetCatalogStockAsync(storeId, "Extra", extra.Id));
 
         var clientVoidId = Guid.NewGuid();
         using var voidReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{sale!.SaleId}/void", token);

@@ -22,9 +22,9 @@ public sealed class InventoryConsumptionService
         _auditLogger = auditLogger;
     }
 
-    public async Task ConsumeForSaleAsync(Guid tenantId, Guid storeId, Guid saleId, Guid? userId, IReadOnlyList<CreateSaleItemRequestDto> items, Dictionary<Guid, Product> products, Dictionary<Guid, Extra> extras, Dictionary<(CatalogItemType, Guid), CatalogOverrideState?> storeOverrides, HashSet<(CatalogItemType, Guid)> tenantDisabled, CancellationToken ct)
+    public async Task ConsumeForSaleAsync(Guid tenantId, Guid storeId, Guid saleId, Guid? userId, IReadOnlyList<CreateSaleItemRequestDto> items, Dictionary<Guid, Product> products, Dictionary<Guid, Extra> extras, bool enforceStockForAllItems, Dictionary<(CatalogItemType, Guid), CatalogOverrideState?> storeOverrides, HashSet<(CatalogItemType, Guid)> tenantDisabled, CancellationToken ct)
     {
-        var movements = BuildConsumption(items, products, extras);
+        var movements = BuildConsumption(items, products, extras, enforceStockForAllItems);
         if (movements.Count == 0)
         {
             return;
@@ -225,14 +225,14 @@ public sealed class InventoryConsumptionService
         }
     }
 
-    private static List<InventoryMovement> BuildConsumption(IReadOnlyList<CreateSaleItemRequestDto> items, Dictionary<Guid, Product> products, Dictionary<Guid, Extra> extras)
+    private static List<InventoryMovement> BuildConsumption(IReadOnlyList<CreateSaleItemRequestDto> items, Dictionary<Guid, Product> products, Dictionary<Guid, Extra> extras, bool enforceStockForAllItems)
     {
         var aggregated = new Dictionary<(CatalogItemType ItemType, Guid ItemId), InventoryMovement>();
 
         foreach (var item in items)
         {
             var product = products[item.ProductId];
-            if (product.IsInventoryTracked)
+            if (product.IsInventoryTracked || enforceStockForAllItems)
             {
                 Add(aggregated, CatalogItemType.Product, product.Id, item.Quantity, product.Name, product.IsAvailable);
             }
@@ -240,7 +240,7 @@ public sealed class InventoryConsumptionService
             foreach (var extraLine in item.Extras ?? [])
             {
                 var extra = extras[extraLine.ExtraId];
-                if (!extra.IsInventoryTracked)
+                if (!extra.IsInventoryTracked && !enforceStockForAllItems)
                 {
                     continue;
                 }
