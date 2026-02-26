@@ -56,6 +56,50 @@ interface ItemOption {
         <p class="error" role="alert" data-testid="inventory-error">{{ error }}</p>
       }
 
+      <section class="card">
+        <h3>Stock actual</h3>
+        <table data-testid="inventory-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Tipo</th>
+              <th>Stock</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of items(); track row.itemType + '-' + row.itemId) {
+              <tr [attr.data-testid]="'inventory-row-' + row.itemType + '-' + row.itemId">
+                <td>{{ row.itemName }}</td>
+                <td>{{ row.itemType }}</td>
+                <td>
+                  <input
+                    type="number"
+                    [attr.data-testid]="'inventory-stock-input-' + row.itemType + '-' + row.itemId"
+                    [value]="getDraftStock(row)"
+                    (input)="setDraftStock(row, $any($event.target).value)"
+                  />
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    [attr.data-testid]="'inventory-save-' + row.itemType + '-' + row.itemId"
+                    [disabled]="isSavingRow(row)"
+                    (click)="saveInventoryRow(row)"
+                  >
+                    {{ isSavingRow(row) ? 'Guardando...' : 'Guardar' }}
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="4">Sin resultados.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+
       <form class="card" data-testid="inventory-adjust-form" (ngSubmit)="submitAdjustment()">
         <h3>Nuevo ajuste</h3>
         <label>
@@ -193,6 +237,8 @@ export class InventoryPage {
   ];
 
   readonly items = signal<InventoryRow[]>([]);
+  readonly stockDrafts = signal<Record<string, string>>({});
+  readonly stockSaving = signal<Record<string, boolean>>({});
   readonly historyRows = signal<CatalogInventoryAdjustmentDto[]>([]);
   readonly products = signal<ItemOption[]>([]);
   readonly extras = signal<ItemOption[]>([]);
@@ -253,6 +299,50 @@ export class InventoryPage {
       );
     } catch (error) {
       this.globalError.set(this.toUiError(error));
+    }
+  }
+
+
+  getDraftStock(row: InventoryRow) {
+    const key = this.getRowKey(row);
+    return this.stockDrafts()[key] ?? `${row.stockOnHandQty}`;
+  }
+
+  setDraftStock(row: InventoryRow, value: string) {
+    const key = this.getRowKey(row);
+    this.stockDrafts.update((state) => ({ ...state, [key]: value }));
+  }
+
+  isSavingRow(row: InventoryRow) {
+    return this.stockSaving()[this.getRowKey(row)] ?? false;
+  }
+
+  async saveInventoryRow(row: InventoryRow) {
+    const rowKey = this.getRowKey(row);
+    const parsedQty = Number.parseInt(this.getDraftStock(row), 10);
+    if (!Number.isFinite(parsedQty)) {
+      this.globalError.set('Cantidad inválida para inventario.');
+      return;
+    }
+
+    this.stockSaving.update((state) => ({ ...state, [rowKey]: true }));
+    try {
+      await this.api.upsertInventory({
+        storeId: this.storeIdControl.value.trim(),
+        itemType: row.itemType,
+        itemId: row.itemId,
+        onHandQty: parsedQty,
+      });
+      this.items.update((rows) =>
+        rows.map((current) =>
+          this.getRowKey(current) === rowKey ? { ...current, stockOnHandQty: parsedQty } : current,
+        ),
+      );
+      this.stockDrafts.update((state) => ({ ...state, [rowKey]: `${parsedQty}` }));
+    } catch (error) {
+      this.globalError.set(this.toUiError(error));
+    } finally {
+      this.stockSaving.update((state) => ({ ...state, [rowKey]: false }));
     }
   }
 
@@ -336,6 +426,10 @@ export class InventoryPage {
       isInventoryTracked: item.isInventoryTracked ?? true,
       stockOnHandQty: item.onHandQty,
     };
+  }
+
+  private getRowKey(row: InventoryRow) {
+    return `${row.itemType}-${row.itemId}`;
   }
 
   private toUiError(error: unknown) {

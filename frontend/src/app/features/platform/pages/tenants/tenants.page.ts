@@ -14,7 +14,7 @@ interface ProblemLike {
   selector: 'app-platform-tenants-page',
   imports: [ReactiveFormsModule],
   template: `
-    <div class="tenants-page">
+    <div class="tenants-page" data-testid="platform-tenants-page">
       <!-- HEADER con barra decorativa -->
       <header class="page-header">
         <h2>🏢 Tenants</h2>
