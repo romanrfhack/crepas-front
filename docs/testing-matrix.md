@@ -66,6 +66,8 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 | Create sale validation disabled vs unavailable | `backend/tests/CobranzaDigital.Api.Tests/PosSalesIntegrationTests.cs` (`CreateSale_ReturnsConflict_WithStableItemUnavailablePayload_When_Product_NotAvailable`) | `409` con `reason=DisabledByTenant` para override tenant y `reason=UnavailableInStore` para disponibilidad operativa. |
 
 - Platform templates UI: Unit (PlatformCatalogTemplatesApiService, platform tenant interceptor) + E2E UI-contract (routes /app/platform/* con data-testid platform-*)
+- Platform Verticals UI: Unit (`frontend/src/app/features/platform/services/platform-verticals-api.service.spec.ts`, `frontend/src/app/features/platform/pages/verticals/verticals.page.spec.ts`, interceptor `frontend/src/app/core/http/platform-tenant.interceptor.spec.ts`) + E2E UI-contract (`frontend/e2e/platform.tenants.verticals.contract.spec.ts`).
+- Platform Tenants UI: Unit (`frontend/src/app/features/platform/services/platform-tenants-api.service.spec.ts`, `frontend/src/app/features/platform/pages/tenants/tenants.page.spec.ts`, interceptor `frontend/src/app/core/http/platform-tenant.interceptor.spec.ts`) + E2E UI-contract (`frontend/e2e/platform.tenants.verticals.contract.spec.ts`).
 - Tenant overrides/availability UI: Unit (POS admin catalog services + error propagation) + E2E UI-contract (override-toggle-*, availability-toggle-*)
 
 

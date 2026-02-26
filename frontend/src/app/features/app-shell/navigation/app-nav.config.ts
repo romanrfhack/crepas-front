@@ -81,6 +81,8 @@ export const APP_NAV_CONFIG: NavSection[] = [
     defaultExpanded: true,
     children: [
       { label: 'Catalog Templates', path: '/app/platform/catalog-templates', roles: ['SuperAdmin'] },
+      { label: 'Verticals', path: '/app/platform/verticals', roles: ['SuperAdmin'] },
+      { label: 'Tenants', path: '/app/platform/tenants', roles: ['SuperAdmin'] },
       { label: 'Asignar template', path: '/app/platform/tenant-template-assignment', roles: ['SuperAdmin'] },
       { label: 'Contexto tenant', path: '/app/platform/tenant-context', roles: ['SuperAdmin'] },
     ],
