@@ -31,7 +31,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       pathOrUrl.startsWith('http') ? new URL(pathOrUrl).pathname : pathOrUrl,
     );
 
-    return normalizedPath.endsWith(normalizePath(endpoint));
+    return normalizedPath.includes(normalizePath(endpoint));
   };
 
   await page.route('**/v1/pos/**', async (route) => {
