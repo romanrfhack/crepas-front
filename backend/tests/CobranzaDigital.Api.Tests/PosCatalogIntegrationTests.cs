@@ -15,11 +15,18 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 {
     private readonly HttpClient _client;
     private readonly CobranzaDigitalApiFactory _factory;
+    private readonly string _tenantHeaderValue;
 
     public PosCatalogIntegrationTests(CobranzaDigitalApiFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var defaultStoreId = db.PosSettings.AsNoTracking().OrderBy(x => x.Id).Select(x => x.DefaultStoreId).First();
+        var tenantId = db.Stores.AsNoTracking().Where(x => x.Id == defaultStoreId).Select(x => x.TenantId).First();
+        _tenantHeaderValue = tenantId.ToString("D");
     }
 
     [Fact]
@@ -601,7 +608,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     {
         using var req = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
         using var response = await _client.SendAsync(req);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
         return (await response.Content.ReadFromJsonAsync<SnapshotResponse>())!;
     }
 
@@ -610,7 +617,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var req = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", token);
         using var response = await _client.SendAsync(req);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
         Assert.True(response.Headers.TryGetValues("ETag", out var etagValues));
         return etagValues!.Single();
     }
@@ -632,7 +639,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         req.Headers.TryAddWithoutValidation("If-None-Match", previousEtag);
         using var response = await _client.SendAsync(req);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
         Assert.True(response.Headers.TryGetValues("ETag", out var etagValues));
 
         var changedEtag = etagValues!.Single();
@@ -655,7 +662,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         using var request = CreateAuthorizedRequest(HttpMethod.Get, query, token);
         using var response = await _client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
         return (await response.Content.ReadFromJsonAsync<List<StoreInventoryItemResponse>>())!;
     }
 
@@ -664,7 +671,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory/settings", token);
         request.Content = JsonContent.Create(new { showOnlyInStock });
         using var response = await _client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
     }
 
     private async Task UpsertInventoryAsync(string token, Guid storeId, Guid productId, decimal onHand)
@@ -672,7 +679,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory", token);
         request.Content = JsonContent.Create(new { storeId, productId, onHand });
         using var response = await _client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
     }
 
     private async Task UpsertCatalogInventoryAsync(string token, Guid storeId, Guid productId, decimal onHandQty)
@@ -680,7 +687,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/inventory", token);
         request.Content = JsonContent.Create(new { storeId, itemType = "Product", itemId = productId, onHandQty, reason = "Correction" });
         using var response = await _client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
     }
 
     private async Task AdjustInventoryAsync(string token, Guid storeId, string itemType, Guid itemId, decimal quantityDelta, string reason, HttpStatusCode expectStatus = HttpStatusCode.OK)
@@ -688,7 +695,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", token);
         request.Content = JsonContent.Create(new { storeId, itemType, itemId, quantityDelta, reason });
         using var response = await _client.SendAsync(request);
-        Assert.Equal(expectStatus, response.StatusCode);
+        await AssertStatusAsync(response, expectStatus);
     }
 
     private async Task UpdateProductAsync(string token, ProductResponse product)
@@ -706,7 +713,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             product.CustomizationSchemaId,
         });
         using var response = await _client.SendAsync(updateReq);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
     }
 
     private async Task UpdateExtraAsync(string token, ExtraResponse extra)
@@ -714,7 +721,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var updateReq = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/pos/admin/extras/{extra.Id}", token);
         updateReq.Content = JsonContent.Create(new { extra.Name, extra.Price, extra.IsActive, extra.IsAvailable });
         using var response = await _client.SendAsync(updateReq);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
     }
 
     private async Task UpdateOptionItemAsync(string token, Guid optionSetId, OptionItemResponse item)
@@ -722,7 +729,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var updateReq = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/pos/admin/option-sets/{optionSetId}/items/{item.Id}", token);
         updateReq.Content = JsonContent.Create(new { item.Name, item.IsActive, item.IsAvailable, item.SortOrder });
         using var response = await _client.SendAsync(updateReq);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await AssertStatusAsync(response, HttpStatusCode.OK);
     }
 
     private async Task<T> PostAsync<T>(string url, string token, object body)
@@ -730,8 +737,19 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var req = CreateAuthorizedRequest(HttpMethod.Post, url, token);
         req.Content = JsonContent.Create(body);
         using var resp = await _client.SendAsync(req);
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        await AssertStatusAsync(resp, HttpStatusCode.OK);
         return (await resp.Content.ReadFromJsonAsync<T>())!;
+    }
+
+    private static async Task AssertStatusAsync(HttpResponseMessage response, HttpStatusCode expectedStatus)
+    {
+        if (response.StatusCode == expectedStatus)
+        {
+            return;
+        }
+
+        var content = response.Content is null ? string.Empty : await response.Content.ReadAsStringAsync();
+        Assert.True(false, $"Expected HTTP {(int)expectedStatus} ({expectedStatus}) but got {(int)response.StatusCode} ({response.StatusCode}). Body: {content}");
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)
@@ -831,10 +849,15 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         return payload.Items[0].Id;
     }
 
-    private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token)
+    private HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token)
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (url.StartsWith("/api/v1/pos/", StringComparison.OrdinalIgnoreCase))
+        {
+            request.Headers.Add("X-Tenant-Id", _tenantHeaderValue);
+        }
+
         return request;
     }
 

@@ -15,11 +15,18 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
 {
     private readonly CobranzaDigitalApiFactory _factory;
     private readonly HttpClient _client;
+    private readonly string _tenantHeaderValue;
 
     public PosSalesIntegrationTests(CobranzaDigitalApiFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var defaultStoreId = db.PosSettings.AsNoTracking().OrderBy(x => x.Id).Select(x => x.DefaultStoreId).First();
+        var tenantId = db.Stores.AsNoTracking().Where(x => x.Id == defaultStoreId).Select(x => x.TenantId).First();
+        _tenantHeaderValue = tenantId.ToString("D");
     }
 
 
@@ -838,10 +845,15 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         return payload!.AccessToken;
     }
 
-    private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token)
+    private HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token)
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (url.StartsWith("/api/v1/pos/", StringComparison.OrdinalIgnoreCase))
+        {
+            request.Headers.Add("X-Tenant-Id", _tenantHeaderValue);
+        }
+
         return request;
     }
 
