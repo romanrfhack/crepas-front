@@ -33,7 +33,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
     const url = new URL(request.url());
     seenUrls.push(url.toString());
 
-    if (url.pathname.endsWith('/reports/sales/cashiers')) {
+    if (url.pathname.includes('/reports/sales/cashiers')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -51,7 +51,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/shifts/summary')) {
+    if (url.pathname.includes('/reports/shifts/summary')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -73,7 +73,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/sales/daily')) {
+    if (url.pathname.includes('/reports/sales/daily')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -94,7 +94,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/payments/methods')) {
+    if (url.pathname.includes('/reports/payments/methods')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -106,7 +106,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/sales/hourly')) {
+    if (url.pathname.includes('/reports/sales/hourly')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -114,7 +114,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/voids/reasons')) {
+    if (url.pathname.includes('/reports/voids/reasons')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -124,7 +124,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/top-products')) {
+    if (url.pathname.includes('/reports/top-products')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -134,7 +134,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/kpis/summary')) {
+    if (url.pathname.includes('/reports/kpis/summary')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -150,7 +150,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/sales/categories')) {
+    if (url.pathname.includes('/reports/sales/categories')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -168,7 +168,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/sales/products')) {
+    if (url.pathname.includes('/reports/sales/products')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -187,7 +187,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/sales/addons/extras')) {
+    if (url.pathname.includes('/reports/sales/addons/extras')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -205,7 +205,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/sales/addons/options')) {
+    if (url.pathname.includes('/reports/sales/addons/options')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -223,7 +223,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.endsWith('/reports/control/cash-differences')) {
+    if (url.pathname.includes('/reports/control/cash-differences')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
