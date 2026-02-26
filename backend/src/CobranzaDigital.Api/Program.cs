@@ -147,14 +147,14 @@ builder.Services.AddScoped<IAuditRequestContextAccessor, HttpAuditRequestContext
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(AuthorizationPolicies.AdminOnly, policy =>
-        policy.RequireRole("Admin"));
+    options.AddPolicy(AuthorizationPolicies.UserAdminAccess, policy =>
+        policy.RequireRole("AdminStore", "TenantAdmin", "SuperAdmin", "Admin"));
     options.AddPolicy(AuthorizationPolicies.PosAdmin, policy =>
-        policy.RequireRole("Admin", "Manager", "TenantAdmin", "SuperAdmin"));
+        policy.RequireRole("AdminStore", "Manager", "TenantAdmin", "SuperAdmin", "Admin"));
     options.AddPolicy(AuthorizationPolicies.PosOperator, policy =>
-        policy.RequireRole("Admin", "Cashier", "Manager", "TenantAdmin", "SuperAdmin"));
+        policy.RequireRole("AdminStore", "Cashier", "Manager", "TenantAdmin", "SuperAdmin", "Admin"));
     options.AddPolicy(AuthorizationPolicies.PosReportViewer, policy =>
-        policy.RequireRole("Admin", "Manager", "TenantAdmin", "SuperAdmin"));
+        policy.RequireRole("AdminStore", "Manager", "TenantAdmin", "SuperAdmin", "Admin"));
     options.AddPolicy(AuthorizationPolicies.PlatformOnly, policy =>
         policy.RequireRole("SuperAdmin"));
     options.AddPolicy(AuthorizationPolicies.TenantScoped, policy =>

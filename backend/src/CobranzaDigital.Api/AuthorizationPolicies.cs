@@ -2,7 +2,7 @@ namespace CobranzaDigital.Api;
 
 public static class AuthorizationPolicies
 {
-    public const string AdminOnly = "AdminOnly";
+    public const string UserAdminAccess = "UserAdminAccess";
     public const string RequireScope = "RequireScope";
     public const string PosAdmin = "PosAdmin";
     public const string PosOperator = "PosOperator";

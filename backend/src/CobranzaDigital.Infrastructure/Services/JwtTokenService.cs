@@ -122,7 +122,7 @@ public sealed class JwtTokenService : ITokenService
         var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.SigningKey));
         var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
         var roles = await ResolveRolesAsync(user, cancellationToken).ConfigureAwait(false);
-        var tenantId = await ResolveTenantIdAsync(user).ConfigureAwait(false);
+        var (tenantId, storeId) = await ResolveScopeAsync(user).ConfigureAwait(false);
 
         var claims = new List<Claim>
         {
@@ -133,7 +133,7 @@ public sealed class JwtTokenService : ITokenService
         };
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
-        if (roles.Any(role => string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)))
+        if (roles.Any(role => string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase)))
         {
             claims.Add(new Claim("scope", "cobranza.read"));
         }
@@ -141,6 +141,11 @@ public sealed class JwtTokenService : ITokenService
         if (tenantId.HasValue)
         {
             claims.Add(new Claim("tenantId", tenantId.Value.ToString("D")));
+        }
+
+        if (storeId.HasValue)
+        {
+            claims.Add(new Claim("storeId", storeId.Value.ToString("D")));
         }
 
         var token = new JwtSecurityToken(
@@ -176,15 +181,15 @@ public sealed class JwtTokenService : ITokenService
     }
 
 
-    private async Task<Guid?> ResolveTenantIdAsync(IdentityUserInfo user)
+    private async Task<(Guid? TenantId, Guid? StoreId)> ResolveScopeAsync(IdentityUserInfo user)
     {
         if (!Guid.TryParse(user.UserId, out var parsedUserId))
         {
-            return null;
+            return (null, null);
         }
 
         var applicationUser = await _userManager.FindByIdAsync(parsedUserId.ToString()).ConfigureAwait(false);
-        return applicationUser?.TenantId;
+        return (applicationUser?.TenantId, applicationUser?.StoreId);
     }
 
     private static string GenerateRefreshToken()

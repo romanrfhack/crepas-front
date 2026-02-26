@@ -52,7 +52,7 @@ public static class PosBootstrapper
             defaultStore = new Store
             {
                 Id = Guid.NewGuid(),
-                Name = "Default",
+                Name = "Matriz",
                 TenantId = defaultTenant.Id,
                 IsActive = true,
                 TimeZoneId = "America/Mexico_City",
@@ -76,10 +76,25 @@ public static class PosBootstrapper
         }
 
         var seededAdmin = await db.Users.FirstOrDefaultAsync(x => x.Email == "admin@test.local").ConfigureAwait(false);
-        if (seededAdmin is not null && !seededAdmin.TenantId.HasValue)
+        if (seededAdmin is not null)
         {
-            seededAdmin.TenantId = defaultTenant.Id;
-            await db.SaveChangesAsync().ConfigureAwait(false);
+            var changed = false;
+            if (!seededAdmin.TenantId.HasValue)
+            {
+                seededAdmin.TenantId = defaultTenant.Id;
+                changed = true;
+            }
+
+            if (!seededAdmin.StoreId.HasValue)
+            {
+                seededAdmin.StoreId = defaultStore.Id;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                await db.SaveChangesAsync().ConfigureAwait(false);
+            }
         }
 
 
@@ -117,6 +132,28 @@ public static class PosBootstrapper
         }
 
         await db.SaveChangesAsync().ConfigureAwait(false);
+
+        var usersInAdminRole = await db.UserRoles
+            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, RoleName = r.Name })
+            .Where(x => x.RoleName == "Admin")
+            .Select(x => x.UserId)
+            .ToListAsync()
+            .ConfigureAwait(false);
+
+        var adminStoreRoleId = await db.Roles.Where(r => r.Name == "AdminStore").Select(r => (Guid?)r.Id).FirstOrDefaultAsync().ConfigureAwait(false);
+        if (adminStoreRoleId.HasValue)
+        {
+            foreach (var userId in usersInAdminRole)
+            {
+                var exists = await db.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.RoleId == adminStoreRoleId.Value).ConfigureAwait(false);
+                if (!exists)
+                {
+                    db.UserRoles.Add(new Microsoft.AspNetCore.Identity.IdentityUserRole<Guid> { UserId = userId, RoleId = adminStoreRoleId.Value });
+                }
+            }
+
+            await db.SaveChangesAsync().ConfigureAwait(false);
+        }
 
         await db.Categories.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
         await db.Products.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);

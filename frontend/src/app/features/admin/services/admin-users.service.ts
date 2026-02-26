@@ -7,6 +7,8 @@ interface UsersQuery {
   page: number;
   pageSize: number;
   search: string;
+  tenantId?: string | null;
+  storeId?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -22,6 +24,14 @@ export class AdminUsersService {
     const normalizedSearch = query.search.trim();
     if (normalizedSearch) {
       searchParams.set('search', normalizedSearch);
+    }
+
+    if (query.tenantId) {
+      searchParams.set('tenantId', query.tenantId);
+    }
+
+    if (query.storeId) {
+      searchParams.set('storeId', query.storeId);
     }
 
     return firstValueFrom(

@@ -16,7 +16,7 @@ namespace CobranzaDigital.Api.Controllers.Admin;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/admin/users")]
-[Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+[Authorize(Policy = AuthorizationPolicies.UserAdminAccess)]
 [Tags("Admin - Users")]
 [FeatureFlag("Features:UserAdmin")]
 public sealed class AdminUsersController : ControllerBase
@@ -64,6 +64,8 @@ public sealed class AdminUsersController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int? pageNumber = null,
         [FromQuery] int pageSize = 20,
+        [FromQuery] Guid? tenantId = null,
+        [FromQuery] Guid? storeId = null,
         CancellationToken cancellationToken = default)
     {
         var effectivePage = pageNumber ?? page;
@@ -80,7 +82,7 @@ public sealed class AdminUsersController : ControllerBase
             }));
         }
 
-        var result = await _userAdminService.GetUsersAsync(search, effectivePage, pageSize, cancellationToken).ConfigureAwait(false);
+        var result = await _userAdminService.GetUsersAsync(search, tenantId, storeId, effectivePage, pageSize, cancellationToken).ConfigureAwait(false);
         return Ok(result);
     }
 

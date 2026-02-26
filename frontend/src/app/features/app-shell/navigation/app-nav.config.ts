@@ -16,61 +16,61 @@ export interface NavSection {
 export const APP_NAV_CONFIG: NavSection[] = [
   {
     label: 'General',
-    roles: ['Admin', 'SuperAdmin'],
+    roles: ['AdminStore', 'Admin', 'SuperAdmin'],
     defaultExpanded: true,
     children: [
       {
         label: 'Dashboard',
         path: '/app/dashboard',
-        roles: ['Admin', 'SuperAdmin'],
+        roles: ['AdminStore', 'Admin', 'SuperAdmin'],
       },
     ],
   },
   {
     label: 'POS',
-    roles: ['Admin', 'Cashier', 'Manager'],
+    roles: ['AdminStore', 'Admin', 'Cashier', 'Manager'],
     defaultExpanded: true,
     children: [
       {
         label: 'Caja POS',
         path: '/app/pos/caja',
-        roles: ['Admin', 'Cashier'],
+        roles: ['AdminStore', 'Admin', 'Cashier'],
       },
       {
         label: 'Reportes',
         path: '/app/pos/reportes',
-        roles: ['Admin', 'Manager'],
+        roles: ['AdminStore', 'Admin', 'Manager'],
       },
     ],
   },
   {
     label: 'Admin',
-    roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'],
+    roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'],
     defaultExpanded: true,
     children: [
       {
         label: 'Users',
         path: '/app/admin/users',
-        roles: ['Admin'],
+        roles: ['AdminStore', 'TenantAdmin', 'SuperAdmin', 'Admin'],
       },
       {
         label: 'Roles',
         path: '/app/admin/roles',
-        roles: ['Admin'],
+        roles: ['AdminStore', 'TenantAdmin', 'SuperAdmin', 'Admin'],
       },
       {
         label: 'POS Catálogo',
         path: '/app/admin/pos/catalog/categories',
-        roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'],
+        roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'],
         children: [
-          { label: 'Categories', path: '/app/admin/pos/catalog/categories', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Products', path: '/app/admin/pos/catalog/products', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Option Sets', path: '/app/admin/pos/catalog/option-sets', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Schemas', path: '/app/admin/pos/catalog/schemas', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Extras', path: '/app/admin/pos/catalog/extras', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Included Items', path: '/app/admin/pos/catalog/included-items', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Overrides', path: '/app/admin/pos/catalog/overrides', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Inventory', path: '/app/admin/pos/inventory', roles: ['Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Categories', path: '/app/admin/pos/catalog/categories', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Products', path: '/app/admin/pos/catalog/products', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Option Sets', path: '/app/admin/pos/catalog/option-sets', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Schemas', path: '/app/admin/pos/catalog/schemas', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Extras', path: '/app/admin/pos/catalog/extras', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Included Items', path: '/app/admin/pos/catalog/included-items', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Overrides', path: '/app/admin/pos/catalog/overrides', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Inventory', path: '/app/admin/pos/inventory', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
         ],
       },
     ],

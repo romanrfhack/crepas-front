@@ -10,7 +10,7 @@ namespace CobranzaDigital.Infrastructure.Identity;
 
 public static partial class IdentitySeeder
 {
-    private static readonly string[] DefaultRoles = ["Admin", "User", "Manager", "Collector", "Cashier", "TenantAdmin", "SuperAdmin"];
+    private static readonly string[] DefaultRoles = ["AdminStore", "Admin", "User", "Manager", "Collector", "Cashier", "TenantAdmin", "SuperAdmin"];
 
     public static async Task SeedAsync(IServiceProvider serviceProvider, IConfiguration configuration)
     {
@@ -78,9 +78,9 @@ public static partial class IdentitySeeder
             }
         }
 
-        if (!await userManager.IsInRoleAsync(adminUser, "Admin").ConfigureAwait(false))
+        if (!await userManager.IsInRoleAsync(adminUser, "AdminStore").ConfigureAwait(false) && !await userManager.IsInRoleAsync(adminUser, "Admin").ConfigureAwait(false))
         {
-            var addRoleResult = await userManager.AddToRoleAsync(adminUser, "Admin").ConfigureAwait(false);
+            var addRoleResult = await userManager.AddToRoleAsync(adminUser, "AdminStore").ConfigureAwait(false);
             if (!addRoleResult.Succeeded)
             {
                 LogMessages.FailedToAddAdminRole(logger, addRoleResult.Errors);

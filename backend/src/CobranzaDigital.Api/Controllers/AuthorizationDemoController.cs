@@ -11,7 +11,7 @@ namespace CobranzaDigital.Api.Controllers;
 public sealed class AuthorizationDemoController : ControllerBase
 {
     [HttpGet("protected")]
-    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+    [Authorize(Policy = AuthorizationPolicies.UserAdminAccess)]
     [Authorize(Policy = AuthorizationPolicies.RequireScope)]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
