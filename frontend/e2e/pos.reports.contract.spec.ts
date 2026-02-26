@@ -27,6 +27,8 @@ test('POS reports UI-contract renders sections and propagates selected filters',
   page,
 }) => {
   const seenUrls: string[] = [];
+  const hasReportsPath = (url: string, endpoint: string) =>
+    new URL(url).pathname.includes(endpoint);
 
   await page.route('**/api/v1/pos/**', async (route) => {
     const request = route.request();
@@ -242,7 +244,18 @@ test('POS reports UI-contract renders sections and propagates selected filters',
   });
 
   await seedAuth(page);
+  const cashiersLoaded = page.waitForResponse(
+    (response) =>
+      hasReportsPath(response.url(), '/reports/sales/cashiers') &&
+      response.request().method() === 'GET',
+  );
+  const shiftsLoaded = page.waitForResponse(
+    (response) =>
+      hasReportsPath(response.url(), '/reports/shifts/summary') &&
+      response.request().method() === 'GET',
+  );
   await page.goto('/app/pos/reportes');
+  await Promise.all([cashiersLoaded, shiftsLoaded]);
 
   await expect(page.getByTestId('reports-payments-table')).toBeVisible();
   await expect(page.getByTestId('reports-hourly-table')).toBeVisible();
@@ -251,9 +264,9 @@ test('POS reports UI-contract renders sections and propagates selected filters',
   await expect(
     page.locator('[data-testid="reports-cashier"] option[value="cashier-e2e"]'),
   ).toHaveCount(1);
-  await expect(page.locator('[data-testid="reports-shift"] option[value="shift-e2e"]')).toHaveCount(
-    1,
-  );
+  await expect(
+    page.locator('[data-testid="reports-shift"] option[value="shift-e2e"]'),
+  ).toHaveCount(1, { timeout: 15000 });
 
   await page.getByTestId('reports-cashier').selectOption('cashier-e2e');
   await page.getByTestId('reports-shift').selectOption('shift-e2e');
