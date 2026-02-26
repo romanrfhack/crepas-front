@@ -674,8 +674,8 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
 
     private async Task UpsertInventoryAsync(string token, Guid storeId, Guid productId, decimal onHand)
     {
-        using var req = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory", token);
-        req.Content = JsonContent.Create(new { storeId, productId, onHand });
+        using var req = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/inventory", token);
+        req.Content = JsonContent.Create(new { storeId, itemType = "Product", itemId = productId, onHandQty = onHand, reason = "TestSeed" });
         using var resp = await _client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
     }
