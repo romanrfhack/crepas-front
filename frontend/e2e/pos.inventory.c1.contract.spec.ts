@@ -128,7 +128,7 @@ test('reportes inventory current/low/out renderizan y propagan filtros', async (
   await expect(page.locator('[data-testid^="report-inventory-out-row-"]').first()).toBeVisible();
 });
 
-test('historial C.2 renderiza badges para sale/void y fallback unknown', async ({ page }) => {
+test('historial C.2.1 renderiza movementKind, referencia y fallback estable', async ({ page }) => {
   await page.route('**/api/v1/pos/**', async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
@@ -151,16 +151,34 @@ test('historial C.2 renderiza badges para sale/void y fallback unknown', async (
         contentType: 'application/json',
         body: JSON.stringify([
           {
-            id: 'adj-sale',
+            id: 'adj-manual',
             storeId: 'store-e2e',
             itemType: 'Product',
             itemId: 'product-1',
             itemName: 'Latte',
             qtyBefore: 5,
+            qtyDelta: 1,
+            qtyAfter: 6,
+            reason: 'Correction',
+            movementKind: null,
+            referenceType: null,
+            referenceId: null,
+            createdAtUtc: '2026-01-01T00:00:00Z',
+            performedByUserId: 'admin',
+          },
+          {
+            id: 'adj-sale',
+            storeId: 'store-e2e',
+            itemType: 'Product',
+            itemId: 'product-1',
+            itemName: 'Latte',
+            qtyBefore: 6,
             qtyDelta: -1,
-            qtyAfter: 4,
-            reason: 'SaleConsumption',
-            reference: 'Sale:sale-100',
+            qtyAfter: 5,
+            reason: 'ManualCount',
+            movementKind: 'SaleConsumption',
+            referenceType: 'Sale',
+            referenceId: 'sale-100',
             createdAtUtc: '2026-01-01T00:00:01Z',
             performedByUserId: 'admin',
           },
@@ -170,10 +188,13 @@ test('historial C.2 renderiza badges para sale/void y fallback unknown', async (
             itemType: 'Product',
             itemId: 'product-1',
             itemName: 'Latte',
-            qtyBefore: 4,
+            qtyBefore: 5,
             qtyDelta: 1,
-            qtyAfter: 5,
-            reason: 'VoidReversal',
+            qtyAfter: 6,
+            reason: 'Correction',
+            movementKind: 'VoidReversal',
+            referenceType: 'SaleVoid',
+            referenceId: 'void-200',
             createdAtUtc: '2026-01-01T00:00:02Z',
             performedByUserId: 'admin',
           },
@@ -183,10 +204,11 @@ test('historial C.2 renderiza badges para sale/void y fallback unknown', async (
             itemType: 'Product',
             itemId: 'product-1',
             itemName: 'Latte',
-            qtyBefore: 5,
+            qtyBefore: 6,
             qtyDelta: 0,
-            qtyAfter: 5,
+            qtyAfter: 6,
             reason: 'FutureReason',
+            movementKind: 'FutureMovement',
             createdAtUtc: '2026-01-01T00:00:03Z',
             performedByUserId: 'admin',
           },
@@ -202,13 +224,21 @@ test('historial C.2 renderiza badges para sale/void y fallback unknown', async (
   await page.getByRole('button', { name: 'Cargar' }).click();
   await page.getByTestId('inventory-history-filter-submit').click();
 
+  await expect(page.getByTestId('inventory-history-row-adj-manual')).toBeVisible();
   await expect(page.getByTestId('inventory-history-row-adj-sale')).toBeVisible();
   await expect(page.getByTestId('inventory-history-row-adj-void')).toBeVisible();
   await expect(page.getByTestId('inventory-history-row-adj-unknown')).toBeVisible();
-  await expect(page.getByTestId('inventory-reason-badge-adj-sale')).toBeVisible();
-  await expect(page.getByTestId('inventory-reason-badge-adj-void')).toBeVisible();
-  await expect(page.getByTestId('inventory-reason-badge-adj-unknown')).toBeVisible();
-  await expect(page.getByTestId('inventory-reason-sale-consumption')).toBeVisible();
-  await expect(page.getByTestId('inventory-reason-void-reversal')).toBeVisible();
-  await expect(page.getByTestId('inventory-reason-unknown')).toBeVisible();
+
+  await expect(page.getByTestId('inventory-history-movement-kind-adj-manual')).toContainText('Corrección');
+  await expect(page.getByTestId('inventory-history-movement-kind-adj-sale')).toContainText('Consumo por venta');
+  await expect(page.getByTestId('inventory-history-movement-kind-adj-void')).toContainText('Reversa por cancelación');
+  await expect(page.getByTestId('inventory-history-movement-kind-adj-unknown')).toContainText('Otro (FutureMovement)');
+
+  await expect(page.getByTestId('inventory-history-reference-adj-sale')).toContainText('Sale: sale-100');
+  await expect(page.getByTestId('inventory-history-reference-adj-void')).toContainText('SaleVoid: void-200');
+  await expect(page.getByTestId('inventory-history-reference-adj-manual')).toContainText('—');
+
+  await expect(page.getByTestId('inventory-history-badge-sale-consumption')).toBeVisible();
+  await expect(page.getByTestId('inventory-history-badge-void-reversal')).toBeVisible();
+  await expect(page.getByTestId('inventory-history-badge-unknown')).toBeVisible();
 });

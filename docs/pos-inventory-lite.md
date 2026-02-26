@@ -58,8 +58,9 @@ Campos por fila:
 - Filtros de historial FE: `storeId` (requerido), `itemType`, `itemId`, `reason`, `fromUtc`, `toUtc`; la consulta usa `GET /api/v1/pos/admin/catalog/inventory/adjustments`.
 - Pantalla reportes: `/app/pos/reportes` agrega bloques `report-inventory-current`, `report-inventory-low` y `report-inventory-out` con filtros `storeId`, `itemType`, `search` y `threshold` (solo low-stock).
 - Cada bloque tiene error aislado (`report-error-inventory-current|low|out`) para no bloquear toda la pantalla.
-- UI historial C.2: reasons `SaleConsumption`/`VoidReversal` se muestran con etiqueta amigable y badge (`inventory-reason-sale-consumption`, `inventory-reason-void-reversal`).
-- Compat/hardening FE: si llega un `reason` desconocido, la UI no falla; renderiza `Otro (<valor>)` + badge `inventory-reason-unknown`.
+- UI historial C.2.1: prioriza `movementKind` cuando viene (`SaleConsumption`/`VoidReversal`) para etiqueta amigable y badges estables (`inventory-history-badge-sale-consumption`, `inventory-history-badge-void-reversal`).
+- Referencias C.2.1 en FE: si vienen `referenceType` + `referenceId`, se renderiza formato amigable `<referenceType>: <referenceId>` en `inventory-history-reference-{id}`; si no, fallback al `reference` legacy y finalmente `—`.
+- Compat/hardening FE: si `movementKind` viene `null`, se mantiene formatter por `reason`; si llega un valor desconocido, renderiza fallback seguro `Otro (<valor>)` + `inventory-history-badge-unknown` sin romper la tabla.
 
 ## Release C.2 — consumo automático por venta + reversa por void
 

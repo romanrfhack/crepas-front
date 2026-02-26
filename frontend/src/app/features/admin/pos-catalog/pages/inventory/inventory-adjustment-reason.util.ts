@@ -23,7 +23,35 @@ export interface InventoryAdjustmentReasonUi {
   badgeKind: InventoryReasonBadgeKind;
 }
 
-export function toInventoryAdjustmentReasonUi(reason: string | null | undefined): InventoryAdjustmentReasonUi {
+export function toInventoryAdjustmentReasonUi(
+  reason: string | null | undefined,
+  movementKind?: string | null,
+): InventoryAdjustmentReasonUi {
+  const rawMovementKind = movementKind?.trim() ?? '';
+  if (rawMovementKind) {
+    if (isKnownInventoryAdjustmentReason(rawMovementKind)) {
+      const badgeKind =
+        rawMovementKind === 'SaleConsumption'
+          ? 'sale-consumption'
+          : rawMovementKind === 'VoidReversal'
+            ? 'void-reversal'
+            : 'default';
+      return {
+        label: REASON_LABELS[rawMovementKind],
+        rawReason: rawMovementKind,
+        isKnown: true,
+        badgeKind,
+      };
+    }
+
+    return {
+      label: `Otro (${rawMovementKind})`,
+      rawReason: rawMovementKind,
+      isKnown: false,
+      badgeKind: 'unknown',
+    };
+  }
+
   const rawReason = reason?.trim() ?? '';
   if (!rawReason) {
     return {
