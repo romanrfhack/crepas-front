@@ -121,7 +121,9 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
     page.getByTestId('inventory-adjust-item').locator('option[value="product-1"]'),
   ).toHaveCount(1);
   await page.getByTestId('inventory-adjust-item').selectOption('product-1');
+  await expect(page.getByTestId('inventory-adjust-item')).toHaveValue('product-1');
   await page.getByTestId('inventory-adjust-delta').fill('2');
+  await expect(page.getByTestId('inventory-adjust-submit')).toBeEnabled();
   const adjustmentPosted = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
@@ -198,7 +200,10 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
     page.getByTestId('inventory-adjust-item').locator('option[value="product-1"]'),
   ).toHaveCount(1);
   await page.getByTestId('inventory-adjust-item').selectOption('product-1');
+  await expect(page.getByTestId('inventory-adjust-item')).toHaveValue('product-1');
+  await expect(page.getByTestId('inventory-adjust-reason')).toHaveValue('Correction');
   await page.getByTestId('inventory-adjust-delta').fill('-5');
+  await expect(page.getByTestId('inventory-adjust-submit')).toBeEnabled();
   const adjustmentRejected = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
