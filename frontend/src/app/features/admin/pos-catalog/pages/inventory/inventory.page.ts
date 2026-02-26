@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormControl, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import {
   CatalogInventoryAdjustmentDto,
   CatalogInventoryItemDto,
@@ -35,7 +35,7 @@ interface ItemOption {
 
 @Component({
   selector: 'app-pos-inventory-page',
-  imports: [ReactiveFormsModule],
+  imports: [FormsModule, ReactiveFormsModule],
   template: `
     <section class="inventory-page" data-testid="inventory-page">
       <h2>Inventory Lite</h2>
