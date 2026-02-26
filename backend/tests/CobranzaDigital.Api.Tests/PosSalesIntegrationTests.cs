@@ -370,7 +370,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         await EnsureOpenShiftAsync(token, "admin@test.local");
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"stock-sales-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
-        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock one", categoryId = category.Id, basePrice = 70m, isActive = true, isAvailable = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock one", categoryId = category.Id, basePrice = 70m, isActive = true, isAvailable = true, isInventoryTracked = true });
         var snapshot = await GetSnapshotAsync(token);
 
         await UpdateInventorySettingsAsync(token, true);
@@ -393,7 +393,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         await EnsureOpenShiftAsync(token, "admin@test.local");
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"stock-concurrency-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
-        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock race", categoryId = category.Id, basePrice = 45m, isActive = true, isAvailable = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock race", categoryId = category.Id, basePrice = 45m, isActive = true, isAvailable = true, isInventoryTracked = true });
         var snapshot = await GetSnapshotAsync(token);
 
         await UpdateInventorySettingsAsync(token, true);
@@ -414,7 +414,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         await EnsureOpenShiftAsync(token, "admin@test.local");
 
         var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"stock-off-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
-        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock disabled", categoryId = category.Id, basePrice = 20m, isActive = true, isAvailable = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Stock disabled", categoryId = category.Id, basePrice = 20m, isActive = true, isAvailable = true, isInventoryTracked = true });
         var snapshot = await GetSnapshotAsync(token);
 
         await UpdateInventorySettingsAsync(token, false);
