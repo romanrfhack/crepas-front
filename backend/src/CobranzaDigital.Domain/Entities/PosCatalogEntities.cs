@@ -34,7 +34,9 @@ public enum InventoryAdjustmentReason
     Correction = 5,
     TransferIn = 6,
     TransferOut = 7,
-    ManualCount = 8
+    ManualCount = 8,
+    SaleConsumption = 9,
+    VoidReversal = 10
 }
 
 public sealed class CatalogTemplate : Entity
@@ -103,6 +105,9 @@ public sealed class CatalogInventoryAdjustment : Entity
     public decimal DeltaQty { get; set; }
     public decimal ResultingOnHandQty { get; set; }
     public string Reason { get; set; } = string.Empty;
+    public string? ReferenceType { get; set; }
+    public string? ReferenceId { get; set; }
+    public string? MovementKind { get; set; }
     public string? Reference { get; set; }
     public string? Note { get; set; }
     public string? ClientOperationId { get; set; }

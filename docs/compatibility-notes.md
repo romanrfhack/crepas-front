@@ -82,3 +82,8 @@ No se removieron rutas ni campos existentes (compatibilidad Release A/B preserva
 - El frontend de Inventory Lite usa por defecto Release C: `/api/v1/pos/admin/catalog/inventory`.
 - Se mantiene cliente legacy (`/api/v1/pos/admin/inventory`) solo para compatibilidad temporal en llamadas antiguas.
 - Motivo: despliegues graduales donde aún exista consumo histórico del endpoint legado.
+
+## 2026-02-26 — POS inventory Release C.2 reasons extension
+
+- `InventoryAdjustmentReason` se amplía con nuevos valores: `SaleConsumption` y `VoidReversal`.
+- Compatibilidad: no se renombraron ni removieron motivos existentes; clientes con enums cerrados deben aceptar valores adicionales en historial/reportes de inventario.

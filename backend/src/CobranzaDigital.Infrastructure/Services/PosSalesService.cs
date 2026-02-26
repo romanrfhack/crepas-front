@@ -33,6 +33,7 @@ public sealed class PosSalesService : IPosSalesService
     private readonly PosStoreContextService _storeContext;
     private readonly IPointsReversalService _pointsReversalService;
     private readonly ITenantContext _tenantContext;
+    private readonly InventoryConsumptionService _inventoryConsumptionService;
 
     public PosSalesService(
         CobranzaDigitalDbContext db,
@@ -43,7 +44,8 @@ public sealed class PosSalesService : IPosSalesService
         IBusinessTime businessTime,
         PosStoreContextService storeContext,
         IPointsReversalService pointsReversalService,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        InventoryConsumptionService inventoryConsumptionService)
     {
         _db = db;
         _auditLogger = auditLogger;
@@ -54,6 +56,7 @@ public sealed class PosSalesService : IPosSalesService
         _storeContext = storeContext;
         _pointsReversalService = pointsReversalService;
         _tenantContext = tenantContext;
+        _inventoryConsumptionService = inventoryConsumptionService;
     }
 
     public async Task<CreateSaleResponseDto> CreateSaleAsync(CreateSaleRequestDto request, CancellationToken ct)
@@ -377,14 +380,17 @@ public sealed class PosSalesService : IPosSalesService
             IDbContextTransaction tx = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             try
             {
-                if (settings.ShowOnlyInStock)
-                {
-                    await DecrementInventoryStrictAsync(storeId, request.Items, products, userId, ct).ConfigureAwait(false);
-                }
-                else
-                {
-                    await DecrementInventoryInformativeAsync(storeId, request.Items, userId, ct).ConfigureAwait(false);
-                }
+                await _inventoryConsumptionService.ConsumeForSaleAsync(
+                    tenantId,
+                    storeId,
+                    sale.Id,
+                    userId,
+                    request.Items,
+                    products,
+                    extras,
+                    storeOverrides,
+                    tenantDisabled.Select(x => (x.ItemType, x.ItemId)).ToHashSet(),
+                    ct).ConfigureAwait(false);
 
                 await _auditLogger.LogAsync(new AuditEntry(
                     Action: "Create",
@@ -415,48 +421,6 @@ public sealed class PosSalesService : IPosSalesService
             LogAction("Create", "Sale", sale.Id, correlationId);
             return new CreateSaleResponseDto(sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Total);
         }).ConfigureAwait(false);
-    }
-
-    private async Task DecrementInventoryStrictAsync(Guid storeId, IReadOnlyList<CreateSaleItemRequestDto> items, Dictionary<Guid, Product> products, Guid userId, CancellationToken ct)
-    {
-        var grouped = items.GroupBy(x => x.ProductId).Select(x => new { ProductId = x.Key, Quantity = x.Sum(v => v.Quantity) });
-        foreach (var row in grouped)
-        {
-            var affected = await _db.StoreInventories
-                .Where(x => x.StoreId == storeId && x.ProductId == row.ProductId && x.OnHand >= row.Quantity)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(x => x.OnHand, x => x.OnHand - row.Quantity)
-                    .SetProperty(x => x.UpdatedAtUtc, DateTimeOffset.UtcNow)
-                    .SetProperty(x => x.UpdatedByUserId, userId), ct)
-                .ConfigureAwait(false);
-
-            if (affected == 0)
-            {
-                var availableQty = await _db.StoreInventories.AsNoTracking()
-                    .Where(x => x.StoreId == storeId && x.ProductId == row.ProductId)
-                    .Select(x => (decimal?)x.OnHand)
-                    .SingleOrDefaultAsync(ct)
-                    .ConfigureAwait(false) ?? 0m;
-
-                var productName = products.TryGetValue(row.ProductId, out var product) ? product.Name : string.Empty;
-                throw new ItemUnavailableException("Product", row.ProductId, productName, "OutOfStock", availableQty);
-            }
-        }
-    }
-
-    private async Task DecrementInventoryInformativeAsync(Guid storeId, IReadOnlyList<CreateSaleItemRequestDto> items, Guid userId, CancellationToken ct)
-    {
-        var grouped = items.GroupBy(x => x.ProductId).Select(x => new { ProductId = x.Key, Quantity = x.Sum(v => v.Quantity) });
-        foreach (var row in grouped)
-        {
-            _ = await _db.StoreInventories
-                .Where(x => x.StoreId == storeId && x.ProductId == row.ProductId)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(x => x.OnHand, x => x.OnHand - row.Quantity)
-                    .SetProperty(x => x.UpdatedAtUtc, DateTimeOffset.UtcNow)
-                    .SetProperty(x => x.UpdatedByUserId, userId), ct)
-                .ConfigureAwait(false);
-        }
     }
 
     public async Task<DailySummaryDto> GetDailySummaryAsync(DateOnly forDate, CancellationToken ct)
@@ -958,6 +922,8 @@ public sealed class PosSalesService : IPosSalesService
         {
             await _pointsReversalService.ReversePointsForSaleAsync(sale.Id, sale.LoyaltyPointsAwarded.Value, userId, _businessTime.UtcNow, ct).ConfigureAwait(false);
         }
+
+        await _inventoryConsumptionService.ReverseForVoidAsync(tenantId, sale.StoreId, sale.Id, userId, ct).ConfigureAwait(false);
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
 

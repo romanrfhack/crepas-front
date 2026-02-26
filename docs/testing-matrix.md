@@ -102,3 +102,11 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 
 | Inventory adjustments FE + history UI (Release C.1) | Frontend Unit: `frontend/src/app/features/admin/pos-catalog/services/pos-inventory-adjustments-api.service.spec.ts`, `frontend/src/app/features/admin/pos-catalog/pages/inventory/inventory.page.spec.ts`; E2E UI-contract: `frontend/e2e/pos.inventory.c1.contract.spec.ts` | Verificar payload `createAdjustment` (incluye `clientOperationId`), filtros de historial y render estable de success/error con `data-testid` y reason code `409`. |
 | POS reports inventory blocks FE (Release C.1) | Frontend Unit: `frontend/src/app/features/pos/services/pos-reports-api.service.spec.ts`, `frontend/src/app/features/pos/pages/pos-reportes.page.spec.ts`; E2E UI-contract: `frontend/e2e/pos.inventory.c1.contract.spec.ts` | Validar consumo de `/inventory/current|low-stock|out-of-stock`, propagación de filtros (`storeId`, `itemType`, `search`, `threshold`) y errores por bloque. |
+
+## Release C.2 — inventory consumption on sale/void
+
+| Escenario | Cobertura | Resultado esperado |
+| --- | --- | --- |
+| Create sale consume tracked Product/Extra + idempotencia por `clientSaleId` | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PosSalesIntegrationTests.cs` (`CreateSale_Consumes_Tracked_Product_And_Writes_Adjustment`, `CreateSale_Consumes_Tracked_Extra_And_Void_Reverses_With_Idempotency`). | Ajustes `SaleConsumption` (delta negativo), sin doble descuento en retry idempotente. |
+| Void revierte stock + idempotencia por `clientVoidId` | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PosSalesIntegrationTests.cs` (`CreateSale_Consumes_Tracked_Extra_And_Void_Reverses_With_Idempotency`). | Ajustes `VoidReversal` (delta positivo), sin doble reversa en retry idempotente. |
+| Prevent negative stock en create sale tracked | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PosSalesIntegrationTests.cs` (`CreateSale_Prevents_Negative_Stock_And_Does_Not_Create_Adjustments`). | `409 reason=OutOfStock`, sin cambios de saldo ni movimientos automáticos. |

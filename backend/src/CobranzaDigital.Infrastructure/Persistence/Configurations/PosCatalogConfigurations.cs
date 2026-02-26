@@ -100,13 +100,18 @@ public sealed class CatalogInventoryAdjustmentConfiguration : IEntityTypeConfigu
         builder.Property(x => x.DeltaQty).HasColumnType("decimal(18,3)");
         builder.Property(x => x.ResultingOnHandQty).HasColumnType("decimal(18,3)");
         builder.Property(x => x.Reason).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.ReferenceType).HasMaxLength(50);
+        builder.Property(x => x.ReferenceId).HasMaxLength(100);
+        builder.Property(x => x.MovementKind).HasMaxLength(100);
         builder.Property(x => x.Reference).HasMaxLength(200);
         builder.Property(x => x.Note).HasMaxLength(400);
         builder.Property(x => x.ClientOperationId).HasMaxLength(100);
         builder.Property(x => x.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.HasIndex(x => new { x.StoreId, x.ItemType, x.ItemId });
         builder.HasIndex(x => new { x.StoreId, x.CreatedAtUtc });
+        builder.HasIndex(x => new { x.StoreId, x.ReferenceType, x.ReferenceId });
         builder.HasIndex(x => new { x.TenantId, x.StoreId, x.ClientOperationId });
+        builder.HasIndex(x => new { x.ReferenceType, x.ReferenceId, x.ItemType, x.ItemId, x.Reason }).IsUnique();
         builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
     }

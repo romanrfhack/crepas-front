@@ -8,4 +8,6 @@ public static class AuditActions
     public const string DeleteRole = "DeleteRole";
     public const string AdjustInventory = "AdjustInventory";
     public const string SetInventoryBalance = "SetInventoryBalance";
+    public const string ConsumeInventoryForSale = "ConsumeInventoryForSale";
+    public const string ReverseInventoryForVoid = "ReverseInventoryForVoid";
 }

@@ -549,6 +549,107 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Assert.Equal(HttpStatusCode.OK, voidResp2.StatusCode);
     }
 
+
+    [Fact]
+    public async Task CreateSale_Consumes_Tracked_Product_And_Writes_Adjustment()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"InvP-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Tracked Product", categoryId = category.Id, basePrice = 20m, isActive = true, isInventoryTracked = true });
+
+        var storeId = await GetDefaultStoreIdAsync();
+        await AdjustCatalogInventoryAsync(token, storeId, "Product", product.Id, 5m, "InitialLoad");
+
+        using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        req.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 2, selections = Array.Empty<object>(), extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 40m } });
+        using var resp = await _client.SendAsync(req);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var stock = await GetCatalogStockAsync(storeId, "Product", product.Id);
+        Assert.Equal(3m, stock);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var adj = await db.CatalogInventoryAdjustments.AsNoTracking().FirstOrDefaultAsync(x => x.StoreId == storeId && x.ItemType.ToString() == "Product" && x.ItemId == product.Id && x.Reason == "SaleConsumption");
+        Assert.NotNull(adj);
+        Assert.Equal(-2m, adj!.DeltaQty);
+    }
+
+    [Fact]
+    public async Task CreateSale_Consumes_Tracked_Extra_And_Void_Reverses_With_Idempotency()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"InvE-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Tracked Base", categoryId = category.Id, basePrice = 15m, isActive = true, isInventoryTracked = true });
+        var extra = await PostAsync<ExtraResponse>("/api/v1/pos/admin/extras", token, new { name = "Tracked Extra", price = 5m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var storeId = await GetDefaultStoreIdAsync();
+        await AdjustCatalogInventoryAsync(token, storeId, "Product", product.Id, 5m, "InitialLoad");
+        await AdjustCatalogInventoryAsync(token, storeId, "Extra", extra.Id, 10m, "InitialLoad");
+
+        var clientSaleId = Guid.NewGuid();
+        using var saleReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        saleReq.Content = JsonContent.Create(new { clientSaleId, items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = new[] { new { extraId = extra.Id, quantity = 3 } } } }, payment = new { method = "Cash", amount = 30m } });
+        using var saleResp = await _client.SendAsync(saleReq);
+        var sale = await saleResp.Content.ReadFromJsonAsync<CreateSaleResponse>();
+        Assert.Equal(HttpStatusCode.OK, saleResp.StatusCode);
+
+        Assert.Equal(2m, await GetCatalogStockAsync(storeId, "Extra", extra.Id));
+
+        using var saleRetryReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        saleRetryReq.Content = JsonContent.Create(new { clientSaleId, items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = new[] { new { extraId = extra.Id, quantity = 3 } } } }, payment = new { method = "Cash", amount = 30m } });
+        using var saleRetryResp = await _client.SendAsync(saleRetryReq);
+        Assert.Equal(HttpStatusCode.OK, saleRetryResp.StatusCode);
+        Assert.Equal(2m, await GetCatalogStockAsync(storeId, "Extra", extra.Id));
+
+        var clientVoidId = Guid.NewGuid();
+        using var voidReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{sale!.SaleId}/void", token);
+        voidReq.Content = JsonContent.Create(new { reasonCode = "CashierError", note = "void", clientVoidId });
+        using var voidResp = await _client.SendAsync(voidReq);
+        Assert.Equal(HttpStatusCode.OK, voidResp.StatusCode);
+
+        Assert.Equal(10m, await GetCatalogStockAsync(storeId, "Extra", extra.Id));
+
+        using var voidRetryReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{sale.SaleId}/void", token);
+        voidRetryReq.Content = JsonContent.Create(new { reasonCode = "CashierError", note = "void", clientVoidId });
+        using var voidRetryResp = await _client.SendAsync(voidRetryReq);
+        Assert.Equal(HttpStatusCode.OK, voidRetryResp.StatusCode);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var voidRows = await db.CatalogInventoryAdjustments.AsNoTracking().CountAsync(x => x.StoreId == storeId && x.ItemType.ToString() == "Extra" && x.ItemId == extra.Id && x.Reason == "VoidReversal" && x.ReferenceId == sale.SaleId.ToString());
+        Assert.Equal(1, voidRows);
+    }
+
+    [Fact]
+    public async Task CreateSale_Prevents_Negative_Stock_And_Does_Not_Create_Adjustments()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"InvN-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Tracked Low", categoryId = category.Id, basePrice = 10m, isActive = true, isInventoryTracked = true });
+        var storeId = await GetDefaultStoreIdAsync();
+        await AdjustCatalogInventoryAsync(token, storeId, "Product", product.Id, 1m, "InitialLoad");
+
+        using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        req.Content = JsonContent.Create(new { clientSaleId = Guid.NewGuid(), items = new[] { new { productId = product.Id, quantity = 2, selections = Array.Empty<object>(), extras = Array.Empty<object>() } }, payment = new { method = "Cash", amount = 20m } });
+        using var resp = await _client.SendAsync(req);
+        var problem = await resp.Content.ReadFromJsonAsync<JsonObject>();
+
+        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+        Assert.Equal("OutOfStock", problem!["reason"]!.GetValue<string>());
+        Assert.Equal(1m, await GetCatalogStockAsync(storeId, "Product", product.Id));
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var saleAdjustments = await db.CatalogInventoryAdjustments.AsNoTracking().CountAsync(x => x.StoreId == storeId && x.ItemId == product.Id && x.Reason == "SaleConsumption");
+        Assert.Equal(0, saleAdjustments);
+    }
+
     private async Task<HttpStatusCode> SendCreateSaleAsync(string token, Guid productId, int quantity, decimal total)
     {
         using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
@@ -577,6 +678,24 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         req.Content = JsonContent.Create(new { storeId, productId, onHand });
         using var resp = await _client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+
+    private async Task AdjustCatalogInventoryAsync(string token, Guid storeId, string itemType, Guid itemId, decimal quantityDelta, string reason)
+    {
+        using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/catalog/inventory/adjustments", token);
+        req.Content = JsonContent.Create(new { storeId, itemType, itemId, quantityDelta, reason });
+        using var resp = await _client.SendAsync(req);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    private async Task<decimal> GetCatalogStockAsync(Guid storeId, string itemType, Guid itemId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var parsed = Enum.Parse<CobranzaDigital.Domain.Entities.CatalogItemType>(itemType, true);
+        var row = await db.CatalogInventoryBalances.AsNoTracking().FirstOrDefaultAsync(x => x.StoreId == storeId && x.ItemType == parsed && x.ItemId == itemId);
+        return row?.OnHandQty ?? 0m;
     }
 
     private async Task<SnapshotResponse> GetSnapshotAsync(string token)
