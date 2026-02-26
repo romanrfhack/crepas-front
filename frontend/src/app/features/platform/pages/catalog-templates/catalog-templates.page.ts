@@ -8,7 +8,7 @@ import { CatalogTemplateDto } from '../../models/platform.models';
   selector: 'app-platform-catalog-templates-page',
   imports: [ReactiveFormsModule, DatePipe],
   template: `
-    <div class="templates-page">
+    <div class="templates-page" data-testid="platform-templates-page">
       <!-- HEADER con barra decorativa -->
       <header class="page-header">
         <h2>📋 Plantillas de catálogo</h2>
