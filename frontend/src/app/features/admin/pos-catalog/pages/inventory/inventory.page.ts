@@ -201,16 +201,16 @@ interface ItemOption {
                 <td>{{ row.qtyDelta }}</td>
                 <td>{{ row.qtyAfter }}</td>
                 <td>
-                  <span [attr.data-testid]="'inventory-reason-badge-' + row.id">{{ toReasonUi(row.reason).label }}</span>
-                  @if (toReasonUi(row.reason).badgeKind === 'sale-consumption') {
-                    <span data-testid="inventory-reason-sale-consumption" class="reason-badge sale">Venta</span>
-                  } @else if (toReasonUi(row.reason).badgeKind === 'void-reversal') {
-                    <span data-testid="inventory-reason-void-reversal" class="reason-badge void">Void</span>
-                  } @else if (toReasonUi(row.reason).badgeKind === 'unknown') {
-                    <span data-testid="inventory-reason-unknown" class="reason-badge unknown">Otro</span>
+                  <span [attr.data-testid]="'inventory-history-movement-kind-' + row.id">{{ toReasonUi(row.reason, row.movementKind).label }}</span>
+                  @if (toReasonUi(row.reason, row.movementKind).badgeKind === 'sale-consumption') {
+                    <span data-testid="inventory-history-badge-sale-consumption" class="reason-badge sale">Venta</span>
+                  } @else if (toReasonUi(row.reason, row.movementKind).badgeKind === 'void-reversal') {
+                    <span data-testid="inventory-history-badge-void-reversal" class="reason-badge void">Void</span>
+                  } @else if (toReasonUi(row.reason, row.movementKind).badgeKind === 'unknown') {
+                    <span data-testid="inventory-history-badge-unknown" class="reason-badge unknown">Otro</span>
                   }
                 </td>
-                <td>{{ getReferenceText(row) }}</td>
+                <td [attr.data-testid]="'inventory-history-reference-' + row.id">{{ getReferenceText(row) }}</td>
                 <td>{{ row.note ?? '—' }}</td>
                 <td>{{ row.performedByUserId }}</td>
               </tr>
@@ -458,11 +458,15 @@ export class InventoryPage {
     return `${row.itemType}-${row.itemId}`;
   }
 
-  toReasonUi(reason: string | null | undefined) {
-    return toInventoryAdjustmentReasonUi(reason);
+  toReasonUi(reason: string | null | undefined, movementKind?: string | null) {
+    return toInventoryAdjustmentReasonUi(reason, movementKind);
   }
 
   getReferenceText(row: CatalogInventoryAdjustmentDto) {
+    if (row.referenceType && row.referenceId) {
+      return `${row.referenceType}: ${row.referenceId}`;
+    }
+
     return row.reference || '—';
   }
 

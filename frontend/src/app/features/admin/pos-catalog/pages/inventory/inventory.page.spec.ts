@@ -23,8 +23,10 @@ describe('InventoryPage', () => {
         qtyBefore: 5,
         qtyDelta: -1,
         qtyAfter: 4,
-        reason: 'SaleConsumption',
-        reference: 'Sale:sale-1',
+        reason: 'ManualCount',
+        movementKind: 'SaleConsumption',
+        referenceType: 'Sale',
+        referenceId: 'sale-1',
         createdAtUtc: '2026-05-01T00:00:00Z',
         performedByUserId: 'admin-1',
       },
@@ -37,7 +39,10 @@ describe('InventoryPage', () => {
         qtyBefore: 4,
         qtyDelta: 1,
         qtyAfter: 5,
-        reason: 'VoidReversal',
+        reason: 'Correction',
+        movementKind: 'VoidReversal',
+        referenceType: 'SaleVoid',
+        referenceId: 'void-1',
         createdAtUtc: '2026-05-01T00:05:00Z',
         performedByUserId: 'admin-1',
       },
@@ -51,7 +56,35 @@ describe('InventoryPage', () => {
         qtyDelta: 0,
         qtyAfter: 5,
         reason: 'FutureReason',
+        movementKind: 'FutureMovement',
         createdAtUtc: '2026-05-01T00:10:00Z',
+        performedByUserId: 'admin-1',
+      },
+      {
+        id: 'adj-4',
+        storeId: 'store-1',
+        itemType: 'Product',
+        itemId: 'product-1',
+        itemName: 'Latte',
+        qtyBefore: 5,
+        qtyDelta: 1,
+        qtyAfter: 6,
+        reason: 'Correction',
+        reference: 'Legacy:manual-1',
+        createdAtUtc: '2026-05-01T00:15:00Z',
+        performedByUserId: 'admin-1',
+      },
+      {
+        id: 'adj-5',
+        storeId: 'store-1',
+        itemType: 'Product',
+        itemId: 'product-1',
+        itemName: 'Latte',
+        qtyBefore: 6,
+        qtyDelta: -1,
+        qtyAfter: 5,
+        reason: 'Correction',
+        createdAtUtc: '2026-05-01T00:20:00Z',
         performedByUserId: 'admin-1',
       },
     ]);
@@ -126,18 +159,33 @@ describe('InventoryPage', () => {
     expect(error?.textContent).toContain('NegativeStockNotAllowed');
   });
 
-
-  it('historial renderiza badges para C.2 y fallback unknown', async () => {
+  it('historial renderiza movementKind/referencias y fallback seguro', async () => {
     await fixture.componentInstance.loadHistory();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[data-testid="inventory-reason-badge-adj-1"]')?.textContent).toContain(
-      'Consumo por venta',
-    );
-    expect(fixture.nativeElement.querySelector('[data-testid="inventory-reason-sale-consumption"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="inventory-reason-void-reversal"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="inventory-reason-unknown"]')).not.toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Sale:sale-1');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-movement-kind-adj-1"]')?.textContent,
+    ).toContain('Consumo por venta');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-movement-kind-adj-2"]')?.textContent,
+    ).toContain('Reversa por cancelación');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-movement-kind-adj-3"]')?.textContent,
+    ).toContain('Otro (FutureMovement)');
+
+    expect(fixture.nativeElement.querySelector('[data-testid="inventory-history-badge-sale-consumption"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="inventory-history-badge-void-reversal"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="inventory-history-badge-unknown"]')).not.toBeNull();
+
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-reference-adj-1"]')?.textContent,
+    ).toContain('Sale: sale-1');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-reference-adj-4"]')?.textContent,
+    ).toContain('Legacy:manual-1');
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-reference-adj-5"]')?.textContent,
+    ).toContain('—');
   });
 
   it('historial renderiza filas y filtros disparan consulta', async () => {
