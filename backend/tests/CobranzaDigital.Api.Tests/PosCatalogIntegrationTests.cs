@@ -3,7 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -750,6 +752,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
     private async Task SetUserRolesAsync(string adminToken, string email, string[] roles)
     {
+        await EnsureUserScopeForRolesAsync(email, roles);
         var userId = await GetUserIdByEmailAsync(adminToken, email);
 
         using var request = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/admin/users/{userId}/roles", adminToken);
@@ -766,6 +769,52 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Equal(HttpStatusCode.OK, verifyResponse.StatusCode);
         Assert.NotNull(user);
         Assert.Equal(roles.OrderBy(x => x), user!.Roles.OrderBy(x => x));
+    }
+
+
+    private async Task EnsureUserScopeForRolesAsync(string email, IReadOnlyCollection<string> roles)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.FindByEmailAsync(email);
+        Assert.NotNull(user);
+
+        var requiresTenant = roles.Any(role => string.Equals(role, "TenantAdmin", StringComparison.OrdinalIgnoreCase))
+            || roles.Any(role => string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(role, "Manager", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase));
+        var requiresStore = roles.Any(role => string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "Manager", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase));
+        var isSuperAdmin = roles.Any(role => string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase));
+
+        if (isSuperAdmin)
+        {
+            user!.TenantId = null;
+            user.StoreId = null;
+        }
+        else
+        {
+            if (requiresTenant && !user!.TenantId.HasValue)
+            {
+                user.TenantId = await db.Tenants.AsNoTracking().OrderBy(x => x.Name).Select(x => (Guid?)x.Id).FirstOrDefaultAsync();
+            }
+
+            if (requiresStore && !user.StoreId.HasValue)
+            {
+                user.StoreId = await db.Stores.AsNoTracking()
+                    .Where(x => user.TenantId.HasValue && x.TenantId == user.TenantId.Value)
+                    .OrderBy(x => x.Name)
+                    .Select(x => (Guid?)x.Id)
+                    .FirstOrDefaultAsync();
+            }
+        }
+
+        var update = await userManager.UpdateAsync(user!);
+        Assert.True(update.Succeeded, string.Join("; ", update.Errors.Select(x => x.Description)));
     }
 
     private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)
