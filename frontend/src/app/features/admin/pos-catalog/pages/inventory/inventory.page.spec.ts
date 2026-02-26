@@ -145,6 +145,28 @@ describe('InventoryPage', () => {
     expect(success?.textContent).toContain('AdjustmentCreated');
   });
 
+  it('el form de ajuste dispara submitAdjustment al enviar desde DOM', async () => {
+    createAdjustment.mockResolvedValue({ id: 'adj-2' });
+    fixture.componentInstance.adjustItemIdControl.setValue('product-1');
+    fixture.componentInstance.adjustDeltaControl.setValue(2);
+    fixture.detectChanges();
+
+    const form = fixture.nativeElement.querySelector('[data-testid="inventory-adjust-form"]') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(createAdjustment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storeId: 'store-1',
+        itemType: 'Product',
+        itemId: 'product-1',
+        quantityDelta: 2,
+        reason: 'Correction',
+      }),
+    );
+  });
+
   it('submit ajuste muestra error reason code en 409', async () => {
     createAdjustment.mockRejectedValue(
       new HttpErrorResponse({ status: 409, error: { reason: 'NegativeStockNotAllowed' } }),
