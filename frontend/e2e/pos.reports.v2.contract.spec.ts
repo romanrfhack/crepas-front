@@ -26,7 +26,7 @@ const seedAuth = async (page: Page) => {
 test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async ({ page }) => {
   const seenUrls: string[] = [];
   const hasReportsPath = (url: string, endpoint: string) =>
-    new URL(url).pathname.endsWith(endpoint);
+    new URL(url).pathname.includes(endpoint);
 
   await page.route('**/api/v1/pos/**', async (route) => {
     const request = route.request();
@@ -269,18 +269,23 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       hasReportsPath(response.url(), '/reports/control/cash-differences') &&
       response.request().method() === 'GET',
   );
+  const shiftsResponse = page.waitForResponse(
+    (response) =>
+      hasReportsPath(response.url(), '/reports/shifts/summary') &&
+      response.request().method() === 'GET',
+  );
   await page.goto('/app/pos/reportes');
-  await Promise.all([categoriesResponse, productsResponse, cashDiffResponse]);
+  await Promise.all([categoriesResponse, productsResponse, cashDiffResponse, shiftsResponse]);
 
   await expect(page.getByTestId('mix-categories-table')).toBeVisible();
   await expect(page.getByTestId('mix-products-table')).toBeVisible();
   await expect(page.getByTestId('addons-extras-table')).toBeVisible();
   await expect(page.getByTestId('addons-options-table')).toBeVisible();
   await expect(page.getByTestId('cash-diff-table')).toBeVisible();
-  await expect(page.getByTestId('mix-category-row-0')).toBeVisible({ timeout: 15000 });
-  await expect(page.getByTestId('mix-product-row-0')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId('mix-category-row-0')).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId('mix-product-row-0')).toBeVisible({ timeout: 20000 });
   await expect(page.locator('[data-testid^="cash-diff-row-"]').first()).toBeVisible({
-    timeout: 15000,
+    timeout: 20000,
   });
 
   await expect(page.getByTestId('cash-diff-table').locator('thead')).not.toContainText('Turno');

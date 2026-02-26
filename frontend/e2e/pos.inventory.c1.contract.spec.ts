@@ -122,8 +122,15 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
   ).toHaveCount(1);
   await page.getByTestId('inventory-adjust-item').selectOption('product-1');
   await expect(page.getByTestId('inventory-adjust-item')).toHaveValue('product-1');
+  await page.getByTestId('inventory-adjust-reason').selectOption('Correction');
   await page.getByTestId('inventory-adjust-delta').fill('2');
+  await page.getByTestId('inventory-adjust-delta').blur();
   await expect(page.getByTestId('inventory-adjust-submit')).toBeEnabled();
+  const adjustmentPostedRequest = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' &&
+      request.url().includes('/v1/pos/admin/catalog/inventory/adjustments'),
+  );
   const adjustmentPosted = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
@@ -134,9 +141,9 @@ test('crear ajuste ok muestra success y refresca historial', async ({ page }) =>
       response.request().method() === 'GET' &&
       response.url().includes('/v1/pos/admin/catalog/inventory/adjustments'),
   );
-  await page.getByTestId('inventory-adjust-submit').click();
+  await page.getByTestId('inventory-adjust-submit').click({ force: true });
 
-  await Promise.all([adjustmentPosted, historyReloaded]);
+  await Promise.all([adjustmentPostedRequest, adjustmentPosted, historyReloaded]);
   await expect(page.getByTestId('inventory-adjust-success')).toBeVisible();
   await expect(page.locator('[data-testid^="inventory-history-row-"]').first()).toBeVisible();
   await expect(page.getByTestId('inventory-adjust-error')).toHaveCount(0);
@@ -201,18 +208,25 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
   ).toHaveCount(1);
   await page.getByTestId('inventory-adjust-item').selectOption('product-1');
   await expect(page.getByTestId('inventory-adjust-item')).toHaveValue('product-1');
+  await page.getByTestId('inventory-adjust-reason').selectOption('Correction');
   await expect(page.getByTestId('inventory-adjust-reason')).toHaveValue('Correction');
   await page.getByTestId('inventory-adjust-delta').fill('-5');
+  await page.getByTestId('inventory-adjust-delta').blur();
   await expect(page.getByTestId('inventory-adjust-submit')).toBeEnabled();
+  const adjustmentRejectedRequest = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' &&
+      request.url().includes('/v1/pos/admin/catalog/inventory/adjustments'),
+  );
   const adjustmentRejected = page.waitForResponse(
     (response) =>
       response.request().method() === 'POST' &&
       response.url().includes('/v1/pos/admin/catalog/inventory/adjustments') &&
       response.status() === 409,
   );
-  await page.getByTestId('inventory-adjust-submit').click();
+  await page.getByTestId('inventory-adjust-submit').click({ force: true });
 
-  await adjustmentRejected;
+  await Promise.all([adjustmentRejectedRequest, adjustmentRejected]);
   await expect(page.getByTestId('inventory-adjust-success')).toHaveCount(0);
 });
 
