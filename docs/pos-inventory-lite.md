@@ -73,7 +73,8 @@ Campos por fila:
 
 ### Idempotencia y referencias
 
-- Los movimientos automáticos registran referencia estable:
+- Los movimientos automáticos registran referencia estable internamente:
   - consumo: `ReferenceType=Sale`, `ReferenceId={saleId}`
   - reversa: `ReferenceType=SaleVoid`, `ReferenceId={saleId}`
+- **Contrato DTO actual (GET/POST adjustments):** expone `reference` (string opcional), pero no expone `referenceType`, `referenceId` ni `movementKind`.
 - Se agrega unicidad para evitar duplicados por reintentos en venta/void por item de inventario.

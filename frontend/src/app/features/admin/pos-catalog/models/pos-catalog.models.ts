@@ -226,9 +226,6 @@ export interface CatalogInventoryAdjustmentDto {
   qtyAfter: number;
   reason: InventoryAdjustmentReasonValue;
   reference?: string | null;
-  referenceType?: string | null;
-  referenceId?: string | null;
-  movementKind?: string | null;
   note?: string | null;
   clientOperationId?: string | null;
   createdAtUtc: string;
