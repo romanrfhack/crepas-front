@@ -261,10 +261,10 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
   await expect(page.getByTestId('cash-diff-table')).toBeVisible();
   await expect(page.getByTestId('mix-category-row-0')).toBeVisible();
   await expect(page.getByTestId('mix-product-row-0')).toBeVisible();
-  await expect(page.getByTestId('cash-diff-row-0')).toBeVisible();
+  await expect(page.locator('[data-testid^="cash-diff-row-"]').first()).toBeVisible();
 
   await expect(page.getByTestId('cash-diff-table').locator('thead')).not.toContainText('Turno');
-  await expect(page.getByTestId('cash-diff-row-0')).toContainText('Cashier E2E');
+  await expect(page.locator('[data-testid^="cash-diff-row-"]').first()).toContainText('Cashier E2E');
   await expect(
     page.locator('[data-testid="reports-cashier"] option[value="cashier-e2e"]'),
   ).toHaveCount(1);
