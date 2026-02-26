@@ -25,15 +25,21 @@ const seedAuth = async (page: Page) => {
 
 test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async ({ page }) => {
   const seenUrls: string[] = [];
-  const hasReportsPath = (url: string, endpoint: string) =>
-    new URL(url).pathname.includes(endpoint);
+  const normalizePath = (path: string) => path.replace(/\/+$/, '');
+  const matchesReportPath = (pathOrUrl: string, endpoint: string) => {
+    const normalizedPath = normalizePath(
+      pathOrUrl.startsWith('http') ? new URL(pathOrUrl).pathname : pathOrUrl,
+    );
+
+    return normalizedPath.endsWith(normalizePath(endpoint));
+  };
 
   await page.route('**/v1/pos/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     seenUrls.push(url.toString());
 
-    if (url.pathname.includes('/reports/sales/cashiers')) {
+    if (matchesReportPath(url.pathname, '/reports/sales/cashiers')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -51,7 +57,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/shifts/summary')) {
+    if (matchesReportPath(url.pathname, '/reports/shifts/summary')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -73,7 +79,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/sales/daily')) {
+    if (matchesReportPath(url.pathname, '/reports/sales/daily')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -94,7 +100,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/payments/methods')) {
+    if (matchesReportPath(url.pathname, '/reports/payments/methods')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -106,7 +112,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/sales/hourly')) {
+    if (matchesReportPath(url.pathname, '/reports/sales/hourly')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -114,7 +120,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/voids/reasons')) {
+    if (matchesReportPath(url.pathname, '/reports/voids/reasons')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -124,7 +130,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/top-products')) {
+    if (matchesReportPath(url.pathname, '/reports/top-products')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -134,7 +140,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/kpis/summary')) {
+    if (matchesReportPath(url.pathname, '/reports/kpis/summary')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -150,7 +156,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/sales/categories')) {
+    if (matchesReportPath(url.pathname, '/reports/sales/categories')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -168,7 +174,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/sales/products')) {
+    if (matchesReportPath(url.pathname, '/reports/sales/products')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -187,7 +193,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/sales/addons/extras')) {
+    if (matchesReportPath(url.pathname, '/reports/sales/addons/extras')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -205,7 +211,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/sales/addons/options')) {
+    if (matchesReportPath(url.pathname, '/reports/sales/addons/options')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -223,7 +229,7 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
       });
     }
 
-    if (url.pathname.includes('/reports/control/cash-differences')) {
+    if (matchesReportPath(url.pathname, '/reports/control/cash-differences')) {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -256,22 +262,22 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
   await seedAuth(page);
   const categoriesResponse = page.waitForResponse(
     (response) =>
-      hasReportsPath(response.url(), '/reports/sales/categories') &&
+      matchesReportPath(response.url(), '/reports/sales/categories') &&
       response.request().method() === 'GET',
   );
   const productsResponse = page.waitForResponse(
     (response) =>
-      hasReportsPath(response.url(), '/reports/sales/products') &&
+      matchesReportPath(response.url(), '/reports/sales/products') &&
       response.request().method() === 'GET',
   );
   const cashDiffResponse = page.waitForResponse(
     (response) =>
-      hasReportsPath(response.url(), '/reports/control/cash-differences') &&
+      matchesReportPath(response.url(), '/reports/control/cash-differences') &&
       response.request().method() === 'GET',
   );
   const shiftsResponse = page.waitForResponse(
     (response) =>
-      hasReportsPath(response.url(), '/reports/shifts/summary') &&
+      matchesReportPath(response.url(), '/reports/shifts/summary') &&
       response.request().method() === 'GET',
   );
   await page.goto('/app/pos/reportes');
@@ -282,6 +288,8 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
   await expect(page.getByTestId('addons-extras-table')).toBeVisible();
   await expect(page.getByTestId('addons-options-table')).toBeVisible();
   await expect(page.getByTestId('cash-diff-table')).toBeVisible();
+  await expect(page.getByTestId('report-error-mixCategories')).toHaveCount(0);
+  await expect(page.getByTestId('report-error-mixProducts')).toHaveCount(0);
   await expect(page.getByTestId('mix-category-row-0')).toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('mix-product-row-0')).toBeVisible({ timeout: 20000 });
   await expect(page.locator('[data-testid^="cash-diff-row-"]').first()).toBeVisible({
@@ -307,13 +315,13 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
     .poll(() => {
       const withFilters = seenUrls.filter(
         (item) =>
-          hasReportsPath(item, '/reports/sales/products') &&
+          matchesReportPath(item, '/reports/sales/products') &&
           item.includes('cashierUserId=cashier-e2e') &&
           item.includes('shiftId=shift-e2e'),
       );
       const cashDiff = seenUrls.filter(
         (item) =>
-          hasReportsPath(item, '/reports/control/cash-differences') &&
+          matchesReportPath(item, '/reports/control/cash-differences') &&
           item.includes('cashierUserId=cashier-e2e'),
       );
       return withFilters.length > 0 && cashDiff.length > 0;
