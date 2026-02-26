@@ -199,7 +199,11 @@ export type InventoryAdjustmentReason =
   | 'Correction'
   | 'TransferIn'
   | 'TransferOut'
-  | 'ManualCount';
+  | 'ManualCount'
+  | 'SaleConsumption'
+  | 'VoidReversal';
+
+export type InventoryAdjustmentReasonValue = InventoryAdjustmentReason | (string & {});
 
 export interface CreateCatalogInventoryAdjustmentRequest {
   storeId: string;
@@ -220,8 +224,11 @@ export interface CatalogInventoryAdjustmentDto {
   qtyBefore: number;
   qtyDelta: number;
   qtyAfter: number;
-  reason: InventoryAdjustmentReason;
+  reason: InventoryAdjustmentReasonValue;
   reference?: string | null;
+  referenceType?: string | null;
+  referenceId?: string | null;
+  movementKind?: string | null;
   note?: string | null;
   clientOperationId?: string | null;
   createdAtUtc: string;

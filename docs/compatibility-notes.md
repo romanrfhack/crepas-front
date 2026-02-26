@@ -87,3 +87,8 @@ No se removieron rutas ni campos existentes (compatibilidad Release A/B preserva
 
 - `InventoryAdjustmentReason` se amplía con nuevos valores: `SaleConsumption` y `VoidReversal`.
 - Compatibilidad: no se renombraron ni removieron motivos existentes; clientes con enums cerrados deben aceptar valores adicionales en historial/reportes de inventario.
+
+## 2026-02-26 — Frontend inventory history reason fallback (Release C.2)
+
+- Inventory history UI (`/app/admin/pos/inventory`) ahora soporta `SaleConsumption` y `VoidReversal` con etiquetas amigables.
+- Compatibilidad: si backend envía un `reason` desconocido en ajustes, frontend renderiza fallback seguro `Otro (<reason>)` sin romper la pantalla.
