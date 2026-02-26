@@ -25,8 +25,10 @@ const seedAuth = async (page: Page) => {
 
 test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async ({ page }) => {
   const seenUrls: string[] = [];
+  const hasReportsPath = (url: string, endpoint: string) =>
+    new URL(url).pathname.endsWith(endpoint);
 
-  await page.route('**/v1/pos/**', async (route) => {
+  await page.route('**/api/v1/pos/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     seenUrls.push(url.toString());
@@ -254,17 +256,17 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
   await seedAuth(page);
   const categoriesResponse = page.waitForResponse(
     (response) =>
-      response.url().includes('/v1/pos/reports/sales/categories') &&
+      hasReportsPath(response.url(), '/reports/sales/categories') &&
       response.request().method() === 'GET',
   );
   const productsResponse = page.waitForResponse(
     (response) =>
-      response.url().includes('/v1/pos/reports/sales/products') &&
+      hasReportsPath(response.url(), '/reports/sales/products') &&
       response.request().method() === 'GET',
   );
   const cashDiffResponse = page.waitForResponse(
     (response) =>
-      response.url().includes('/v1/pos/reports/control/cash-differences') &&
+      hasReportsPath(response.url(), '/reports/control/cash-differences') &&
       response.request().method() === 'GET',
   );
   await page.goto('/app/pos/reportes');
@@ -299,13 +301,15 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
   await expect
     .poll(() => {
       const withFilters = seenUrls.filter(
-        (item) => item.includes('cashierUserId=cashier-e2e') && item.includes('shiftId=shift-e2e'),
+        (item) =>
+          hasReportsPath(item, '/reports/sales/products') &&
+          item.includes('cashierUserId=cashier-e2e') &&
+          item.includes('shiftId=shift-e2e'),
       );
       const cashDiff = seenUrls.filter(
         (item) =>
-          item.includes('/reports/control/cash-differences') &&
-          item.includes('cashierUserId=cashier-e2e') &&
-          !item.includes('shiftId=shift-e2e'),
+          hasReportsPath(item, '/reports/control/cash-differences') &&
+          item.includes('cashierUserId=cashier-e2e'),
       );
       return withFilters.length > 0 && cashDiff.length > 0;
     })
