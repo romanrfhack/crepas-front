@@ -6,4 +6,6 @@ public sealed record AdminUserDto(
     string UserName,
     IReadOnlyCollection<string> Roles,
     bool IsLockedOut,
-    DateTimeOffset? LockoutEnd);
+    DateTimeOffset? LockoutEnd,
+    Guid? TenantId,
+    Guid? StoreId);

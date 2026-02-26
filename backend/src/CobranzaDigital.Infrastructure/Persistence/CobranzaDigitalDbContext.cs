@@ -52,6 +52,13 @@ public sealed class CobranzaDigitalDbContext
     {
         base.OnModelCreating(builder);
 
+        builder.Entity<ApplicationUser>(entity =>
+        {
+            entity.HasIndex(x => x.TenantId);
+            entity.HasIndex(x => x.StoreId);
+            entity.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+        });
+
         builder.Entity<Sale>(entity =>
         {
             entity.Property(e => e.Status)

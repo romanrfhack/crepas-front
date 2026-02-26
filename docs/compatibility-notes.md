@@ -101,3 +101,10 @@ No se removieron rutas ni campos existentes (compatibilidad Release A/B preserva
 - Fuente de datos: columnas persistidas en `CatalogInventoryAdjustments` (`ReferenceType`, `ReferenceId`, `MovementKind`).
 - Compatibilidad: los 3 campos son nullable y se agregaron al final del DTO; clientes legacy pueden ignorarlos.
 - Limitación explícita: ajustes manuales históricos o filas sin metadata persistida seguirán devolviendo `null` en estos campos.
+
+## 2026-02-26 — Admin role transition to AdminStore (temporary compatibility)
+
+- Se introduce rol `AdminStore` como nombre objetivo del administrador de sucursal.
+- Compatibilidad temporal: policies y guards aceptan `AdminStore` y también `Admin` (legacy) mientras dura la migración.
+- Seeder/bootstrapping agrega `AdminStore` y replica membresía desde `Admin` para evitar corte de acceso inmediato.
+- Deprecación: `Admin` queda en modo legado y debe removerse en una fase posterior una vez migrados todos los usuarios.

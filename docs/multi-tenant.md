@@ -42,3 +42,20 @@ Notas:
 - La sección `/app/platform` permite CRUD de verticals y tenants usando `/api/v1/platform/verticals` y `/api/v1/platform/tenants`.
 - Desde la tabla de tenants se puede activar "Usar este tenant" para setear `platform_selected_tenant_id` (tenant-context usado por endpoints POS operativos).
 - Si se elimina el tenant activo desde Plataforma, el frontend limpia tenant-context para evitar headers `X-Tenant-Id` inválidos.
+
+## Modelo final de roles para administración de usuarios
+
+- `SuperAdmin`: alcance global de usuarios (todos los tenants/stores).
+- `TenantAdmin`: alcance completo dentro de su `tenantId`.
+- `AdminStore`: alcance restringido a su `storeId` (y tenant asociado).
+- `Manager` y `Cashier`: sin acceso a `/api/v1/admin/users`.
+
+### Claims de scoping
+
+- JWT mantiene `tenantId` cuando corresponde.
+- JWT agrega `storeId` cuando el usuario tiene sucursal asignada.
+
+### Reglas de asignación
+
+- Roles `AdminStore`/`Manager`/`Cashier` requieren usuario con `StoreId` válido.
+- Si existe `StoreId`, backend valida pertenencia de la store al `TenantId` del usuario.

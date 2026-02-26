@@ -22,12 +22,12 @@ describe('roleGuard', () => {
     });
 
     const router = TestBed.inject(Router);
-    const result = TestBed.runInInjectionContext(() => roleGuard(['Admin'])(route, segments));
+    const result = TestBed.runInInjectionContext(() => roleGuard(['AdminStore', 'Admin'])(route, segments));
 
     expect(result).toEqual(router.createUrlTree(['/login']));
   });
 
-  it('should redirect to /app/dashboard when user has no Admin role', () => {
+  it('should redirect to /app/dashboard when user has no AdminStore role', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
@@ -42,12 +42,12 @@ describe('roleGuard', () => {
     });
 
     const router = TestBed.inject(Router);
-    const result = TestBed.runInInjectionContext(() => roleGuard(['Admin'])(route, segments));
+    const result = TestBed.runInInjectionContext(() => roleGuard(['AdminStore', 'Admin'])(route, segments));
 
     expect(result).toEqual(router.createUrlTree(['/app/dashboard']));
   });
 
-  it('should allow access when user has Admin role', () => {
+  it('should allow access when user has AdminStore role', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
@@ -61,7 +61,7 @@ describe('roleGuard', () => {
       ],
     });
 
-    const result = TestBed.runInInjectionContext(() => roleGuard(['Admin'])(route, segments));
+    const result = TestBed.runInInjectionContext(() => roleGuard(['AdminStore', 'Admin'])(route, segments));
 
     expect(result).toBe(true);
   });

@@ -11,7 +11,7 @@ describe('appShellRoutes', () => {
 
     expect(posRoute).toBeDefined();
     expect(posRoute?.loadChildren).toBeDefined();
-    expect(posRoute?.data?.['roles']).toEqual(['Admin', 'Cashier', 'Manager']);
+    expect(posRoute?.data?.['roles']).toEqual(['AdminStore', 'Admin', 'Cashier', 'Manager']);
   });
 
   it('should block pos route for users without Admin/Cashier roles', () => {

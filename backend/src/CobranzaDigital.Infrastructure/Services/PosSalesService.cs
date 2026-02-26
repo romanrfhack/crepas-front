@@ -899,7 +899,7 @@ public sealed class PosSalesService : IPosSalesService
 
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
         var user = _httpContextAccessor.HttpContext?.User;
-        var isManager = user?.IsInRole("Manager") == true || user?.IsInRole("Admin") == true;
+        var isManager = user?.IsInRole("Manager") == true || user?.IsInRole("Admin") == true || user?.IsInRole("AdminStore") == true;
         if (!isManager)
         {
             var isOwnShift = sale.ShiftId.HasValue && await _db.PosShifts.AsNoTracking().AnyAsync(

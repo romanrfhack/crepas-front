@@ -16,7 +16,7 @@ namespace CobranzaDigital.Api.Controllers.Admin;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/admin/roles")]
-[Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+[Authorize(Policy = AuthorizationPolicies.UserAdminAccess)]
 [Tags("Admin - Roles")]
 [FeatureFlag("Features:UserAdmin")]
 public sealed class AdminRolesController : ControllerBase
