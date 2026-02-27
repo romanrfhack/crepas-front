@@ -199,7 +199,7 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
         var store3 = new Store { Id = Guid.NewGuid(), TenantId = tenant3.Id, Name = "Store C1", IsActive = true, TimeZoneId = "UTC", CreatedAtUtc = now, UpdatedAtUtc = now };
         db.Stores.AddRange(store1, store2, store3);
 
-        var template = new CatalogTemplate { Id = Guid.NewGuid(), Name = "Template A", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now };
+        var template = new CatalogTemplate { Id = Guid.NewGuid(), VerticalId = vertical.Id, Name = "Template A", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now };
         db.CatalogTemplates.Add(template);
         db.TenantCatalogTemplates.Add(new TenantCatalogTemplate { TenantId = tenant1.Id, CatalogTemplateId = template.Id, UpdatedAtUtc = now });
 
