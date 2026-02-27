@@ -87,3 +87,19 @@ Contrato detallado en `docs/platform-dashboard-contract-sheet.md`.
   - KPIs: `platform-kpi-*`
   - Bloques: `platform-top-tenants`, `platform-alerts`, `platform-recent-adjustments`, `platform-out-of-stock`
   - Errores por bloque: `platform-top-tenants-error`, `platform-alerts-error`, `platform-recent-adjustments-error`, `platform-out-of-stock-error`
+
+## Frontend UX scoped user admin v2 (`/app/admin/users`)
+
+- Badge de alcance visible por sesión:
+  - `SuperAdmin` → `Vista global`
+  - `TenantAdmin` → `Vista del tenant`
+  - `AdminStore` → `Vista de sucursal`
+- Filtros contractuales (`data-testid`):
+  - `admin-users-filter-search`
+  - `admin-users-filter-tenant`
+  - `admin-users-filter-store`
+- Scoping en UI:
+  - `SuperAdmin`: tenant/store editables.
+  - `TenantAdmin`: tenant fijo (deshabilitado), store editable dentro de su alcance.
+  - `AdminStore`: store fijo (deshabilitado), sin cambio de tenant.
+- Formulario inline de rol usa `admin-user-form-*` testids y muestra `admin-user-form-store-required` cuando el rol destino requiere `StoreId` (`AdminStore`, `Manager`, `Cashier`).

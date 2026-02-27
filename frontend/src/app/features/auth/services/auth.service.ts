@@ -86,12 +86,25 @@ export class AuthService {
     return roles.some((role) => this.hasRole(role));
   }
 
+  getTenantId() {
+    return this.extractGuidClaim(this.parsedJwtPayload(), ['tenantId']);
+  }
+
+  getStoreId() {
+    return this.extractGuidClaim(this.parsedJwtPayload(), ['storeId']);
+  }
+
   resolvePostLoginUrl(returnUrl?: string | null) {
     if (this.hasRole('Cashier')) {
       return CASHIER_POST_LOGIN_ROUTE;
     }
 
-    if (this.hasRole('AdminStore') || this.hasRole('Manager') || this.hasRole('TenantAdmin') || this.hasRole('SuperAdmin')) {
+    if (
+      this.hasRole('AdminStore') ||
+      this.hasRole('Manager') ||
+      this.hasRole('TenantAdmin') ||
+      this.hasRole('SuperAdmin')
+    ) {
       const normalizedReturnUrl = this.normalizeReturnUrl(returnUrl);
       if (normalizedReturnUrl) {
         return normalizedReturnUrl;
@@ -154,11 +167,7 @@ export class AuthService {
     });
 
     return Array.from(
-      new Set(
-        roles
-          .map((role) => String(role).trim())
-          .filter((role) => role.length > 0),
-      ),
+      new Set(roles.map((role) => String(role).trim()).filter((role) => role.length > 0)),
     );
   }
 
@@ -169,6 +178,17 @@ export class AuthService {
       .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
 
     return sessionCandidate?.trim().toLowerCase() ?? 'anonymous';
+  }
+
+  private extractGuidClaim(payload: Record<string, unknown> | null, keys: readonly string[]) {
+    for (const key of keys) {
+      const value = payload?.[key];
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return value.trim();
+      }
+    }
+
+    return null;
   }
 
   private normalizeReturnUrl(returnUrl?: string | null): string | null {
@@ -187,5 +207,4 @@ export class AuthService {
 
     return normalizedValue;
   }
-
 }

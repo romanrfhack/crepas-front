@@ -1,9 +1,13 @@
 export interface UserSummary {
   id: string;
   email: string;
-  fullName: string;
-  isLocked: boolean;
+  userName?: string;
+  fullName?: string;
+  isLockedOut?: boolean;
+  isLocked?: boolean;
   roles: string[];
+  tenantId?: string | null;
+  storeId?: string | null;
 }
 
 export interface PagedResult<T> {
