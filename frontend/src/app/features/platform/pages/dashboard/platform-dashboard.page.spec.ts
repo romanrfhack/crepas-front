@@ -10,6 +10,11 @@ describe('PlatformDashboardPage', () => {
     getAlerts: vi.fn(),
     getRecentInventoryAdjustments: vi.fn(),
     getOutOfStock: vi.fn(),
+    getExecutiveSignals: vi.fn(),
+    getSalesTrend: vi.fn(),
+    getTopVoidTenants: vi.fn(),
+    getStockoutHotspots: vi.fn(),
+    getActivityFeed: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -37,6 +42,26 @@ describe('PlatformDashboardPage', () => {
     service.getAlerts.mockResolvedValue({ alerts: [{ code: 'TENANT_WITHOUT_TEMPLATE', severity: 'High', count: 1, description: 'desc', topExamples: [] }] });
     service.getRecentInventoryAdjustments.mockResolvedValue({ items: [{ adjustmentId: 'adj-1', tenantId: 'tenant-1', tenantName: 'Tenant 1', storeId: 'store-1', storeName: 'Store 1', itemType: 'Product', itemId: 'item-1', itemName: 'Item 1', itemSku: 'SKU', qtyBefore: 1, qtyDelta: -1, qtyAfter: 0, reason: 'Manual', referenceType: null, referenceId: null, movementKind: 'Out', createdAtUtc: '2026-01-01', performedByUserId: null }], take: 20 });
     service.getOutOfStock.mockResolvedValue({ items: [{ tenantId: 'tenant-1', tenantName: 'Tenant 1', storeId: 'store-1', storeName: 'Store 1', itemType: 'Product', itemId: 'item-1', itemName: 'Item 1', itemSku: 'SKU', stockOnHandQty: 0, updatedAtUtc: '2026-01-01', lastAdjustmentAtUtc: null }] });
+    service.getExecutiveSignals.mockResolvedValue({
+      fastestGrowingTenantId: 'tenant-1',
+      fastestGrowingTenantName: 'Tenant 1',
+      salesGrowthRatePercent: 11,
+      voidRatePercent: 2,
+      tenantsWithNoSalesInRangeCount: 1,
+      storesWithNoAdminStoreCount: 2,
+      tenantsWithNoCatalogTemplateCount: 3,
+      storesWithOutOfStockCount: 4,
+      inventoryAdjustmentCountInRange: 9,
+      topRiskTenantId: 'tenant-2',
+      topRiskTenantName: 'Tenant 2',
+      effectiveDateFromUtc: 'a',
+      effectiveDateToUtc: 'b',
+      previousPeriodCompare: true,
+    });
+    service.getSalesTrend.mockResolvedValue({ items: [{ bucketStartUtc: '2026-01-01', bucketLabel: '2026-01-01', salesCount: 3, salesAmount: 300, voidedSalesCount: 1, averageTicket: 100 }], effectiveDateFromUtc: 'a', effectiveDateToUtc: 'b', granularity: 'day' });
+    service.getTopVoidTenants.mockResolvedValue({ items: [{ tenantId: 'tenant-v', tenantName: 'Tenant Void', verticalId: 'v1', verticalName: 'Retail', voidedSalesCount: 3, voidedSalesAmount: 200, totalSalesCount: 50, voidRate: 0.06, storeCount: 2 }], effectiveDateFromUtc: 'a', effectiveDateToUtc: 'b', top: 10 });
+    service.getStockoutHotspots.mockResolvedValue({ items: [{ tenantId: 'tenant-1', tenantName: 'Tenant 1', storeId: 'store-2', storeName: 'Store 2', outOfStockItemsCount: 5, lowStockItemsCount: 8, lastInventoryMovementAtUtc: '2026-01-01', trackedItemsCount: 20 }], threshold: 5, top: 10, itemType: null });
+    service.getActivityFeed.mockResolvedValue({ items: [{ eventType: 'SaleVoided', occurredAtUtc: '2026-01-01', tenantId: 'tenant-1', tenantName: 'Tenant 1', storeId: 'store-1', storeName: 'Store 1', title: 'Sale voided', description: 'd', referenceId: 'ref-1', severity: 'medium', actorUserId: 'u-1' }], take: 20, eventType: null });
 
     await TestBed.configureTestingModule({
       imports: [PlatformDashboardPage],
@@ -48,68 +73,100 @@ describe('PlatformDashboardPage', () => {
     fixture.detectChanges();
   });
 
-  it('renders KPI cards and sections', () => {
+  it('renders v1 and v2 sections', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector('[data-testid="platform-kpi-active-tenants"]')?.textContent).toContain('2');
-    expect(host.querySelector('[data-testid="platform-top-tenants-row-tenant-1"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="platform-alert-row-TENANT_WITHOUT_TEMPLATE"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="platform-recent-adjustment-row-adj-1"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="platform-out-of-stock-row-Product-item-1-store-1"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="platform-executive-signal-growth"]')?.textContent).toContain('11');
+    expect(host.querySelector('[data-testid="platform-sales-trend-row-0"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="platform-top-void-tenant-row-tenant-v"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="platform-stockout-hotspot-row-store-2"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="platform-activity-feed-row-0"]')).toBeTruthy();
   });
 
-  it('refresh triggers all blocks', async () => {
+  it('refresh triggers all v1 + v2 blocks', async () => {
     const host = fixture.nativeElement as HTMLElement;
-    const beforeSummary = service.getSummary.mock.calls.length;
-    const beforeTopTenants = service.getTopTenants.mock.calls.length;
-    const beforeAlerts = service.getAlerts.mock.calls.length;
-    const beforeAdjustments = service.getRecentInventoryAdjustments.mock.calls.length;
-    const beforeOutOfStock = service.getOutOfStock.mock.calls.length;
+    const baseline = {
+      summary: service.getSummary.mock.calls.length,
+      topTenants: service.getTopTenants.mock.calls.length,
+      alerts: service.getAlerts.mock.calls.length,
+      adjustments: service.getRecentInventoryAdjustments.mock.calls.length,
+      outOfStock: service.getOutOfStock.mock.calls.length,
+      executiveSignals: service.getExecutiveSignals.mock.calls.length,
+      salesTrend: service.getSalesTrend.mock.calls.length,
+      topVoidTenants: service.getTopVoidTenants.mock.calls.length,
+      hotspots: service.getStockoutHotspots.mock.calls.length,
+      feed: service.getActivityFeed.mock.calls.length,
+    };
 
     host.querySelector('[data-testid="platform-dashboard-refresh"]')?.dispatchEvent(new Event('click'));
     await fixture.whenStable();
 
-    expect(service.getSummary.mock.calls.length).toBeGreaterThan(beforeSummary);
-    expect(service.getTopTenants.mock.calls.length).toBeGreaterThan(beforeTopTenants);
-    expect(service.getAlerts.mock.calls.length).toBeGreaterThan(beforeAlerts);
-    expect(service.getRecentInventoryAdjustments.mock.calls.length).toBeGreaterThan(beforeAdjustments);
-    expect(service.getOutOfStock.mock.calls.length).toBeGreaterThan(beforeOutOfStock);
+    expect(service.getSummary.mock.calls.length).toBeGreaterThan(baseline.summary);
+    expect(service.getTopTenants.mock.calls.length).toBeGreaterThan(baseline.topTenants);
+    expect(service.getAlerts.mock.calls.length).toBeGreaterThan(baseline.alerts);
+    expect(service.getRecentInventoryAdjustments.mock.calls.length).toBeGreaterThan(baseline.adjustments);
+    expect(service.getOutOfStock.mock.calls.length).toBeGreaterThan(baseline.outOfStock);
+    expect(service.getExecutiveSignals.mock.calls.length).toBeGreaterThan(baseline.executiveSignals);
+    expect(service.getSalesTrend.mock.calls.length).toBeGreaterThan(baseline.salesTrend);
+    expect(service.getTopVoidTenants.mock.calls.length).toBeGreaterThan(baseline.topVoidTenants);
+    expect(service.getStockoutHotspots.mock.calls.length).toBeGreaterThan(baseline.hotspots);
+    expect(service.getActivityFeed.mock.calls.length).toBeGreaterThan(baseline.feed);
   });
 
-  it('top tenants and out-of-stock filters call service with expected query', async () => {
+  it('sends expected filter queries for v2 blocks', async () => {
     const page = fixture.componentInstance;
-    page.topTenantsDateFrom.set('2026-01-01');
-    page.topTenantsDateTo.set('2026-01-31');
-    page.topTenantsTop.set(12);
-    await page.loadTopTenants();
+    page.salesTrendDateFrom.set('2026-01-01');
+    page.salesTrendDateTo.set('2026-01-31');
+    page.salesTrendGranularity.set('week');
+    await page.loadSalesTrend();
 
-    page.outTenantId.set('tenant-x');
-    page.outStoreId.set('store-x');
-    page.outItemType.set('Product');
-    page.outSearch.set('latte');
-    page.outTop.set(25);
-    await page.loadOutOfStock();
+    page.topVoidDateFrom.set('2026-01-01');
+    page.topVoidDateTo.set('2026-01-31');
+    page.topVoidTop.set(7);
+    await page.loadTopVoidTenants();
 
-    expect(service.getTopTenants).toHaveBeenLastCalledWith({
+    page.stockoutThreshold.set(4);
+    page.stockoutTop.set(6);
+    page.stockoutItemType.set('Product');
+    await page.loadStockoutHotspots();
+
+    page.activityFeedTake.set(12);
+    page.activityFeedEventType.set('InventoryAdjusted');
+    await page.loadActivityFeed();
+
+    expect(service.getSalesTrend).toHaveBeenLastCalledWith({
       dateFrom: '2026-01-01',
       dateTo: '2026-01-31',
-      top: 12,
+      granularity: 'week',
     });
-    expect(service.getOutOfStock).toHaveBeenLastCalledWith({
-      tenantId: 'tenant-x',
-      storeId: 'store-x',
+    expect(service.getTopVoidTenants).toHaveBeenLastCalledWith({
+      dateFrom: '2026-01-01',
+      dateTo: '2026-01-31',
+      top: 7,
+    });
+    expect(service.getStockoutHotspots).toHaveBeenLastCalledWith({
+      threshold: 4,
+      top: 6,
       itemType: 'Product',
-      search: 'latte',
-      top: 25,
+    });
+    expect(service.getActivityFeed).toHaveBeenLastCalledWith({
+      take: 12,
+      eventType: 'InventoryAdjusted',
     });
   });
 
-  it('shows block error state', async () => {
-    service.getAlerts.mockRejectedValueOnce(new Error('boom'));
+  it('shows v2 block errors independently', async () => {
+    service.getSalesTrend.mockRejectedValueOnce(new Error('boom'));
+    service.getExecutiveSignals.mockRejectedValueOnce(new Error('boom'));
+
     const page = fixture.componentInstance;
-    await page.loadAlerts();
+    await page.loadSalesTrend();
+    await page.loadExecutiveSignals();
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('[data-testid="platform-alerts-error"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="platform-sales-trend-error"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="platform-executive-signals-error"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="platform-top-void-tenant-row-tenant-v"]')).toBeTruthy();
   });
 });

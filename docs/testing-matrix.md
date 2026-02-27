@@ -124,3 +124,6 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 - E2E (Playwright UI-contract): `frontend/e2e/platform.dashboard.contract.spec.ts` interceptando `**/api/v1/platform/dashboard/**` con asserts por `data-testid`.
 
 | Admin users scoped UX v2 (`/app/admin/users`) | Frontend Unit: `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts`; E2E UI-contract: `frontend/e2e/admin.users.scoped-ux.contract.spec.ts` | Validar badges de alcance por rol (SuperAdmin/TenantAdmin/AdminStore), filtros tenant/store con visibilidad correcta, `StoreId` obligatorio visual para `AdminStore`/`Manager`/`Cashier`, y mensajes success/error por `data-testid`. |
+
+
+| Frontend `/app/platform/dashboard` v2 (executive signals, sales trend, top void tenants, stockout hotspots, activity feed) | `frontend/src/app/features/platform/services/platform-dashboard-api.service.spec.ts`, `frontend/src/app/features/platform/pages/dashboard/platform-dashboard.page.spec.ts`, `frontend/e2e/platform.dashboard.v2.contract.spec.ts` | Si cambia mapping/filtros, actualizar unit tests Vitest de query params y estado por bloque. Si cambia UX/flujo de dashboard, mantener Playwright UI-contract determinista con `route` a `/api/v1/platform/dashboard/**` y asserts por `data-testid`. |
