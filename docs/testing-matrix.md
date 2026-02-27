@@ -110,7 +110,7 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 | Prevent negative stock en create sale tracked                               | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PosSalesIntegrationTests.cs` (`CreateSale_Prevents_Negative_Stock_And_Does_Not_Create_Adjustments`).                                                                                                                           | `409 reason=OutOfStock`, sin cambios de saldo ni movimientos automáticos.                                                                                                                  |
 | Historial FE C.2/C.2.1 movementKind + referencias + fallback                | Frontend Unit: `frontend/src/app/features/admin/pos-catalog/pages/inventory/inventory-adjustment-reason.util.spec.ts`, `frontend/src/app/features/admin/pos-catalog/pages/inventory/inventory.page.spec.ts`; E2E UI-contract: `frontend/e2e/pos.inventory.c1.contract.spec.ts` (spec C.2.1). | Render estable por `data-testid` para `movementKind` (`SaleConsumption`/`VoidReversal`), referencia amigable (`referenceType/referenceId`) y fallback seguro para metadata `null`/unknown. |
 | Historial inventory adjustments expone metadata opcional C.2.1              | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PosCatalogIntegrationTests.cs` (`CatalogInventory_Adjustment_History_Exposes_Reference_Metadata_When_Present`).                                                                                                                | Manual adjustments mantienen `referenceType/referenceId/movementKind` en `null`; movimientos automáticos exponen `Sale                                                                     | SaleVoid`, `saleId`y`movementKind` esperado. |
-| Admin users scoping (`GET/PUT /api/v1/admin/users*`)                        | Integration backend (authz + tenant/store scope), frontend unit guards/users mapping, E2E UI-contract de visibilidad por rol                                                                                                                                                                 | Validar matrix SuperAdmin/TenantAdmin/AdminStore vs Manager/Cashier, filtros tenant/store.                                                                                                 |
+| Admin users scoping (`GET/POST/PUT /api/v1/admin/users*`)                        | Integration backend (authz + tenant/store scope), frontend unit guards/users mapping, E2E UI-contract de visibilidad por rol                                                                                                                                                                 | Validar matrix SuperAdmin/TenantAdmin/AdminStore vs Manager/Cashier, filtros tenant/store.                                                                                                 |
 
 | Platform Dashboard v1 (`/api/v1/platform/dashboard/*`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformDashboardIntegrationTests.cs` | Validar acceso `SuperAdmin` vs demás roles (403), summary/top-tenants/alerts, recent adjustments y out-of-stock con filtros cross-tenant. |
 | Platform Dashboard v2 (`/api/v1/platform/dashboard/sales-trend|top-void-tenants|stockout-hotspots|activity-feed|executive-signals`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformDashboardIntegrationTests.cs` | Validar authz `SuperAdmin` only (403 para demás), buckets/rangos de `sales-trend`, orden/top en `top-void-tenants`, filtros en `stockout-hotspots`, mezcla/filtro en `activity-feed` y coherencia de `executive-signals`. |
@@ -148,9 +148,22 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 
 ## 2026-02-27 — Admin Users v3 contextual create form (prefill only)
 
-- Estado de contrato backend real: `AdminUsersController` expone `GET /api/v1/admin/users*`, `PUT /api/v1/admin/users/{id}/roles`, `POST|PUT /api/v1/admin/users/{id}/lock`; no existe endpoint `create user`.
+- Estado de contrato backend v4: `AdminUsersController` expone `GET /api/v1/admin/users*`, `POST /api/v1/admin/users`, `PUT /api/v1/admin/users/{id}/roles`, `POST|PUT /api/v1/admin/users/{id}/lock`.
 - Frontend Unit (Vitest):
-  - `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts` valida prefill de formulario de alta desde query params/filtros (`tenantId`, `storeId`), sugerencia de rol por contexto, validación visual `StoreId` requerido por rol y estado estable `admin-user-form-create-unavailable`.
+  - `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts` valida prefill de formulario de alta desde query params/filtros (`tenantId`, `storeId`) y sugerencia de rol por contexto; conexión del submit real queda para el siguiente paso frontend.
 - E2E Playwright UI-contract:
-  - `frontend/e2e/admin.users.scoped-ux.contract.spec.ts` valida apertura de “Nuevo usuario” con contexto (`tenantId+storeId` y `tenantId`), sugerencia de rol y banner estable de endpoint de creación no disponible.
+  - `frontend/e2e/admin.users.scoped-ux.contract.spec.ts` valida apertura de “Nuevo usuario” con contexto (`tenantId+storeId` y `tenantId`) y sugerencia de rol; el wiring de submit API se valida en iteración frontend posterior.
   - `frontend/e2e/platform.dashboard.v3.contract.spec.ts` valida flujo dashboard→users→nuevo usuario con prefill contextual por `data-testid`.
+
+
+## 2026-02-27 — Admin Users v4 backend scoped create endpoint
+
+- Backend integration: `backend/tests/CobranzaDigital.Api.Tests/AdminUsersCreateIntegrationTests.cs`.
+- Cobertura mínima obligatoria:
+  - SuperAdmin crea `TenantAdmin`/`AdminStore`/`Manager`/`Cashier` con tenant/store válidos.
+  - TenantAdmin crea dentro de su tenant y recibe `403` fuera de alcance.
+  - AdminStore crea solo `Manager`/`Cashier` en su propia store y recibe `403` para roles/store fuera de alcance.
+  - Manager/Cashier reciben `403` al invocar create.
+  - Validaciones: email duplicado (`409`), role con `storeId` faltante (`400`), store fuera de tenant (`400`), role inválido (`400`).
+  - Auditoría `CreateUser` persistida.
+  - `GET /admin/users` refleja al usuario creado conforme al scope del actor.

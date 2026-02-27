@@ -55,6 +55,53 @@ public sealed class AdminUsersController : ControllerBase
         _logger = logger;
     }
 
+    [HttpPost]
+    [ProducesResponseType(typeof(CreateAdminUserResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateUser(
+        [FromBody] CreateAdminUserRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _userAdminService.CreateUserAsync(
+            new CreateAdminUserRequestDto(
+                request.Email,
+                request.UserName,
+                request.Role,
+                request.TenantId,
+                request.StoreId,
+                request.TemporaryPassword),
+            cancellationToken).ConfigureAwait(false);
+
+        var correlationId = _auditRequestContextAccessor.GetCorrelationId();
+        var userId = _auditRequestContextAccessor.GetUserId();
+
+        await _auditLogger.LogAsync(new AuditEntry(
+                AuditActions.CreateUser,
+                userId,
+                correlationId,
+                EntityType: "User",
+                EntityId: result.Id,
+                Before: null,
+                After: new
+                {
+                    result.Email,
+                    result.UserName,
+                    result.TenantId,
+                    result.StoreId,
+                    role = result.Roles.FirstOrDefault()
+                },
+                Source: "Api",
+                Notes: null),
+            cancellationToken).ConfigureAwait(false);
+
+        LogAuditWritten(_logger, AuditActions.CreateUser, "User", result.Id, correlationId, userId);
+
+        return CreatedAtAction(nameof(GetUserById), new { id = result.Id, version = "1" }, result);
+    }
+
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<AdminUserDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -194,6 +241,26 @@ public sealed class UpdateUserRolesRequest
     [Required]
     [MinLength(1)]
     public string[] Roles { get; init; } = [];
+}
+
+public sealed class CreateAdminUserRequest
+{
+    [Required]
+    [EmailAddress]
+    public string Email { get; init; } = string.Empty;
+
+    [Required]
+    public string UserName { get; init; } = string.Empty;
+
+    [Required]
+    public string Role { get; init; } = string.Empty;
+
+    public Guid? TenantId { get; init; }
+
+    public Guid? StoreId { get; init; }
+
+    [Required]
+    public string TemporaryPassword { get; init; } = string.Empty;
 }
 
 public sealed class SetUserLockRequest
