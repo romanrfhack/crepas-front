@@ -69,6 +69,8 @@ describe('UsersAdminPage', () => {
               { name: 'SuperAdmin' },
               { name: 'TenantAdmin' },
               { name: 'AdminStore' },
+              { name: 'Manager' },
+              { name: 'Cashier' },
             ],
           },
         },
@@ -210,6 +212,100 @@ describe('UsersAdminPage', () => {
         storeId: 'store-2',
       }),
     );
+  });
+
+  it('prefills create form from query context and suggests AdminStore for tenant + store', async () => {
+    queryParams = {
+      tenantId: 'tenant-q',
+      storeId: 'store-q',
+    };
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.openCreateFormFromContext();
+    fixture.detectChanges();
+
+    expect(component.createTenantControl.value).toBe('tenant-q');
+    expect(component.createStoreControl.value).toBe('store-q');
+    expect(component.createRoleControl.value).toBe('AdminStore');
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(nativeElement.querySelector('[data-testid="admin-users-create-context-badge"]')).toBeTruthy();
+    expect(
+      nativeElement.querySelector('[data-testid="admin-user-form-role-suggestion"]')?.textContent,
+    ).toContain('AdminStore');
+  });
+
+  it('prefills tenant only and keeps role store-required visual validation', async () => {
+    queryParams = {
+      tenantId: 'tenant-only',
+    };
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.openCreateFormFromContext();
+    component.createRoleControl.setValue('Manager');
+    fixture.detectChanges();
+
+    expect(component.createTenantControl.value).toBe('tenant-only');
+    expect(component.createStoreControl.value).toBe('');
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('[data-testid="admin-user-form-store-required"]'),
+    ).toBeTruthy();
+  });
+
+  it('when filters are cleared, create form falls back to neutral context', async () => {
+    queryParams = {
+      tenantId: 'tenant-q',
+      storeId: 'store-q',
+    };
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.tenantFilterControl.setValue('');
+    component.storeFilterControl.setValue('');
+    component.openCreateFormFromContext();
+    fixture.detectChanges();
+
+    expect(component.createTenantControl.value).toBe('');
+    expect(component.createStoreControl.value).toBe('');
+    expect(component.createRoleControl.value).toBe('');
+  });
+
+  it('renders stable create unavailable state when backend endpoint is missing', async () => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.openCreateFormFromContext();
+    fixture.detectChanges();
+
+    const nativeElement = fixture.nativeElement as HTMLElement;
+    expect(nativeElement.querySelector('[data-testid="admin-user-form-create-unavailable"]')).toBeTruthy();
   });
 
   it('should render success and validation errors with stable testids', async () => {

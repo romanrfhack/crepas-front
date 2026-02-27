@@ -430,6 +430,10 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
   await expect(page).toHaveURL(/\/app\/admin\/users\?tenantId=tenant-1&storeId=store-1/);
   await expect(page.getByTestId('admin-users-filter-tenant')).toHaveValue('tenant-1');
   await expect(page.getByTestId('admin-users-filter-store')).toHaveValue('store-1');
+  await page.getByTestId('admin-users-create-open').click();
+  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('tenant-1');
+  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('store-1');
+  await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('AdminStore');
 
   await page.goto('/app/platform/dashboard');
   await page.getByTestId('platform-alert-drilldown-open-STORE_SCOPED_USER_WITHOUT_STORE').click();
@@ -438,6 +442,8 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
     .click();
   await expect(page).toHaveURL(/\/app\/admin\/users\?tenantId=tenant-2/);
   await expect(page.getByTestId('admin-users-filter-tenant')).toHaveValue('tenant-2');
+  await page.getByTestId('admin-users-create-open').click();
+  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('tenant-2');
 
   await page.goto('/app/platform/dashboard');
   await page.getByTestId('platform-tenant-overview-open-tenant-1').click();

@@ -145,3 +145,12 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
   - `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts` valida inicialización de filtros (`tenantId`, `storeId`, `search`) desde query params en `/app/admin/users`.
 - E2E Playwright UI-contract:
   - `frontend/e2e/platform.dashboard.v3.contract.spec.ts` valida navegación end-to-end dashboard→users con query params esperados y asserts por `data-testid`.
+
+## 2026-02-27 — Admin Users v3 contextual create form (prefill only)
+
+- Estado de contrato backend real: `AdminUsersController` expone `GET /api/v1/admin/users*`, `PUT /api/v1/admin/users/{id}/roles`, `POST|PUT /api/v1/admin/users/{id}/lock`; no existe endpoint `create user`.
+- Frontend Unit (Vitest):
+  - `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts` valida prefill de formulario de alta desde query params/filtros (`tenantId`, `storeId`), sugerencia de rol por contexto, validación visual `StoreId` requerido por rol y estado estable `admin-user-form-create-unavailable`.
+- E2E Playwright UI-contract:
+  - `frontend/e2e/admin.users.scoped-ux.contract.spec.ts` valida apertura de “Nuevo usuario” con contexto (`tenantId+storeId` y `tenantId`), sugerencia de rol y banner estable de endpoint de creación no disponible.
+  - `frontend/e2e/platform.dashboard.v3.contract.spec.ts` valida flujo dashboard→users→nuevo usuario con prefill contextual por `data-testid`.
