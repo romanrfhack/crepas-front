@@ -5,7 +5,7 @@ import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../../auth/services/auth.service';
 import { AdminRolesService } from '../../services/admin-roles.service';
 import { AdminUsersService } from '../../services/admin-users.service';
-import { UserSummary } from '../../models/admin.models';
+import { CreateAdminUserRequestDto, UserSummary } from '../../models/admin.models';
 
 type AdminScope = 'global' | 'tenant' | 'store' | 'none';
 
@@ -111,19 +111,39 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
               >
             }
 
-            @if (!createUserAvailable) {
-              <small data-testid="admin-user-form-create-unavailable">
-                La creación de usuarios no está disponible porque no existe endpoint backend de
-                alta de usuarios en /api/v1/admin/users.
-              </small>
-            }
+            <label>
+              Email
+              <input
+                type="email"
+                [formControl]="createEmailControl"
+                data-testid="admin-user-form-email"
+              />
+            </label>
+
+            <label>
+              UserName
+              <input
+                type="text"
+                [formControl]="createUserNameControl"
+                data-testid="admin-user-form-username"
+              />
+            </label>
+
+            <label>
+              Temporary password
+              <input
+                type="password"
+                [formControl]="createPasswordControl"
+                data-testid="admin-user-form-password"
+              />
+            </label>
 
             <button
               type="submit"
               data-testid="admin-user-form-submit"
-              [disabled]="loading() || !createUserAvailable"
+              [disabled]="createSubmitting()"
             >
-              Crear usuario
+              {{ createSubmitting() ? 'Creando...' : 'Crear usuario' }}
             </button>
           </form>
         </section>
@@ -289,6 +309,9 @@ export class UsersAdminPage {
   readonly createTenantControl = new FormControl('', { nonNullable: true });
   readonly createStoreControl = new FormControl('', { nonNullable: true });
   readonly createRoleControl = new FormControl('', { nonNullable: true });
+  readonly createEmailControl = new FormControl('', { nonNullable: true });
+  readonly createUserNameControl = new FormControl('', { nonNullable: true });
+  readonly createPasswordControl = new FormControl('', { nonNullable: true });
 
   readonly users = signal<UserSummary[]>([]);
   readonly loading = signal(false);
@@ -298,9 +321,9 @@ export class UsersAdminPage {
   readonly createFormVisible = signal(false);
   readonly createContextMessage = signal('');
   readonly createSuggestedRole = signal('');
+  readonly createSubmitting = signal(false);
 
   private readonly roleDrafts = signal<Record<string, FormControl<string>>>({});
-  readonly createUserAvailable = false;
   private readonly initialTenantQuery = this.route.snapshot.queryParamMap.get('tenantId')?.trim() ?? '';
   private readonly initialStoreQuery = this.route.snapshot.queryParamMap.get('storeId')?.trim() ?? '';
 
@@ -434,11 +457,35 @@ export class UsersAdminPage {
     }
   }
 
-  onSubmitCreate(event: Event) {
+  async onSubmitCreate(event: Event) {
     event.preventDefault();
-    if (!this.createUserAvailable) {
-      this.errorMessage.set('No existe endpoint backend para crear usuarios en el módulo de administración.');
+    if (this.createSubmitting()) {
+      return;
+    }
+
+    const validationError = this.validateCreateForm();
+    if (validationError) {
+      this.errorMessage.set(validationError);
       this.successMessage.set('');
+      return;
+    }
+
+    this.createSubmitting.set(true);
+    this.errorMessage.set('');
+    this.successMessage.set('');
+
+    try {
+      await this.adminUsersService.createUser(this.buildCreateRequest());
+      this.createEmailControl.setValue('');
+      this.createUserNameControl.setValue('');
+      this.createPasswordControl.setValue('');
+      await this.loadUsers();
+      this.successMessage.set('Usuario creado.');
+      this.errorMessage.set('');
+    } catch (error) {
+      this.errorMessage.set(this.resolveCreateErrorMessage(error));
+    } finally {
+      this.createSubmitting.set(false);
     }
   }
 
@@ -505,6 +552,56 @@ export class UsersAdminPage {
     if (!payload) return fallback;
     const firstFieldError = payload.errors ? Object.values(payload.errors).flat()[0] : null;
     return firstFieldError || payload.detail || fallback;
+  }
+
+  private validateCreateForm() {
+    const email = this.createEmailControl.value.trim();
+    const userName = this.createUserNameControl.value.trim();
+    const role = this.createRoleControl.value.trim();
+    const password = this.createPasswordControl.value.trim();
+    const tenantId = this.createTenantControl.value.trim();
+    const storeId = this.createStoreControl.value.trim();
+
+    if (!email || !userName || !role || !password) {
+      return 'Completa email, username, rol y contraseña temporal.';
+    }
+
+    if (this.roleRequiresStore(role) && !storeId) {
+      return 'StoreId es obligatorio para asignar ese rol.';
+    }
+
+    if ((role === 'AdminStore' || role === 'Manager' || role === 'Cashier') && !tenantId) {
+      return 'TenantId es obligatorio para asignar ese rol.';
+    }
+
+    return '';
+  }
+
+  private buildCreateRequest(): CreateAdminUserRequestDto {
+    return {
+      email: this.createEmailControl.value.trim(),
+      userName: this.createUserNameControl.value.trim(),
+      role: this.createRoleControl.value.trim(),
+      tenantId: this.createTenantControl.value.trim() || null,
+      storeId: this.createStoreControl.value.trim() || null,
+      temporaryPassword: this.createPasswordControl.value.trim(),
+    };
+  }
+
+  private resolveCreateErrorMessage(error: unknown) {
+    if (!(error instanceof HttpErrorResponse)) {
+      return 'No fue posible crear el usuario.';
+    }
+
+    if (error.status === 409) {
+      return this.resolveErrorMessage(error, 'El email o username ya existe.');
+    }
+
+    if (error.status === 400) {
+      return this.resolveErrorMessage(error, 'Datos inválidos para crear el usuario.');
+    }
+
+    return this.resolveErrorMessage(error, 'No fue posible crear el usuario.');
   }
 
   private resolveContextFromFilters() {

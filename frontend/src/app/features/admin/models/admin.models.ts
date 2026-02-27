@@ -24,3 +24,22 @@ export interface RoleDto {
 export interface UpdateUserRolesRequest {
   roles: string[];
 }
+
+export interface CreateAdminUserRequestDto {
+  email: string;
+  userName: string;
+  role: string;
+  tenantId: string | null;
+  storeId: string | null;
+  temporaryPassword: string;
+}
+
+export interface CreateAdminUserResponseDto {
+  id: string;
+  email: string;
+  userName: string;
+  roles: string[];
+  tenantId: string | null;
+  storeId: string | null;
+  isLockedOut: boolean;
+}

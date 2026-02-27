@@ -181,7 +181,7 @@ Referencia de contrato: `docs/platform-dashboard-contract-sheet.md` (sección v3
   - `tenantId + storeId` → `AdminStore` (o `Cashier` cuando el operador actual es `AdminStore`).
   - solo `tenantId` → `TenantAdmin`.
 - Se mantienen testids contractuales para contexto y formulario (`admin-users-create-context-*`, `admin-user-form-*`).
-- Backend `AdminUsersController` ahora expone `POST /api/v1/admin/users` para alta real con scoping tenant/store y validaciones por rol destino. El frontend puede conectar submit en una iteración posterior.
+- El frontend ya conecta submit real contra `POST /api/v1/admin/users`: envía `email`, `userName`, `role`, `tenantId`, `storeId`, `temporaryPassword`, muestra success/error por `ProblemDetails`, y refresca el listado scoped después de crear.
 
 
 ## Backend Admin Users v4: alta real (`POST /api/v1/admin/users`)

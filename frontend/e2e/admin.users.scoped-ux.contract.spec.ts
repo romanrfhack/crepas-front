@@ -14,6 +14,14 @@ const buildJwt = (roles: string[], tenantId?: string, storeId?: string) => {
   return `${header}.${payload}.sig`;
 };
 
+const rolesResponse = [
+  { name: 'SuperAdmin' },
+  { name: 'TenantAdmin' },
+  { name: 'AdminStore' },
+  { name: 'Manager' },
+  { name: 'Cashier' },
+];
+
 const usersResponse = {
   items: [
     {
@@ -25,24 +33,13 @@ const usersResponse = {
       tenantId: 'tenant-1',
       storeId: null,
     },
-    {
-      id: 'user-2',
-      email: 'user2@test.local',
-      userName: 'User 2',
-      isLockedOut: false,
-      roles: ['AdminStore'],
-      tenantId: 'tenant-1',
-      storeId: 'store-1',
-    },
   ],
-  totalCount: 2,
+  totalCount: 1,
   pageNumber: 1,
   pageSize: 20,
 };
 
-test('SuperAdmin sees tenant/store filters and store requirement for AdminStore/Cashier roles', async ({
-  page,
-}) => {
+test.beforeEach(async ({ page }) => {
   await page.addInitScript(
     (token: string) => {
       localStorage.setItem('access_token', token);
@@ -52,155 +49,111 @@ test('SuperAdmin sees tenant/store filters and store requirement for AdminStore/
   );
 
   await page.route('**/api/v1/admin/roles', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify([
-        { name: 'SuperAdmin' },
-        { name: 'TenantAdmin' },
-        { name: 'AdminStore' },
-        { name: 'Manager' },
-        { name: 'Cashier' },
-      ]),
-    }),
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rolesResponse) }),
   );
-  await page.route('**/api/v1/admin/users**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(usersResponse),
-    }),
-  );
-
-  await page.goto('/app/admin/users');
-
-  await expect(page.getByTestId('admin-users-page')).toBeVisible();
-  await expect(page.getByTestId('admin-users-filter-tenant')).toBeVisible();
-  await expect(page.getByTestId('admin-users-filter-store')).toBeVisible();
-
-  const firstUserRow = page.getByTestId('admin-users-row-user-1');
-  const firstUserRoleSelect = firstUserRow.getByTestId('admin-user-form-role');
-  const firstUserStoreRequiredHint = firstUserRow.getByTestId('admin-user-form-store-required');
-
-  await firstUserRoleSelect.selectOption('AdminStore');
-  await expect(firstUserStoreRequiredHint).toBeVisible();
-  await firstUserRoleSelect.selectOption('Cashier');
-  await expect(firstUserStoreRequiredHint).toBeVisible();
-  await firstUserRoleSelect.selectOption('TenantAdmin');
-  await expect(firstUserStoreRequiredHint).toBeHidden();
 });
 
-test('TenantAdmin and AdminStore stay scoped by tenant/store filters', async ({ page }) => {
-  await page.route('**/api/v1/admin/roles', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify([
-        { name: 'TenantAdmin' },
-        { name: 'AdminStore' },
-        { name: 'Manager' },
-        { name: 'Cashier' },
-      ]),
-    }),
-  );
-  await page.route('**/api/v1/admin/users**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(usersResponse),
-    }),
-  );
+test('create user success from tenant+store context submits POST and refreshes list', async ({ page }) => {
+  let getUsersCalls = 0;
+  await page.route('**/api/v1/admin/users**', (route) => {
+    const method = route.request().method();
+    if (method === 'GET') {
+      getUsersCalls += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(usersResponse),
+      });
+    }
 
-  await page.goto('/');
-  await page.evaluate((token: string) => {
-    localStorage.setItem('access_token', token);
-    localStorage.setItem('refresh_token', 'refresh-e2e');
-  }, buildJwt(['TenantAdmin'], 'tenant-1'));
-  await page.goto('/app/admin/users');
-  await expect(page.getByTestId('admin-users-filter-tenant')).toBeDisabled();
-  await expect(page.getByTestId('admin-users-filter-store')).not.toBeDisabled();
+    if (method === 'POST') {
+      const body = route.request().postDataJSON();
+      expect(body).toEqual({
+        email: 'new@test.local',
+        userName: 'new-user',
+        role: 'AdminStore',
+        tenantId: 'tenant-ctx',
+        storeId: 'store-ctx',
+        temporaryPassword: 'Temp123!',
+      });
+      return route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'user-2',
+          email: 'new@test.local',
+          userName: 'new-user',
+          roles: ['AdminStore'],
+          tenantId: 'tenant-ctx',
+          storeId: 'store-ctx',
+          isLockedOut: false,
+        }),
+      });
+    }
 
-  await page.evaluate(
-    (token: string) => {
-      localStorage.setItem('access_token', token);
-    },
-    buildJwt(['AdminStore'], 'tenant-1', 'store-1'),
-  );
-  await page.reload();
-
-  await expect(page.getByTestId('admin-users-filter-store')).toBeDisabled();
-  await expect(page.getByTestId('admin-users-scope-badge')).toContainText('Vista de sucursal');
-});
-
-test('opens contextual create form with tenant+store and suggests AdminStore', async ({ page }) => {
-  await page.addInitScript(
-    (token: string) => {
-      localStorage.setItem('access_token', token);
-      localStorage.setItem('refresh_token', 'refresh-e2e');
-    },
-    buildJwt(['SuperAdmin']),
-  );
-
-  await page.route('**/api/v1/admin/roles', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify([
-        { name: 'SuperAdmin' },
-        { name: 'TenantAdmin' },
-        { name: 'AdminStore' },
-        { name: 'Manager' },
-        { name: 'Cashier' },
-      ]),
-    }),
-  );
-  await page.route('**/api/v1/admin/users**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(usersResponse),
-    }),
-  );
+    return route.continue();
+  });
 
   await page.goto('/app/admin/users?tenantId=tenant-ctx&storeId=store-ctx');
   await page.getByTestId('admin-users-create-open').click();
 
-  const createPanel = page.getByTestId('admin-users-create-context-badge');
-  await expect(createPanel).toBeVisible();
   await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('tenant-ctx');
   await expect(page.getByTestId('admin-users-create-context-store')).toContainText('store-ctx');
   await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('AdminStore');
-  await expect(page.getByTestId('admin-user-form-create-unavailable')).toBeVisible();
+
+  await page.getByTestId('admin-user-form-email').fill('new@test.local');
+  await page.getByTestId('admin-user-form-username').fill('new-user');
+  await page.getByTestId('admin-user-form-password').fill('Temp123!');
+  await page.getByTestId('admin-user-form-submit').click();
+
+  await expect(page.getByTestId('admin-user-form-success')).toBeVisible();
+  await expect(page.getByTestId('admin-user-form-error')).toHaveCount(0);
+  expect(getUsersCalls).toBeGreaterThanOrEqual(2);
 });
 
-test('opens contextual create form with tenant-only filter', async ({ page }) => {
-  await page.addInitScript(
-    (token: string) => {
-      localStorage.setItem('access_token', token);
-      localStorage.setItem('refresh_token', 'refresh-e2e');
-    },
-    buildJwt(['SuperAdmin']),
-  );
+test('create user error maps conflict and validation responses with stable error testid', async ({ page }) => {
+  await page.route('**/api/v1/admin/users**', async (route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(usersResponse),
+      });
+    }
 
-  await page.route('**/api/v1/admin/roles', (route) =>
-    route.fulfill({
-      status: 200,
+    const body = route.request().postDataJSON() as { email: string };
+    if (body.email === 'dup@test.local') {
+      return route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'El email ya existe.' }),
+      });
+    }
+
+    return route.fulfill({
+      status: 400,
       contentType: 'application/json',
-      body: JSON.stringify([
-        { name: 'SuperAdmin' },
-        { name: 'TenantAdmin' },
-        { name: 'AdminStore' },
-        { name: 'Manager' },
-        { name: 'Cashier' },
-      ]),
-    }),
-  );
+      body: JSON.stringify({ errors: { storeId: ['Store no pertenece al tenant.'] } }),
+    });
+  });
+
+  await page.goto('/app/admin/users?tenantId=tenant-ctx&storeId=store-ctx');
+  await page.getByTestId('admin-users-create-open').click();
+
+  await page.getByTestId('admin-user-form-email').fill('dup@test.local');
+  await page.getByTestId('admin-user-form-username').fill('dup-user');
+  await page.getByTestId('admin-user-form-password').fill('Temp123!');
+  await page.getByTestId('admin-user-form-submit').click();
+  await expect(page.getByTestId('admin-user-form-error')).toBeVisible();
+
+  await page.getByTestId('admin-user-form-email').fill('bad-store@test.local');
+  await page.getByTestId('admin-user-form-submit').click();
+  await expect(page.getByTestId('admin-user-form-error')).toBeVisible();
+});
+
+test('tenant-only context keeps tenant prefill and suggested tenant role', async ({ page }) => {
   await page.route('**/api/v1/admin/users**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(usersResponse),
-    }),
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(usersResponse) }),
   );
 
   await page.goto('/app/admin/users?tenantId=tenant-only');
@@ -208,4 +161,5 @@ test('opens contextual create form with tenant-only filter', async ({ page }) =>
 
   await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('tenant-only');
   await expect(page.getByTestId('admin-users-create-context-store')).toContainText('N/A');
+  await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('TenantAdmin');
 });

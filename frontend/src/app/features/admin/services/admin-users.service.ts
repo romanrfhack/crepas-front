@@ -1,7 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../../core/services/api-client';
-import { PagedResult, UpdateUserRolesRequest, UserSummary } from '../models/admin.models';
+import {
+  CreateAdminUserRequestDto,
+  CreateAdminUserResponseDto,
+  PagedResult,
+  UpdateUserRolesRequest,
+  UserSummary,
+} from '../models/admin.models';
 
 interface UsersQuery {
   page: number;
@@ -49,5 +55,11 @@ export class AdminUsersService {
 
   async setUserLockState(id: string, lock: boolean) {
     return firstValueFrom(this.apiClient.put<UserSummary>(`/v1/admin/users/${id}/lock`, { lock }));
+  }
+
+  async createUser(request: CreateAdminUserRequestDto) {
+    return firstValueFrom(
+      this.apiClient.post<CreateAdminUserResponseDto>('/v1/admin/users', request),
+    );
   }
 }
