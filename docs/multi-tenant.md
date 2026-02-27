@@ -59,3 +59,21 @@ Notas:
 
 - Roles `AdminStore`/`Manager`/`Cashier` requieren usuario con `StoreId` válido.
 - Si existe `StoreId`, backend valida pertenencia de la store al `TenantId` del usuario.
+
+## Platform Dashboard v1 (SuperAdmin cross-tenant)
+
+Se agregan endpoints globales para Dashboard de Plataforma en `GET /api/v1/platform/dashboard/*`.
+
+- Policy: `PlatformOnly` (solo `SuperAdmin`).
+- No requieren header `X-Tenant-Id`.
+- Operan en modo cross-tenant global.
+- Agregados de tiempo (`summary`, `top-tenants`) usan UTC (`DateTimeOffset` en rango).
+
+Endpoints v1:
+- `GET /api/v1/platform/dashboard/summary`
+- `GET /api/v1/platform/dashboard/top-tenants`
+- `GET /api/v1/platform/dashboard/alerts`
+- `GET /api/v1/platform/dashboard/recent-inventory-adjustments`
+- `GET /api/v1/platform/dashboard/out-of-stock`
+
+Contrato detallado en `docs/platform-dashboard-contract-sheet.md`.
