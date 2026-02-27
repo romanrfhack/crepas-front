@@ -1,6 +1,6 @@
 import { expect, Page, test } from '@playwright/test';
 
-const buildJwt = (role: 'Admin' | 'Manager') => {
+const buildJwt = (role: 'AdminStore' | 'Manager') => {
   const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
   const payload = Buffer.from(
     JSON.stringify({

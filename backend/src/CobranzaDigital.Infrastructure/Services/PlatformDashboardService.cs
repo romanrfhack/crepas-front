@@ -27,7 +27,7 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
         var totalUsers = await _db.Users.AsNoTracking().CountAsync(ct).ConfigureAwait(false);
 
         var storeScopedRoleIds = await _db.Roles.AsNoTracking()
-            .Where(x => x.Name == "AdminStore" || x.Name == "Admin" || x.Name == "Manager" || x.Name == "Cashier")
+            .Where(x => x.Name == "AdminStore" || x.Name == "Manager" || x.Name == "Cashier")
             .Select(x => x.Id)
             .ToListAsync(ct).ConfigureAwait(false);
 
@@ -176,7 +176,7 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
         }
 
         var storeScopedRoleIds = await _db.Roles.AsNoTracking()
-            .Where(x => x.Name == "AdminStore" || x.Name == "Admin" || x.Name == "Manager" || x.Name == "Cashier")
+            .Where(x => x.Name == "AdminStore" || x.Name == "Manager" || x.Name == "Cashier")
             .Select(x => x.Id)
             .ToListAsync(ct).ConfigureAwait(false);
 

@@ -10,7 +10,7 @@ namespace CobranzaDigital.Infrastructure.Identity;
 
 public static partial class IdentitySeeder
 {
-    private static readonly string[] DefaultRoles = ["AdminStore", "Admin", "User", "Manager", "Collector", "Cashier", "TenantAdmin", "SuperAdmin"];
+    private static readonly string[] DefaultRoles = ["AdminStore", "User", "Manager", "Collector", "Cashier", "TenantAdmin", "SuperAdmin"];
 
     public static async Task SeedAsync(IServiceProvider serviceProvider, IConfiguration configuration)
     {
@@ -78,7 +78,7 @@ public static partial class IdentitySeeder
             }
         }
 
-        if (!await userManager.IsInRoleAsync(adminUser, "AdminStore").ConfigureAwait(false) && !await userManager.IsInRoleAsync(adminUser, "Admin").ConfigureAwait(false))
+        if (!await userManager.IsInRoleAsync(adminUser, "AdminStore").ConfigureAwait(false))
         {
             var addRoleResult = await userManager.AddToRoleAsync(adminUser, "AdminStore").ConfigureAwait(false);
             if (!addRoleResult.Succeeded)
@@ -99,7 +99,7 @@ public static partial class IdentitySeeder
         [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to create admin user: {Errors}")]
         public static partial void FailedToCreateAdminUser(ILogger logger, IEnumerable<IdentityError> errors);
 
-        [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to add admin user to Admin role: {Errors}")]
+        [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to add admin user to AdminStore role: {Errors}")]
         public static partial void FailedToAddAdminRole(ILogger logger, IEnumerable<IdentityError> errors);
 
         [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to assign tenant to admin user: {Errors}")]

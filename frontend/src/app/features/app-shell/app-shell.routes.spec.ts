@@ -5,16 +5,16 @@ import { AuthService } from '../auth/services/auth.service';
 import { appShellRoutes } from './app-shell.routes';
 
 describe('appShellRoutes', () => {
-  it('should include pos lazy route protected for Admin/Cashier/Manager', () => {
+  it('should include pos lazy route protected for AdminStore/Cashier/Manager', () => {
     const shell = appShellRoutes[0];
     const posRoute = shell?.children?.find((route) => route.path === 'pos');
 
     expect(posRoute).toBeDefined();
     expect(posRoute?.loadChildren).toBeDefined();
-    expect(posRoute?.data?.['roles']).toEqual(['AdminStore', 'Admin', 'Cashier', 'Manager']);
+    expect(posRoute?.data?.['roles']).toEqual(['AdminStore', 'Cashier', 'Manager']);
   });
 
-  it('should block pos route for users without Admin/Cashier roles', () => {
+  it('should block pos route for users without AdminStore/Cashier roles', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
@@ -29,7 +29,7 @@ describe('appShellRoutes', () => {
     });
 
     const router = TestBed.inject(Router);
-    const route = { path: 'pos', data: { roles: ['Admin', 'Cashier'] } };
+    const route = { path: 'pos', data: { roles: ['AdminStore', 'Cashier'] } };
     const segments: UrlSegment[] = [];
 
     const result = TestBed.runInInjectionContext(() => roleGuard([])(route, segments));

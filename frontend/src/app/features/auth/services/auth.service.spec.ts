@@ -22,7 +22,7 @@ const setupAuthService = () => {
         useValue: {
           post: () =>
             of({
-              accessToken: createToken({ roles: ['Admin'] }),
+              accessToken: createToken({ roles: ['AdminStore'] }),
               refreshToken: 'refresh-token',
             }),
         },
@@ -39,21 +39,21 @@ describe('AuthService', () => {
   });
 
   it('should prioritize cashier route over returnUrl', () => {
-    localStorage.setItem('access_token', createToken({ roles: ['Cashier', 'Admin'] }));
+    localStorage.setItem('access_token', createToken({ roles: ['Cashier', 'AdminStore'] }));
     const service = setupAuthService();
 
     expect(service.resolvePostLoginUrl('/app/admin/users')).toBe('/app/pos/caja');
   });
 
-  it('should respect returnUrl for admin users', () => {
-    localStorage.setItem('access_token', createToken({ roles: ['Admin'] }));
+  it('should respect returnUrl for admin-store users', () => {
+    localStorage.setItem('access_token', createToken({ roles: ['AdminStore'] }));
     const service = setupAuthService();
 
     expect(service.resolvePostLoginUrl('/app/admin/users')).toBe('/app/admin/users');
   });
 
   it('should fallback to dashboard when returnUrl is invalid', () => {
-    localStorage.setItem('access_token', createToken({ roles: ['Admin'] }));
+    localStorage.setItem('access_token', createToken({ roles: ['AdminStore'] }));
     const service = setupAuthService();
 
     expect(service.resolvePostLoginUrl('https://evil.local')).toBe('/app/dashboard');
