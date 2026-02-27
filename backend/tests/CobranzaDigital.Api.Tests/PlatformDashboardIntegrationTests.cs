@@ -17,17 +17,19 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
 {
     private readonly CobranzaDigitalApiFactory _factory;
     private readonly HttpClient _client;
+    private readonly Lazy<Task<SeedResult>> _seed;
 
     public PlatformDashboardIntegrationTests(CobranzaDigitalApiFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();
+        _seed = new Lazy<Task<SeedResult>>(SeedDashboardDataAsync);
     }
 
     [Fact]
     public async Task PlatformDashboard_Endpoints_AccessControl_WorksByRole()
     {
-        var seed = await SeedDashboardDataAsync();
+        var seed = await GetSeedAsync();
         var superToken = await LoginAsync(seed.SuperAdminEmail, seed.Password);
 
         foreach (var email in new[] { seed.TenantAdminEmail, seed.AdminStoreEmail, seed.ManagerEmail, seed.CashierEmail })
@@ -56,7 +58,7 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
     [Fact]
     public async Task PlatformDashboard_Summary_ReturnsExpectedMetrics()
     {
-        var seed = await SeedDashboardDataAsync();
+        var seed = await GetSeedAsync();
         var superToken = await LoginAsync(seed.SuperAdminEmail, seed.Password);
 
         using var request = CreateAuthGet($"/api/v1/platform/dashboard/summary?threshold=5", superToken);
@@ -78,7 +80,7 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
     [Fact]
     public async Task PlatformDashboard_TopTenants_OrdersBySales()
     {
-        var seed = await SeedDashboardDataAsync();
+        var seed = await GetSeedAsync();
         var superToken = await LoginAsync(seed.SuperAdminEmail, seed.Password);
 
         using var request = CreateAuthGet("/api/v1/platform/dashboard/top-tenants?top=2", superToken);
@@ -95,7 +97,7 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
     [Fact]
     public async Task PlatformDashboard_Alerts_DetectsConfigurationIssues()
     {
-        var seed = await SeedDashboardDataAsync();
+        var seed = await GetSeedAsync();
         var superToken = await LoginAsync(seed.SuperAdminEmail, seed.Password);
 
         using var request = CreateAuthGet("/api/v1/platform/dashboard/alerts", superToken);
@@ -112,7 +114,7 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
     [Fact]
     public async Task PlatformDashboard_RecentInventoryAdjustments_ReturnsRecentAndFilters()
     {
-        var seed = await SeedDashboardDataAsync();
+        var seed = await GetSeedAsync();
         var superToken = await LoginAsync(seed.SuperAdminEmail, seed.Password);
 
         using var request = CreateAuthGet($"/api/v1/platform/dashboard/recent-inventory-adjustments?take=1&tenantId={seed.Tenant1Id:D}", superToken);
@@ -128,7 +130,7 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
     [Fact]
     public async Task PlatformDashboard_OutOfStock_ReturnsTrackedAndFilters()
     {
-        var seed = await SeedDashboardDataAsync();
+        var seed = await GetSeedAsync();
         var superToken = await LoginAsync(seed.SuperAdminEmail, seed.Password);
 
         using var request = CreateAuthGet($"/api/v1/platform/dashboard/out-of-stock?tenantId={seed.Tenant1Id:D}&itemType=Product", superToken);
@@ -209,6 +211,8 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
 
         return new SeedResult(password, superEmail, tenantAdminEmail, adminStoreEmail, managerEmail, cashierEmail, tenant1.Id);
     }
+
+    private Task<SeedResult> GetSeedAsync() => _seed.Value;
 
     private static async Task CreateUserAsync(UserManager<ApplicationUser> userManager, string email, string password, string[] roles, Guid? tenantId, Guid? storeId)
     {

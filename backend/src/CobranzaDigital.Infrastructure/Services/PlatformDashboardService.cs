@@ -93,25 +93,48 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
         var normalizedTop = Math.Clamp(top <= 0 ? 10 : top, 1, 50);
         var (effectiveFrom, effectiveTo) = ResolveRange(dateFrom, dateTo, 7);
 
-        var rows = await _db.Tenants.AsNoTracking()
-            .Where(x => includeInactive || x.IsActive)
-            .GroupJoin(_db.Verticals.AsNoTracking(), tenant => tenant.VerticalId, vertical => vertical.Id, (tenant, verticals) => new { tenant, vertical = verticals.FirstOrDefault() })
-            .GroupJoin(_db.Stores.AsNoTracking(), x => x.tenant.Id, store => store.TenantId, (x, stores) => new { x.tenant, x.vertical, StoreCount = stores.Count() })
-            .GroupJoin(
-                _db.Sales.AsNoTracking().Where(s => s.OccurredAtUtc >= effectiveFrom && s.OccurredAtUtc <= effectiveTo),
-                x => x.tenant.Id,
-                sale => sale.TenantId,
-                (x, sales) => new PlatformTopTenantRowDto(
-                    x.tenant.Id,
-                    x.tenant.Name,
-                    x.tenant.VerticalId,
-                    x.vertical != null ? x.vertical.Name : null,
-                    x.StoreCount,
-                    sales.Count(s => s.Status == SaleStatus.Completed),
-                    sales.Where(s => s.Status == SaleStatus.Completed).Sum(s => (decimal?)s.Total) ?? 0m,
-                    0m,
-                    sales.Count(s => s.Status == SaleStatus.Void)))
+        var tenantRows = await (
+            from tenant in _db.Tenants.AsNoTracking()
+            where includeInactive || tenant.IsActive
+            join vertical in _db.Verticals.AsNoTracking() on tenant.VerticalId equals vertical.Id into verticalJoin
+            from vertical in verticalJoin.DefaultIfEmpty()
+            join store in _db.Stores.AsNoTracking() on tenant.Id equals store.TenantId into storeJoin
+            select new
+            {
+                tenant.Id,
+                tenant.Name,
+                tenant.VerticalId,
+                VerticalName = vertical != null ? vertical.Name : null,
+                StoreCount = storeJoin.Count()
+            })
             .ToListAsync(ct).ConfigureAwait(false);
+
+        var salesByTenant = await _db.Sales.AsNoTracking()
+            .Where(s => s.OccurredAtUtc >= effectiveFrom && s.OccurredAtUtc <= effectiveTo)
+            .GroupBy(s => s.TenantId)
+            .Select(g => new
+            {
+                TenantId = g.Key,
+                SalesCount = g.Count(s => s.Status == SaleStatus.Completed),
+                SalesAmount = g.Where(s => s.Status == SaleStatus.Completed).Sum(s => (decimal?)s.Total) ?? 0m,
+                VoidsCount = g.Count(s => s.Status == SaleStatus.Void)
+            })
+            .ToDictionaryAsync(x => x.TenantId, ct).ConfigureAwait(false);
+
+        var rows = tenantRows.Select(x =>
+        {
+            var sales = salesByTenant.GetValueOrDefault(x.Id);
+            return new PlatformTopTenantRowDto(
+                x.Id,
+                x.Name,
+                x.VerticalId,
+                x.VerticalName,
+                x.StoreCount,
+                sales?.SalesCount ?? 0,
+                sales?.SalesAmount ?? 0m,
+                0m,
+                sales?.VoidsCount ?? 0);
+        }).ToList();
 
         var sorted = rows
             .Select(x => x with { AverageTicket = x.SalesCount > 0 ? decimal.Round(x.SalesAmount / x.SalesCount, 2) : 0m })
