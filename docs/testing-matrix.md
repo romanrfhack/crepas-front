@@ -111,6 +111,7 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 | Historial FE C.2/C.2.1 movementKind + referencias + fallback                | Frontend Unit: `frontend/src/app/features/admin/pos-catalog/pages/inventory/inventory-adjustment-reason.util.spec.ts`, `frontend/src/app/features/admin/pos-catalog/pages/inventory/inventory.page.spec.ts`; E2E UI-contract: `frontend/e2e/pos.inventory.c1.contract.spec.ts` (spec C.2.1). | Render estable por `data-testid` para `movementKind` (`SaleConsumption`/`VoidReversal`), referencia amigable (`referenceType/referenceId`) y fallback seguro para metadata `null`/unknown. |
 | Historial inventory adjustments expone metadata opcional C.2.1              | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PosCatalogIntegrationTests.cs` (`CatalogInventory_Adjustment_History_Exposes_Reference_Metadata_When_Present`).                                                                                                                | Manual adjustments mantienen `referenceType/referenceId/movementKind` en `null`; movimientos automáticos exponen `Sale                                                                     | SaleVoid`, `saleId`y`movementKind` esperado. |
 | Admin users scoping (`GET/POST/PUT /api/v1/admin/users*`)                        | Integration backend (authz + tenant/store scope), frontend unit guards/users mapping, E2E UI-contract de visibilidad por rol                                                                                                                                                                 | Validar matrix SuperAdmin/TenantAdmin/AdminStore vs Manager/Cashier, filtros tenant/store.                                                                                                 |
+| Admin users temporary password v5 (`POST /api/v1/admin/users/{id}/temporary-password`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/AdminUsersTemporaryPasswordIntegrationTests.cs`                                                                                                                                                                                 | Validar scope por actor (SuperAdmin/TenantAdmin/AdminStore), restricciones por rol objetivo, `403` para Manager/Cashier, validaciones `400`, `404` usuario inexistente, auditoría sin exponer `temporaryPassword` y login con password nuevo. |
 
 | Platform Dashboard v1 (`/api/v1/platform/dashboard/*`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformDashboardIntegrationTests.cs` | Validar acceso `SuperAdmin` vs demás roles (403), summary/top-tenants/alerts, recent adjustments y out-of-stock con filtros cross-tenant. |
 | Platform Dashboard v2 (`/api/v1/platform/dashboard/sales-trend|top-void-tenants|stockout-hotspots|activity-feed|executive-signals`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformDashboardIntegrationTests.cs` | Validar authz `SuperAdmin` only (403 para demás), buckets/rangos de `sales-trend`, orden/top en `top-void-tenants`, filtros en `stockout-hotspots`, mezcla/filtro en `activity-feed` y coherencia de `executive-signals`. |
@@ -168,3 +169,14 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
   - Validaciones: email duplicado (`409`), role con `storeId` faltante (`400`), store fuera de tenant (`400`), role inválido (`400`).
   - Auditoría `CreateUser` persistida.
   - `GET /admin/users` refleja al usuario creado conforme al scope del actor.
+
+## 2026-02-27 — Admin Users v5 temporary password reset endpoint
+
+- Backend integration: `backend/tests/CobranzaDigital.Api.Tests/AdminUsersTemporaryPasswordIntegrationTests.cs`.
+- Cobertura mínima obligatoria:
+  - SuperAdmin resetea password temporal en cualquier scope válido y el usuario puede autenticarse con la nueva contraseña.
+  - TenantAdmin resetea solo dentro de su tenant y recibe `403` fuera de alcance.
+  - AdminStore resetea solo `Manager`/`Cashier` de su store, recibe `403` fuera de store o contra `TenantAdmin`/`SuperAdmin`.
+  - Manager/Cashier reciben `403` al invocar endpoint.
+  - Validaciones: `temporaryPassword` faltante/invalid (`400`), usuario inexistente (`404`).
+  - Auditoría `ResetUserPassword` persistida sin almacenar el valor de `temporaryPassword`.

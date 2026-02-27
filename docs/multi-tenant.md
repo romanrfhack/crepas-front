@@ -221,3 +221,37 @@ Decisión de password inicial:
 
 - `temporaryPassword` es obligatorio en el request.
 - El usuario se crea activo y no bloqueado (`isLockedOut = false` por default).
+
+## Backend Admin Users v5: reset password temporal (`POST /api/v1/admin/users/{id}/temporary-password`)
+
+Contrato de request:
+
+- `temporaryPassword` (required, mínimo 8 caracteres y validado contra policy de Identity).
+
+Contrato de response (200 OK):
+
+- `id`, `email`, `userName`, `roles`, `tenantId`, `storeId`, `message`.
+
+Reglas de autorización por actor:
+
+- `SuperAdmin`: puede resetear password temporal de `TenantAdmin`, `AdminStore`, `Manager`, `Cashier` en cualquier tenant/store válido.
+- `TenantAdmin`: puede resetear `TenantAdmin`, `AdminStore`, `Manager`, `Cashier` únicamente dentro de su tenant.
+- `AdminStore`: puede resetear solo `Manager`/`Cashier` y únicamente dentro de su store.
+- `Manager`/`Cashier`: sin acceso por policy (`403`).
+
+Reglas por usuario objetivo:
+
+- No se permite resetear usuarios con rol `SuperAdmin` vía este endpoint.
+- Si el target está fuera del scope tenant/store del actor, retorna `403`.
+- Si el usuario no existe, retorna `404`.
+
+Decisiones de estado:
+
+- El endpoint solo actualiza password.
+- No cambia lockout, tenant/store ni roles.
+
+Auditoría:
+
+- Se registra `AuditActions.ResetUserPassword` (`Action = "ResetUserPassword"`) con `EntityType = "User"`.
+- Metadata incluye actor, target (`id/email/userName`), roles y scope (`tenantId`, `storeId`) con descriptor `action = "temporary password reset"`.
+- Nunca se persiste el valor de `temporaryPassword` en auditoría/logs.
