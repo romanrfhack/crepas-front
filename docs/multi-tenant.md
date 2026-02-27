@@ -120,3 +120,15 @@ Reglas v2:
 - no requiere header `X-Tenant-Id`.
 - agregados/rangos calculados en UTC para consistencia global.
 - v1 (`summary`, `top-tenants`, `alerts`, `recent-inventory-adjustments`, `out-of-stock`) se mantiene intacto.
+
+
+### Frontend Dashboard v2 (SuperAdmin)
+
+La UI de `/app/platform/dashboard` extiende v1 sin romper bloques existentes y agrega secciones v2:
+- `platform-executive-signals` con tarjetas `platform-executive-signal-*` y error `platform-executive-signals-error`.
+- `platform-sales-trend` con filtros `platform-sales-trend-filter-date-from|date-to|granularity`, filas `platform-sales-trend-row-{index}` y error `platform-sales-trend-error`.
+- `platform-top-void-tenants` con filtros `platform-top-void-tenants-filter-date-from|date-to|top`, filas `platform-top-void-tenant-row-{tenantId}` y error `platform-top-void-tenants-error`.
+- `platform-stockout-hotspots` con filtros `platform-stockout-hotspots-filter-threshold|top|item-type`, filas `platform-stockout-hotspot-row-{storeId}` y error `platform-stockout-hotspots-error`.
+- `platform-activity-feed` con filtros `platform-activity-feed-filter-take|event-type`, filas `platform-activity-feed-row-{index}` y error `platform-activity-feed-error`.
+
+El botón global `platform-dashboard-refresh` vuelve a consultar bloques v1 + v2 de manera independiente (fallas aisladas por bloque).

@@ -20,6 +20,11 @@ describe('PlatformDashboardApiService', () => {
     await service.getTopTenants({ dateFrom: '2026-01-01', dateTo: '2026-01-31', top: 5, includeInactive: true });
     await service.getRecentInventoryAdjustments({ take: 10, reason: 'Manual', tenantId: 'tenant-1', storeId: 'store-1' });
     await service.getOutOfStock({ tenantId: 'tenant-1', storeId: 'store-1', itemType: 'Product', search: 'cafe', onlyTracked: true, top: 20 });
+    await service.getSalesTrend({ dateFrom: '2026-01-01', dateTo: '2026-01-31', granularity: 'week' });
+    await service.getTopVoidTenants({ dateFrom: '2026-01-01', dateTo: '2026-01-31', top: 9 });
+    await service.getStockoutHotspots({ threshold: 3.5, top: 8, itemType: 'Extra' });
+    await service.getActivityFeed({ take: 15, eventType: 'InventoryAdjusted' });
+    await service.getExecutiveSignals({ dateFrom: '2026-01-01', dateTo: '2026-01-31', previousPeriodCompare: false });
     await service.getAlerts();
 
     expect(getSpy).toHaveBeenNthCalledWith(
@@ -38,6 +43,26 @@ describe('PlatformDashboardApiService', () => {
       4,
       '/v1/platform/dashboard/out-of-stock?tenantId=tenant-1&storeId=store-1&itemType=Product&search=cafe&onlyTracked=true&top=20',
     );
-    expect(getSpy).toHaveBeenNthCalledWith(5, '/v1/platform/dashboard/alerts');
+    expect(getSpy).toHaveBeenNthCalledWith(
+      5,
+      '/v1/platform/dashboard/sales-trend?dateFrom=2026-01-01&dateTo=2026-01-31&granularity=week',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      6,
+      '/v1/platform/dashboard/top-void-tenants?dateFrom=2026-01-01&dateTo=2026-01-31&top=9',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      7,
+      '/v1/platform/dashboard/stockout-hotspots?threshold=3.5&top=8&itemType=Extra',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      8,
+      '/v1/platform/dashboard/activity-feed?take=15&eventType=InventoryAdjusted',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      9,
+      '/v1/platform/dashboard/executive-signals?dateFrom=2026-01-01&dateTo=2026-01-31&previousPeriodCompare=false',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(10, '/v1/platform/dashboard/alerts');
   });
 });

@@ -1,11 +1,20 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
+  PlatformActivityFeedEventType,
+  PlatformActivityFeedItemDto,
+  PlatformActivityFeedQuery,
   PlatformDashboardAlertDto,
   PlatformDashboardSummaryDto,
+  PlatformExecutiveSignalsDto,
   PlatformOutOfStockRowDto,
   PlatformRecentInventoryAdjustmentDto,
+  PlatformDashboardItemType,
+  PlatformSalesTrendPointDto,
+  PlatformSalesTrendQuery,
+  PlatformStockoutHotspotRowDto,
   PlatformTopTenantRowDto,
+  PlatformTopVoidTenantRowDto,
 } from '../../models/platform.models';
 import { PlatformDashboardApiService } from '../../services/platform-dashboard-api.service';
 
@@ -28,6 +37,23 @@ const DEFAULT_SUMMARY: PlatformDashboardSummaryDto = {
   effectiveDateFromUtc: '',
   effectiveDateToUtc: '',
   effectiveLowStockThreshold: 0,
+};
+
+const DEFAULT_EXECUTIVE_SIGNALS: PlatformExecutiveSignalsDto = {
+  fastestGrowingTenantId: null,
+  fastestGrowingTenantName: null,
+  salesGrowthRatePercent: 0,
+  voidRatePercent: 0,
+  tenantsWithNoSalesInRangeCount: 0,
+  storesWithNoAdminStoreCount: 0,
+  tenantsWithNoCatalogTemplateCount: 0,
+  storesWithOutOfStockCount: 0,
+  inventoryAdjustmentCountInRange: 0,
+  topRiskTenantId: null,
+  topRiskTenantName: null,
+  effectiveDateFromUtc: '',
+  effectiveDateToUtc: '',
+  previousPeriodCompare: true,
 };
 
 @Component({
@@ -72,6 +98,37 @@ export class PlatformDashboardPage {
   readonly outSearch = signal('');
   readonly outTop = signal(50);
 
+  readonly executiveSignals = signal<PlatformExecutiveSignalsDto>(DEFAULT_EXECUTIVE_SIGNALS);
+  readonly executiveSignalsLoading = signal(false);
+  readonly executiveSignalsError = signal<string | null>(null);
+
+  readonly salesTrend = signal<PlatformSalesTrendPointDto[]>([]);
+  readonly salesTrendLoading = signal(false);
+  readonly salesTrendError = signal<string | null>(null);
+  readonly salesTrendDateFrom = signal('');
+  readonly salesTrendDateTo = signal('');
+  readonly salesTrendGranularity = signal<'day' | 'week'>('day');
+
+  readonly topVoidTenants = signal<PlatformTopVoidTenantRowDto[]>([]);
+  readonly topVoidTenantsLoading = signal(false);
+  readonly topVoidTenantsError = signal<string | null>(null);
+  readonly topVoidDateFrom = signal('');
+  readonly topVoidDateTo = signal('');
+  readonly topVoidTop = signal(10);
+
+  readonly stockoutHotspots = signal<PlatformStockoutHotspotRowDto[]>([]);
+  readonly stockoutHotspotsLoading = signal(false);
+  readonly stockoutHotspotsError = signal<string | null>(null);
+  readonly stockoutThreshold = signal(5);
+  readonly stockoutTop = signal(10);
+  readonly stockoutItemType = signal<PlatformDashboardItemType | ''>('');
+
+  readonly activityFeed = signal<PlatformActivityFeedItemDto[]>([]);
+  readonly activityFeedLoading = signal(false);
+  readonly activityFeedError = signal<string | null>(null);
+  readonly activityFeedTake = signal(20);
+  readonly activityFeedEventType = signal<PlatformActivityFeedEventType | ''>('');
+
   constructor() {
     void this.refreshAll();
   }
@@ -83,6 +140,11 @@ export class PlatformDashboardPage {
       this.loadAlerts(),
       this.loadRecentAdjustments(),
       this.loadOutOfStock(),
+      this.loadExecutiveSignals(),
+      this.loadSalesTrend(),
+      this.loadTopVoidTenants(),
+      this.loadStockoutHotspots(),
+      this.loadActivityFeed(),
     ]);
   }
 
@@ -162,6 +224,87 @@ export class PlatformDashboardPage {
       this.outOfStockError.set('No se pudo cargar out-of-stock.');
     } finally {
       this.outOfStockLoading.set(false);
+    }
+  }
+
+  async loadExecutiveSignals() {
+    this.executiveSignalsLoading.set(true);
+    this.executiveSignalsError.set(null);
+    try {
+      this.executiveSignals.set(await this.api.getExecutiveSignals());
+    } catch {
+      this.executiveSignalsError.set('No se pudieron cargar señales ejecutivas.');
+    } finally {
+      this.executiveSignalsLoading.set(false);
+    }
+  }
+
+  async loadSalesTrend() {
+    this.salesTrendLoading.set(true);
+    this.salesTrendError.set(null);
+    try {
+      const query: PlatformSalesTrendQuery = {
+        dateFrom: this.salesTrendDateFrom() || undefined,
+        dateTo: this.salesTrendDateTo() || undefined,
+        granularity: this.salesTrendGranularity(),
+      };
+      const response = await this.api.getSalesTrend(query);
+      this.salesTrend.set(response.items);
+    } catch {
+      this.salesTrendError.set('No se pudo cargar sales trend.');
+    } finally {
+      this.salesTrendLoading.set(false);
+    }
+  }
+
+  async loadTopVoidTenants() {
+    this.topVoidTenantsLoading.set(true);
+    this.topVoidTenantsError.set(null);
+    try {
+      const response = await this.api.getTopVoidTenants({
+        dateFrom: this.topVoidDateFrom() || undefined,
+        dateTo: this.topVoidDateTo() || undefined,
+        top: this.topVoidTop(),
+      });
+      this.topVoidTenants.set(response.items);
+    } catch {
+      this.topVoidTenantsError.set('No se pudo cargar top void tenants.');
+    } finally {
+      this.topVoidTenantsLoading.set(false);
+    }
+  }
+
+  async loadStockoutHotspots() {
+    this.stockoutHotspotsLoading.set(true);
+    this.stockoutHotspotsError.set(null);
+    try {
+      const response = await this.api.getStockoutHotspots({
+        threshold: this.stockoutThreshold(),
+        top: this.stockoutTop(),
+        itemType: this.stockoutItemType() || undefined,
+      });
+      this.stockoutHotspots.set(response.items);
+    } catch {
+      this.stockoutHotspotsError.set('No se pudo cargar stockout hotspots.');
+    } finally {
+      this.stockoutHotspotsLoading.set(false);
+    }
+  }
+
+  async loadActivityFeed() {
+    this.activityFeedLoading.set(true);
+    this.activityFeedError.set(null);
+    try {
+      const query: PlatformActivityFeedQuery = {
+        take: this.activityFeedTake(),
+        eventType: this.activityFeedEventType() || undefined,
+      };
+      const response = await this.api.getActivityFeed(query);
+      this.activityFeed.set(response.items);
+    } catch {
+      this.activityFeedError.set('No se pudo cargar activity feed.');
+    } finally {
+      this.activityFeedLoading.set(false);
     }
   }
 

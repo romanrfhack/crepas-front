@@ -182,3 +182,128 @@ export interface PlatformOutOfStockRowDto {
 export interface PlatformOutOfStockResponseDto {
   items: PlatformOutOfStockRowDto[];
 }
+
+export type PlatformSalesTrendGranularity = 'day' | 'week';
+
+export interface PlatformSalesTrendQuery {
+  dateFrom?: string;
+  dateTo?: string;
+  granularity?: PlatformSalesTrendGranularity;
+}
+
+export interface PlatformSalesTrendPointDto {
+  bucketStartUtc: string;
+  bucketLabel: string;
+  salesCount: number;
+  salesAmount: number;
+  voidedSalesCount: number;
+  averageTicket: number;
+}
+
+export interface PlatformSalesTrendResponseDto {
+  items: PlatformSalesTrendPointDto[];
+  effectiveDateFromUtc: string;
+  effectiveDateToUtc: string;
+  granularity: PlatformSalesTrendGranularity;
+}
+
+export interface PlatformTopVoidTenantsQuery {
+  dateFrom?: string;
+  dateTo?: string;
+  top?: number;
+}
+
+export interface PlatformTopVoidTenantRowDto {
+  tenantId: string;
+  tenantName: string;
+  verticalId: string;
+  verticalName: string;
+  voidedSalesCount: number;
+  voidedSalesAmount: number;
+  totalSalesCount: number;
+  voidRate: number;
+  storeCount: number;
+}
+
+export interface PlatformTopVoidTenantsResponseDto {
+  items: PlatformTopVoidTenantRowDto[];
+  effectiveDateFromUtc: string;
+  effectiveDateToUtc: string;
+  top: number;
+}
+
+export type PlatformDashboardItemType = 'Product' | 'Extra' | 'OptionItem';
+
+export interface PlatformStockoutHotspotsQuery {
+  threshold?: number;
+  top?: number;
+  itemType?: PlatformDashboardItemType;
+}
+
+export interface PlatformStockoutHotspotRowDto {
+  tenantId: string;
+  tenantName: string;
+  storeId: string;
+  storeName: string;
+  outOfStockItemsCount: number;
+  lowStockItemsCount: number;
+  lastInventoryMovementAtUtc: string | null;
+  trackedItemsCount: number;
+}
+
+export interface PlatformStockoutHotspotsResponseDto {
+  items: PlatformStockoutHotspotRowDto[];
+  threshold: number;
+  top: number;
+  itemType: PlatformDashboardItemType | null;
+}
+
+export type PlatformActivityFeedEventType = 'SaleCreated' | 'SaleVoided' | 'InventoryAdjusted';
+
+export interface PlatformActivityFeedQuery {
+  take?: number;
+  eventType?: PlatformActivityFeedEventType;
+}
+
+export interface PlatformActivityFeedItemDto {
+  eventType: PlatformActivityFeedEventType;
+  occurredAtUtc: string;
+  tenantId: string;
+  tenantName: string;
+  storeId: string;
+  storeName: string;
+  title: string;
+  description: string;
+  referenceId: string | null;
+  severity: string;
+  actorUserId: string | null;
+}
+
+export interface PlatformActivityFeedResponseDto {
+  items: PlatformActivityFeedItemDto[];
+  take: number;
+  eventType: PlatformActivityFeedEventType | null;
+}
+
+export interface PlatformExecutiveSignalsQuery {
+  dateFrom?: string;
+  dateTo?: string;
+  previousPeriodCompare?: boolean;
+}
+
+export interface PlatformExecutiveSignalsDto {
+  fastestGrowingTenantId: string | null;
+  fastestGrowingTenantName: string | null;
+  salesGrowthRatePercent: number;
+  voidRatePercent: number;
+  tenantsWithNoSalesInRangeCount: number;
+  storesWithNoAdminStoreCount: number;
+  tenantsWithNoCatalogTemplateCount: number;
+  storesWithOutOfStockCount: number;
+  inventoryAdjustmentCountInRange: number;
+  topRiskTenantId: string | null;
+  topRiskTenantName: string | null;
+  effectiveDateFromUtc: string;
+  effectiveDateToUtc: string;
+  previousPeriodCompare: boolean;
+}

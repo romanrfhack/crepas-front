@@ -2,13 +2,23 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../../core/services/api-client';
 import {
+  PlatformActivityFeedQuery,
+  PlatformActivityFeedResponseDto,
   PlatformDashboardAlertsResponseDto,
+  PlatformExecutiveSignalsDto,
+  PlatformExecutiveSignalsQuery,
   PlatformDashboardSummaryDto,
   PlatformOutOfStockQuery,
   PlatformOutOfStockResponseDto,
   PlatformRecentInventoryAdjustmentsQuery,
   PlatformRecentInventoryAdjustmentsResponseDto,
+  PlatformSalesTrendQuery,
+  PlatformSalesTrendResponseDto,
+  PlatformStockoutHotspotsQuery,
+  PlatformStockoutHotspotsResponseDto,
   PlatformSummaryQuery,
+  PlatformTopVoidTenantsQuery,
+  PlatformTopVoidTenantsResponseDto,
   PlatformTopTenantsQuery,
   PlatformTopTenantsResponseDto,
 } from '../models/platform.models';
@@ -45,6 +55,38 @@ export class PlatformDashboardApiService {
   getOutOfStock(query?: PlatformOutOfStockQuery) {
     return firstValueFrom(
       this.apiClient.get<PlatformOutOfStockResponseDto>(this.buildPath('/out-of-stock', query)),
+    );
+  }
+
+  getSalesTrend(query?: PlatformSalesTrendQuery) {
+    return firstValueFrom(
+      this.apiClient.get<PlatformSalesTrendResponseDto>(this.buildPath('/sales-trend', query)),
+    );
+  }
+
+  getTopVoidTenants(query?: PlatformTopVoidTenantsQuery) {
+    return firstValueFrom(
+      this.apiClient.get<PlatformTopVoidTenantsResponseDto>(this.buildPath('/top-void-tenants', query)),
+    );
+  }
+
+  getStockoutHotspots(query?: PlatformStockoutHotspotsQuery) {
+    return firstValueFrom(
+      this.apiClient.get<PlatformStockoutHotspotsResponseDto>(
+        this.buildPath('/stockout-hotspots', query),
+      ),
+    );
+  }
+
+  getActivityFeed(query?: PlatformActivityFeedQuery) {
+    return firstValueFrom(
+      this.apiClient.get<PlatformActivityFeedResponseDto>(this.buildPath('/activity-feed', query)),
+    );
+  }
+
+  getExecutiveSignals(query?: PlatformExecutiveSignalsQuery) {
+    return firstValueFrom(
+      this.apiClient.get<PlatformExecutiveSignalsDto>(this.buildPath('/executive-signals', query)),
     );
   }
 
