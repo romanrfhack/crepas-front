@@ -297,6 +297,8 @@ public sealed class AdminUsersCreateIntegrationTests : IClassFixture<CobranzaDig
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
 
+        await EnsureScopeSeedDataAsync(db);
+
         var tenants = await db.Tenants.AsNoTracking().OrderBy(x => x.Name).Take(2).ToListAsync();
         Assert.True(tenants.Count >= 2, "Expected at least 2 seeded tenants for scope tests.");
 
@@ -305,6 +307,47 @@ public sealed class AdminUsersCreateIntegrationTests : IClassFixture<CobranzaDig
         var storeB = stores.First(x => x.TenantId == tenants[1].Id);
 
         return new ScopeData(tenants[0], tenants[1], storeA, storeB);
+    }
+
+    private static async Task EnsureScopeSeedDataAsync(CobranzaDigitalDbContext db)
+    {
+        var tenants = await db.Tenants.OrderBy(x => x.Name).ToListAsync();
+        if (tenants.Count >= 2)
+        {
+            return;
+        }
+
+        var templateTenant = tenants.FirstOrDefault();
+        var verticalId = templateTenant?.VerticalId
+            ?? await db.Verticals.AsNoTracking().OrderBy(x => x.Name).Select(x => x.Id).FirstAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var tenant = new Tenant
+        {
+            Id = Guid.NewGuid(),
+            Name = $"Scope Tenant {Guid.NewGuid():N}"[..20],
+            Slug = $"scope-tenant-{Guid.NewGuid():N}"[..30],
+            VerticalId = verticalId,
+            IsActive = true,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+
+        var store = new Store
+        {
+            Id = Guid.NewGuid(),
+            Name = "Scope Store",
+            TenantId = tenant.Id,
+            IsActive = true,
+            TimeZoneId = "America/Mexico_City",
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+
+        tenant.DefaultStoreId = store.Id;
+        db.Tenants.Add(tenant);
+        db.Stores.Add(store);
+        await db.SaveChangesAsync();
     }
 
     private async Task<HttpResponseMessage> CreateAdminUserAsync(string token, CreateUserRequest request)
