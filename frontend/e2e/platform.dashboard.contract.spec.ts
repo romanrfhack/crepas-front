@@ -60,7 +60,7 @@ test('platform dashboard v1 ui-contract', async ({ page }) => {
   await page.getByTestId('platform-top-tenants-filter-date-from').fill('2026-01-01');
   await page.getByTestId('platform-top-tenants-filter-date-to').fill('2026-01-31');
   await page.getByTestId('platform-top-tenants-filter-top').fill('7');
-  await page.getByRole('button', { name: 'Aplicar' }).first().click();
+  await page.getByTestId('platform-top-tenants').getByRole('button', { name: 'Aplicar' }).click();
   await expect.poll(() => capturedTopTenantQueries[capturedTopTenantQueries.length - 1]).toContain('top=7');
 
   const outSection = page.getByTestId('platform-out-of-stock');
