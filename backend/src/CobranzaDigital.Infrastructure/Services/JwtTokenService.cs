@@ -133,7 +133,7 @@ public sealed class JwtTokenService : ITokenService
         };
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
-        if (roles.Any(role => string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase)))
+        if (roles.Any(role => string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase)))
         {
             claims.Add(new Claim("scope", "cobranza.read"));
         }

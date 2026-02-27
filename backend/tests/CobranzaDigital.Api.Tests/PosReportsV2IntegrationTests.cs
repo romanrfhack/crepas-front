@@ -330,11 +330,9 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
 
         var requiresTenant = roles.Any(role => string.Equals(role, "TenantAdmin", StringComparison.OrdinalIgnoreCase))
             || roles.Any(role => string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(role, "Manager", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase));
         var requiresStore = roles.Any(role => string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
             || string.Equals(role, "Manager", StringComparison.OrdinalIgnoreCase)
             || string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase));
         var isSuperAdmin = roles.Any(role => string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase));

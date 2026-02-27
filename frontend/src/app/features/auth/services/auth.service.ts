@@ -91,7 +91,7 @@ export class AuthService {
       return CASHIER_POST_LOGIN_ROUTE;
     }
 
-    if (this.hasRole('Admin')) {
+    if (this.hasRole('AdminStore') || this.hasRole('Manager') || this.hasRole('TenantAdmin') || this.hasRole('SuperAdmin')) {
       const normalizedReturnUrl = this.normalizeReturnUrl(returnUrl);
       if (normalizedReturnUrl) {
         return normalizedReturnUrl;

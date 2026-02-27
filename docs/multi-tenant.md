@@ -34,7 +34,7 @@ Notas:
 
 ## Roles
 - **SuperAdmin**: acceso a `/api/v1/platform/*` (`PlatformOnly`).
-- **TenantAdmin / Manager / Admin**: operación y reportes POS dentro de su tenant.
+- **TenantAdmin / Manager / AdminStore**: operación y reportes POS dentro de su tenant.
 - **Cashier**: operación POS, sin acceso a plataforma.
 
 

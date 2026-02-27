@@ -133,27 +133,7 @@ public static class PosBootstrapper
 
         await db.SaveChangesAsync().ConfigureAwait(false);
 
-        var usersInAdminRole = await db.UserRoles
-            .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, RoleName = r.Name })
-            .Where(x => x.RoleName == "Admin")
-            .Select(x => x.UserId)
-            .ToListAsync()
-            .ConfigureAwait(false);
-
-        var adminStoreRoleId = await db.Roles.Where(r => r.Name == "AdminStore").Select(r => (Guid?)r.Id).FirstOrDefaultAsync().ConfigureAwait(false);
-        if (adminStoreRoleId.HasValue)
-        {
-            foreach (var userId in usersInAdminRole)
-            {
-                var exists = await db.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.RoleId == adminStoreRoleId.Value).ConfigureAwait(false);
-                if (!exists)
-                {
-                    db.UserRoles.Add(new Microsoft.AspNetCore.Identity.IdentityUserRole<Guid> { UserId = userId, RoleId = adminStoreRoleId.Value });
-                }
-            }
-
-            await db.SaveChangesAsync().ConfigureAwait(false);
-        }
+        await MigrateLegacyAdminRoleAssignmentsAsync(db).ConfigureAwait(false);
 
         await db.Categories.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
         await db.Products.Where(x => x.CatalogTemplateId == Guid.Empty).ExecuteUpdateAsync(x => x.SetProperty(y => y.CatalogTemplateId, defaultTemplate.Id)).ConfigureAwait(false);
@@ -176,6 +156,51 @@ public static class PosBootstrapper
                 ShowOnlyInStock = false
             });
             await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+    }
+
+    private static async Task MigrateLegacyAdminRoleAssignmentsAsync(CobranzaDigitalDbContext db)
+    {
+        var adminRoleId = await db.Roles.AsNoTracking()
+            .Where(r => r.Name == "Admin")
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync()
+            .ConfigureAwait(false);
+        var adminStoreRoleId = await db.Roles.AsNoTracking()
+            .Where(r => r.Name == "AdminStore")
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync()
+            .ConfigureAwait(false);
+
+        if (!adminRoleId.HasValue || !adminStoreRoleId.HasValue)
+        {
+            return;
+        }
+
+        var legacyUserIds = await db.UserRoles.AsNoTracking()
+            .Where(ur => ur.RoleId == adminRoleId.Value)
+            .Select(ur => ur.UserId)
+            .Distinct()
+            .ToListAsync()
+            .ConfigureAwait(false);
+
+        foreach (var userId in legacyUserIds)
+        {
+            var hasAdminStoreRole = await db.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.RoleId == adminStoreRoleId.Value)
+                .ConfigureAwait(false);
+            if (!hasAdminStoreRole)
+            {
+                db.UserRoles.Add(new Microsoft.AspNetCore.Identity.IdentityUserRole<Guid> { UserId = userId, RoleId = adminStoreRoleId.Value });
+            }
+        }
+
+        if (legacyUserIds.Count > 0)
+        {
+            await db.SaveChangesAsync().ConfigureAwait(false);
+            await db.UserRoles
+                .Where(ur => ur.RoleId == adminRoleId.Value)
+                .ExecuteDeleteAsync()
+                .ConfigureAwait(false);
         }
     }
 }

@@ -32,7 +32,7 @@ describe('AppNavComponent', () => {
 
     const fixture = TestBed.createComponent(AppNavComponent);
     fixture.componentRef.setInput('navItems', APP_NAV_CONFIG);
-    fixture.componentRef.setInput('userRoles', ['Admin']);
+    fixture.componentRef.setInput('userRoles', ['AdminStore']);
     fixture.detectChanges();
 
     const content = fixture.nativeElement.textContent as string;

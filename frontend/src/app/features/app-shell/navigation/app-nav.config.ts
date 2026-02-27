@@ -16,61 +16,61 @@ export interface NavSection {
 export const APP_NAV_CONFIG: NavSection[] = [
   {
     label: 'General',
-    roles: ['AdminStore', 'Admin', 'SuperAdmin'],
+    roles: ['AdminStore', 'SuperAdmin'],
     defaultExpanded: true,
     children: [
       {
         label: 'Dashboard',
         path: '/app/dashboard',
-        roles: ['AdminStore', 'Admin', 'SuperAdmin'],
+        roles: ['AdminStore', 'SuperAdmin'],
       },
     ],
   },
   {
     label: 'POS',
-    roles: ['AdminStore', 'Admin', 'Cashier', 'Manager'],
+    roles: ['AdminStore', 'Cashier', 'Manager'],
     defaultExpanded: true,
     children: [
       {
         label: 'Caja POS',
         path: '/app/pos/caja',
-        roles: ['AdminStore', 'Admin', 'Cashier'],
+        roles: ['AdminStore', 'Cashier'],
       },
       {
         label: 'Reportes',
         path: '/app/pos/reportes',
-        roles: ['AdminStore', 'Admin', 'Manager'],
+        roles: ['AdminStore', 'Manager'],
       },
     ],
   },
   {
     label: 'Admin',
-    roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'],
+    roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'],
     defaultExpanded: true,
     children: [
       {
         label: 'Users',
         path: '/app/admin/users',
-        roles: ['AdminStore', 'TenantAdmin', 'SuperAdmin', 'Admin'],
+        roles: ['AdminStore', 'TenantAdmin', 'SuperAdmin'],
       },
       {
         label: 'Roles',
         path: '/app/admin/roles',
-        roles: ['AdminStore', 'TenantAdmin', 'SuperAdmin', 'Admin'],
+        roles: ['AdminStore', 'TenantAdmin', 'SuperAdmin'],
       },
       {
         label: 'POS Catálogo',
         path: '/app/admin/pos/catalog/categories',
-        roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'],
+        roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'],
         children: [
-          { label: 'Categories', path: '/app/admin/pos/catalog/categories', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Products', path: '/app/admin/pos/catalog/products', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Option Sets', path: '/app/admin/pos/catalog/option-sets', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Schemas', path: '/app/admin/pos/catalog/schemas', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Extras', path: '/app/admin/pos/catalog/extras', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Included Items', path: '/app/admin/pos/catalog/included-items', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Overrides', path: '/app/admin/pos/catalog/overrides', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
-          { label: 'Inventory', path: '/app/admin/pos/inventory', roles: ['AdminStore', 'Admin', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Categories', path: '/app/admin/pos/catalog/categories', roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Products', path: '/app/admin/pos/catalog/products', roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Option Sets', path: '/app/admin/pos/catalog/option-sets', roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Schemas', path: '/app/admin/pos/catalog/schemas', roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Extras', path: '/app/admin/pos/catalog/extras', roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Included Items', path: '/app/admin/pos/catalog/included-items', roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Overrides', path: '/app/admin/pos/catalog/overrides', roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+          { label: 'Inventory', path: '/app/admin/pos/inventory', roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
         ],
       },
     ],

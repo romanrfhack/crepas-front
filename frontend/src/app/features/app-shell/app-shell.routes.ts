@@ -28,9 +28,9 @@ export const appShellRoutes: Routes = [
       },
       {
         path: 'pos',
-        canMatch: [roleGuard(['AdminStore', 'Admin', 'Cashier', 'Manager'])],
-        canActivate: [roleGuard(['AdminStore', 'Admin', 'Cashier', 'Manager'])],
-        data: { roles: ['AdminStore', 'Admin', 'Cashier', 'Manager'] },
+        canMatch: [roleGuard(['AdminStore', 'Cashier', 'Manager'])],
+        canActivate: [roleGuard(['AdminStore', 'Cashier', 'Manager'])],
+        data: { roles: ['AdminStore', 'Cashier', 'Manager'] },
         loadChildren: () => import('../pos/pos.routes').then((m) => m.posRoutes),
       },
       {

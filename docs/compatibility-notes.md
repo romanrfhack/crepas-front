@@ -102,9 +102,8 @@ No se removieron rutas ni campos existentes (compatibilidad Release A/B preserva
 - Compatibilidad: los 3 campos son nullable y se agregaron al final del DTO; clientes legacy pueden ignorarlos.
 - Limitación explícita: ajustes manuales históricos o filas sin metadata persistida seguirán devolviendo `null` en estos campos.
 
-## 2026-02-26 — Admin role transition to AdminStore (temporary compatibility)
+## 2026-02-26 — Admin role transition to AdminStore (temporary compatibility, closed)
 
 - Se introduce rol `AdminStore` como nombre objetivo del administrador de sucursal.
-- Compatibilidad temporal: policies y guards aceptan `AdminStore` y también `Admin` (legacy) mientras dura la migración.
-- Seeder/bootstrapping agrega `AdminStore` y replica membresía desde `Admin` para evitar corte de acceso inmediato.
-- Deprecación: `Admin` queda en modo legado y debe removerse en una fase posterior una vez migrados todos los usuarios.
+- Cierre de transición: policies, guards, scoping y emisión de claims/scope ahora operan solo con el modelo final (`SuperAdmin`, `TenantAdmin`, `AdminStore`, `Manager`, `Cashier`).
+- Bootstrapping ejecuta backfill final seguro de usuarios legacy (`Admin` -> `AdminStore`) y elimina membresías `Admin` para evitar dependencia funcional posterior.

@@ -15,7 +15,6 @@ public sealed class UserAdminService : IUserAdminService
 {
     private static readonly HashSet<string> ProtectedRoles = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Admin",
         "AdminStore",
         "User"
     };
@@ -23,7 +22,6 @@ public sealed class UserAdminService : IUserAdminService
     private static readonly HashSet<string> RolesRequiringStore = new(StringComparer.OrdinalIgnoreCase)
     {
         "AdminStore",
-        "Admin",
         "Manager",
         "Cashier"
     };
@@ -255,9 +253,9 @@ public sealed class UserAdminService : IUserAdminService
     private static void ValidateRoleAssignment(ActorScope actor, IReadOnlyCollection<string> normalizedRoles)
     {
         var allowed = actor.IsSuperAdmin
-            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SuperAdmin", "TenantAdmin", "AdminStore", "Admin", "Manager", "Cashier", "User", "Collector" }
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SuperAdmin", "TenantAdmin", "AdminStore", "Manager", "Cashier", "User", "Collector" }
             : actor.IsTenantAdmin
-                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TenantAdmin", "AdminStore", "Admin", "Manager", "Cashier", "User", "Collector" }
+                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TenantAdmin", "AdminStore", "Manager", "Cashier", "User", "Collector" }
                 : actor.IsAdminStore
                     ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Manager", "Cashier", "User", "Collector" }
                     : throw new ForbiddenException("You do not have access to assign roles.");
@@ -307,7 +305,7 @@ public sealed class UserAdminService : IUserAdminService
         return new ActorScope(
             roles.Any(r => string.Equals(r, "SuperAdmin", StringComparison.OrdinalIgnoreCase)),
             roles.Any(r => string.Equals(r, "TenantAdmin", StringComparison.OrdinalIgnoreCase)),
-            roles.Any(r => string.Equals(r, "AdminStore", StringComparison.OrdinalIgnoreCase) || string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase)),
+            roles.Any(r => string.Equals(r, "AdminStore", StringComparison.OrdinalIgnoreCase)),
             actor.TenantId,
             actor.StoreId);
     }

@@ -552,7 +552,7 @@ export class PosCajaPage implements OnDestroy {
       if (this.isVoidForbiddenError(error)) {
         this.voidForbiddenError.set(true);
         this.errorMessage.set(
-          'No autorizado para cancelar esta venta. Solo Manager/Admin o el Cashier dueño del turno vigente pueden anularla.',
+          'No autorizado para cancelar esta venta. Solo Manager/AdminStore o el Cashier dueño del turno vigente pueden anularla.',
         );
       } else if (this.getHttpStatus(error) === 0) {
         this.errorMessage.set(

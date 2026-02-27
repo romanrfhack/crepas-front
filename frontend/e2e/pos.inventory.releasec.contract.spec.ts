@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
       localStorage.setItem('pos_active_store_id', 'store-e2e');
       localStorage.setItem('platform_selected_tenant_id', 'tenant-e2e');
     },
-    buildJwt(['SuperAdmin', 'Admin', 'Manager', 'TenantAdmin', 'Cashier']),
+    buildJwt(['SuperAdmin', 'AdminStore', 'Manager', 'TenantAdmin', 'Cashier']),
   );
 });
 

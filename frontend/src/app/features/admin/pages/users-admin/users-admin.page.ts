@@ -95,7 +95,7 @@ import { RoleDto, UserSummary } from '../../models/admin.models';
                         [value]="userRoleDrafts()[user.id] || user.roles.join(', ')"
                         list="available-role-options"
                         (change)="onUserRolesDraftChange(user.id, $event)"
-                        placeholder="Ej: Admin, Cashier"
+                        placeholder="Ej: AdminStore, Cashier"
                       />
                       <button
                         type="button"
