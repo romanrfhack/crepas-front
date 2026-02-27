@@ -4,15 +4,19 @@ import {
   PlatformActivityFeedEventType,
   PlatformActivityFeedItemDto,
   PlatformActivityFeedQuery,
+  PlatformDashboardAlertDrilldownItemDto,
   PlatformDashboardAlertDto,
+  PlatformDashboardItemType,
   PlatformDashboardSummaryDto,
   PlatformExecutiveSignalsDto,
   PlatformOutOfStockRowDto,
   PlatformRecentInventoryAdjustmentDto,
-  PlatformDashboardItemType,
   PlatformSalesTrendPointDto,
   PlatformSalesTrendQuery,
+  PlatformStockoutDetailsMode,
   PlatformStockoutHotspotRowDto,
+  PlatformStoreStockoutDetailDto,
+  PlatformTenantOverviewDto,
   PlatformTopTenantRowDto,
   PlatformTopVoidTenantRowDto,
 } from '../../models/platform.models';
@@ -55,6 +59,8 @@ const DEFAULT_EXECUTIVE_SIGNALS: PlatformExecutiveSignalsDto = {
   effectiveDateToUtc: '',
   previousPeriodCompare: true,
 };
+
+type DashboardDrilldownPanel = 'none' | 'alert' | 'tenant' | 'stockout';
 
 @Component({
   selector: 'app-platform-dashboard-page',
@@ -128,6 +134,27 @@ export class PlatformDashboardPage {
   readonly activityFeedError = signal<string | null>(null);
   readonly activityFeedTake = signal(20);
   readonly activityFeedEventType = signal<PlatformActivityFeedEventType | ''>('');
+
+  readonly activeDrilldownPanel = signal<DashboardDrilldownPanel>('none');
+
+  readonly alertDrilldownCode = signal('');
+  readonly alertDrilldownItems = signal<PlatformDashboardAlertDrilldownItemDto[]>([]);
+  readonly alertDrilldownLoading = signal(false);
+  readonly alertDrilldownError = signal<string | null>(null);
+
+  readonly tenantOverview = signal<PlatformTenantOverviewDto | null>(null);
+  readonly tenantOverviewLoading = signal(false);
+  readonly tenantOverviewError = signal<string | null>(null);
+
+  readonly selectedStockoutStoreId = signal('');
+  readonly stockoutDetails = signal<PlatformStoreStockoutDetailDto | null>(null);
+  readonly stockoutDetailsLoading = signal(false);
+  readonly stockoutDetailsError = signal<string | null>(null);
+  readonly stockoutDetailsItemType = signal<PlatformDashboardItemType | ''>('');
+  readonly stockoutDetailsSearch = signal('');
+  readonly stockoutDetailsThreshold = signal(5);
+  readonly stockoutDetailsMode = signal<PlatformStockoutDetailsMode>('out-of-stock');
+  readonly stockoutDetailsTake = signal(200);
 
   constructor() {
     void this.refreshAll();
@@ -308,6 +335,91 @@ export class PlatformDashboardPage {
     }
   }
 
+  async openAlertDrilldown(code: string) {
+    this.activeDrilldownPanel.set('alert');
+    this.alertDrilldownCode.set(code);
+    this.alertDrilldownItems.set([]);
+    this.alertDrilldownError.set(null);
+    this.alertDrilldownLoading.set(true);
+
+    try {
+      const response = await this.api.getAlertDrilldown({ code });
+      this.alertDrilldownItems.set(response.items);
+    } catch (error: unknown) {
+      this.alertDrilldownError.set(
+        this.getErrorStatus(error) === 400
+          ? 'Código de alerta inválido o no soportado.'
+          : 'No se pudo cargar el drill-down de la alerta.',
+      );
+    } finally {
+      this.alertDrilldownLoading.set(false);
+    }
+  }
+
+  async openTenantOverview(tenantId: string) {
+    this.activeDrilldownPanel.set('tenant');
+    this.tenantOverviewError.set(null);
+    this.tenantOverview.set(null);
+    this.tenantOverviewLoading.set(true);
+
+    try {
+      const response = await this.api.getTenantOverview(tenantId);
+      this.tenantOverview.set(response);
+    } catch {
+      this.tenantOverviewError.set('No se pudo cargar el overview del tenant.');
+    } finally {
+      this.tenantOverviewLoading.set(false);
+    }
+  }
+
+  async openStoreStockoutDetails(storeId: string) {
+    this.activeDrilldownPanel.set('stockout');
+    this.selectedStockoutStoreId.set(storeId);
+    this.stockoutDetailsError.set(null);
+    this.stockoutDetails.set(null);
+    await this.loadStoreStockoutDetails();
+  }
+
+  async loadStoreStockoutDetails() {
+    if (!this.selectedStockoutStoreId()) {
+      return;
+    }
+
+    this.stockoutDetailsLoading.set(true);
+    this.stockoutDetailsError.set(null);
+
+    try {
+      const response = await this.api.getStoreStockoutDetails(this.selectedStockoutStoreId(), {
+        itemType: this.stockoutDetailsItemType() || undefined,
+        search: this.stockoutDetailsSearch() || undefined,
+        threshold: this.stockoutDetailsThreshold(),
+        mode: this.stockoutDetailsMode(),
+        take: this.stockoutDetailsTake(),
+      });
+      this.stockoutDetails.set(response);
+    } catch {
+      this.stockoutDetailsError.set('No se pudo cargar el detalle de stockout.');
+    } finally {
+      this.stockoutDetailsLoading.set(false);
+    }
+  }
+
+  async applyStockoutDetailFilters() {
+    await this.loadStoreStockoutDetails();
+  }
+
+  closeDrilldown() {
+    this.activeDrilldownPanel.set('none');
+    this.alertDrilldownCode.set('');
+    this.alertDrilldownItems.set([]);
+    this.alertDrilldownError.set(null);
+    this.tenantOverview.set(null);
+    this.tenantOverviewError.set(null);
+    this.selectedStockoutStoreId.set('');
+    this.stockoutDetails.set(null);
+    this.stockoutDetailsError.set(null);
+  }
+
   severityClass(severity: string) {
     const normalized = severity.toLowerCase();
     if (normalized === 'high') {
@@ -323,5 +435,14 @@ export class PlatformDashboardPage {
 
   money(value: number) {
     return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(value);
+  }
+
+  private getErrorStatus(error: unknown): number | undefined {
+    if (typeof error !== 'object' || error === null || !('status' in error)) {
+      return undefined;
+    }
+
+    const status = error.status;
+    return typeof status === 'number' ? status : undefined;
   }
 }

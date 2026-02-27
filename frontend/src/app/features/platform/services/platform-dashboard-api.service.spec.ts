@@ -4,7 +4,7 @@ import { ApiClient } from '../../../core/services/api-client';
 import { PlatformDashboardApiService } from './platform-dashboard-api.service';
 
 describe('PlatformDashboardApiService', () => {
-  it('builds dashboard query params', async () => {
+  it('builds dashboard query params including v3 drilldown endpoints', async () => {
     const getSpy = vi.fn().mockReturnValue(of({ items: [], alerts: [] }));
 
     TestBed.configureTestingModule({
@@ -25,6 +25,9 @@ describe('PlatformDashboardApiService', () => {
     await service.getStockoutHotspots({ threshold: 3.5, top: 8, itemType: 'Extra' });
     await service.getActivityFeed({ take: 15, eventType: 'InventoryAdjusted' });
     await service.getExecutiveSignals({ dateFrom: '2026-01-01', dateTo: '2026-01-31', previousPeriodCompare: false });
+    await service.getAlertDrilldown({ code: 'TENANT_WITHOUT_TEMPLATE', take: 200, tenantId: 'tenant-1' });
+    await service.getTenantOverview('tenant-1', { dateFrom: '2026-01-01', dateTo: '2026-01-31', threshold: 4.5 });
+    await service.getStoreStockoutDetails('store-1', { itemType: 'Product', search: 'sku', threshold: 3, mode: 'all', take: 120 });
     await service.getAlerts();
 
     expect(getSpy).toHaveBeenNthCalledWith(
@@ -63,6 +66,18 @@ describe('PlatformDashboardApiService', () => {
       9,
       '/v1/platform/dashboard/executive-signals?dateFrom=2026-01-01&dateTo=2026-01-31&previousPeriodCompare=false',
     );
-    expect(getSpy).toHaveBeenNthCalledWith(10, '/v1/platform/dashboard/alerts');
+    expect(getSpy).toHaveBeenNthCalledWith(
+      10,
+      '/v1/platform/dashboard/alerts/drilldown?code=TENANT_WITHOUT_TEMPLATE&take=200&tenantId=tenant-1',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      11,
+      '/v1/platform/dashboard/tenants/tenant-1/overview?dateFrom=2026-01-01&dateTo=2026-01-31&threshold=4.5',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      12,
+      '/v1/platform/dashboard/stores/store-1/stockout-details?itemType=Product&search=sku&threshold=3&mode=all&take=120',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(13, '/v1/platform/dashboard/alerts');
   });
 });

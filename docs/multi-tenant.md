@@ -148,3 +148,11 @@ Reglas:
 - Son aditivos (no rompen contratos v1/v2).
 
 Referencia de contrato: `docs/platform-dashboard-contract-sheet.md` (sección v3).
+
+## Platform Dashboard v3 UI (SuperAdmin)
+
+- La UI `/app/platform/dashboard` ahora permite drill-down accionable sin salir de la página:
+  - Alertas: abre panel con `GET /api/v1/platform/dashboard/alerts/drilldown?code=...`.
+  - Top tenants: abre overview con `GET /api/v1/platform/dashboard/tenants/{tenantId}/overview`.
+  - Stockout hotspots: abre detalle de tienda con `GET /api/v1/platform/dashboard/stores/{storeId}/stockout-details` y filtros (`itemType`, `search`, `threshold`, `mode`, `take`).
+- Se establecen `data-testid` contractuales para consumo E2E estable (drilldown open/close, title, rows, empty/error y filtros).

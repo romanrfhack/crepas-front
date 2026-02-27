@@ -7,3 +7,42 @@
 .severity-high { border-left:4px solid #dc2626; padding-left:.5rem; }
 .severity-medium { border-left:4px solid #f59e0b; padding-left:.5rem; }
 .severity-low { border-left:4px solid #22c55e; padding-left:.5rem; }
+.drilldown-row { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-bottom:.5rem; }
+
+.drilldown-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 30%);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 100;
+}
+
+.drilldown-panel {
+  width: min(720px, 95vw);
+  height: 100%;
+  background: #fff;
+  border-left: 1px solid #ddd;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.drilldown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: .75rem;
+}
+
+.drilldown-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: .75rem;
+  margin-bottom: .5rem;
+}
+
+.overview-grid {
+  display: grid;
+  gap: .5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
