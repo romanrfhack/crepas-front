@@ -104,7 +104,10 @@ test('create user success from tenant+store context submits POST and refreshes l
   await page.getByTestId('admin-user-form-email').fill('new@test.local');
   await page.getByTestId('admin-user-form-username').fill('new-user');
   await page.getByTestId('admin-user-form-password').fill('Temp123!');
-  await page.getByTestId('admin-user-form-submit').click();
+  await page
+    .getByTestId('admin-users-create-context-badge')
+    .getByTestId('admin-user-form-submit')
+    .click();
 
   await expect(page.getByTestId('admin-user-form-success')).toBeVisible();
   await expect(page.getByTestId('admin-user-form-error')).toHaveCount(0);
@@ -143,11 +146,17 @@ test('create user error maps conflict and validation responses with stable error
   await page.getByTestId('admin-user-form-email').fill('dup@test.local');
   await page.getByTestId('admin-user-form-username').fill('dup-user');
   await page.getByTestId('admin-user-form-password').fill('Temp123!');
-  await page.getByTestId('admin-user-form-submit').click();
+  await page
+    .getByTestId('admin-users-create-context-badge')
+    .getByTestId('admin-user-form-submit')
+    .click();
   await expect(page.getByTestId('admin-user-form-error')).toBeVisible();
 
   await page.getByTestId('admin-user-form-email').fill('bad-store@test.local');
-  await page.getByTestId('admin-user-form-submit').click();
+  await page
+    .getByTestId('admin-users-create-context-badge')
+    .getByTestId('admin-user-form-submit')
+    .click();
   await expect(page.getByTestId('admin-user-form-error')).toBeVisible();
 });
 
