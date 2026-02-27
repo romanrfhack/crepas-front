@@ -8,6 +8,7 @@ using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CobranzaDigital.Api.Tests;
@@ -179,9 +180,11 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
         await db.Database.EnsureDeletedAsync();
         await db.Database.EnsureCreatedAsync();
+        await IdentitySeeder.SeedAsync(scope.ServiceProvider, configuration);
 
         var now = DateTimeOffset.UtcNow;
         var baseDay = new DateTimeOffset(now.Year, now.Month, now.Day, 0, 0, 0, TimeSpan.Zero);
