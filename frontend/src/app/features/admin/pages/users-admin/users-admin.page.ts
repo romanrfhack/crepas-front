@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
+import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../../auth/services/auth.service';
 import { AdminRolesService } from '../../services/admin-roles.service';
 import { AdminUsersService } from '../../services/admin-users.service';
@@ -195,6 +196,7 @@ export class UsersAdminPage {
   private readonly adminUsersService = inject(AdminUsersService);
   private readonly adminRolesService = inject(AdminRolesService);
   private readonly authService = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly searchControl = new FormControl('', { nonNullable: true });
   readonly tenantFilterControl = new FormControl('', { nonNullable: true });
@@ -228,14 +230,26 @@ export class UsersAdminPage {
   });
 
   constructor() {
+    const tenantIdQuery = this.route.snapshot.queryParamMap.get('tenantId')?.trim() ?? '';
+    const storeIdQuery = this.route.snapshot.queryParamMap.get('storeId')?.trim() ?? '';
+    const searchQuery = this.route.snapshot.queryParamMap.get('search')?.trim() ?? '';
+
+    this.searchControl.setValue(searchQuery);
+
     if (this.scope() === 'tenant') {
       this.tenantFilterControl.setValue(this.authService.getTenantId() ?? '');
       this.tenantFilterControl.disable();
+    } else if (this.scope() === 'global' && tenantIdQuery) {
+      this.tenantFilterControl.setValue(tenantIdQuery);
     }
+
     if (this.scope() === 'store') {
       this.storeFilterControl.setValue(this.authService.getStoreId() ?? '');
       this.storeFilterControl.disable();
+    } else if (this.canFilterStore() && storeIdQuery) {
+      this.storeFilterControl.setValue(storeIdQuery);
     }
+
     void this.loadRoles();
     void this.loadUsers();
   }
