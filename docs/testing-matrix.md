@@ -115,6 +115,7 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 | Admin users scoping (`GET/PUT /api/v1/admin/users*`) | Integration backend (authz + tenant/store scope), frontend unit guards/users mapping, E2E UI-contract de visibilidad por rol | Validar matrix SuperAdmin/TenantAdmin/AdminStore vs Manager/Cashier, filtros tenant/store. |
 
 | Platform Dashboard v1 (`/api/v1/platform/dashboard/*`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformDashboardIntegrationTests.cs` | Validar acceso `SuperAdmin` vs demás roles (403), summary/top-tenants/alerts, recent adjustments y out-of-stock con filtros cross-tenant. |
+| Platform Dashboard v2 (`/api/v1/platform/dashboard/sales-trend|top-void-tenants|stockout-hotspots|activity-feed|executive-signals`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformDashboardIntegrationTests.cs` | Validar authz `SuperAdmin` only (403 para demás), buckets/rangos de `sales-trend`, orden/top en `top-void-tenants`, filtros en `stockout-hotspots`, mezcla/filtro en `activity-feed` y coherencia de `executive-signals`. |
 
 ## Platform Dashboard v1 (SuperAdmin)
 

@@ -83,3 +83,81 @@ public sealed record PlatformOutOfStockRowDto(
     DateTimeOffset? LastAdjustmentAtUtc);
 
 public sealed record PlatformOutOfStockResponseDto(IReadOnlyList<PlatformOutOfStockRowDto> Items);
+
+public sealed record PlatformSalesTrendPointDto(
+    DateTimeOffset BucketStartUtc,
+    string BucketLabel,
+    int SalesCount,
+    decimal SalesAmount,
+    int VoidedSalesCount,
+    decimal AverageTicket);
+
+public sealed record PlatformSalesTrendResponseDto(
+    IReadOnlyList<PlatformSalesTrendPointDto> Items,
+    DateTimeOffset EffectiveDateFromUtc,
+    DateTimeOffset EffectiveDateToUtc,
+    string Granularity);
+
+public sealed record PlatformTopVoidTenantRowDto(
+    Guid TenantId,
+    string TenantName,
+    Guid VerticalId,
+    string? VerticalName,
+    int VoidedSalesCount,
+    decimal VoidedSalesAmount,
+    int TotalSalesCount,
+    decimal VoidRate,
+    int StoreCount);
+
+public sealed record PlatformTopVoidTenantsResponseDto(
+    IReadOnlyList<PlatformTopVoidTenantRowDto> Items,
+    DateTimeOffset EffectiveDateFromUtc,
+    DateTimeOffset EffectiveDateToUtc,
+    int Top);
+
+public sealed record PlatformStockoutHotspotRowDto(
+    Guid TenantId,
+    string TenantName,
+    Guid StoreId,
+    string StoreName,
+    int OutOfStockItemsCount,
+    int LowStockItemsCount,
+    DateTimeOffset? LastInventoryMovementAtUtc,
+    int TrackedItemsCount);
+
+public sealed record PlatformStockoutHotspotsResponseDto(
+    IReadOnlyList<PlatformStockoutHotspotRowDto> Items,
+    decimal Threshold,
+    int Top,
+    string? ItemType);
+
+public sealed record PlatformActivityFeedItemDto(
+    string EventType,
+    DateTimeOffset OccurredAtUtc,
+    Guid TenantId,
+    string TenantName,
+    Guid StoreId,
+    string StoreName,
+    string Title,
+    string Description,
+    Guid? ReferenceId,
+    string Severity,
+    Guid? ActorUserId);
+
+public sealed record PlatformActivityFeedResponseDto(IReadOnlyList<PlatformActivityFeedItemDto> Items, int Take, string? EventType);
+
+public sealed record PlatformExecutiveSignalsDto(
+    Guid? FastestGrowingTenantId,
+    string? FastestGrowingTenantName,
+    decimal? SalesGrowthRatePercent,
+    decimal VoidRatePercent,
+    int TenantsWithNoSalesInRangeCount,
+    int StoresWithNoAdminStoreCount,
+    int TenantsWithNoCatalogTemplateCount,
+    int StoresWithOutOfStockCount,
+    int InventoryAdjustmentCountInRange,
+    Guid? TopRiskTenantId,
+    string? TopRiskTenantName,
+    DateTimeOffset EffectiveDateFromUtc,
+    DateTimeOffset EffectiveDateToUtc,
+    bool PreviousPeriodCompare);

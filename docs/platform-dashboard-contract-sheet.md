@@ -1,4 +1,4 @@
-# Platform Dashboard Contract Sheet v1
+# Platform Dashboard Contract Sheet v1 + v2
 
 ## Security
 
@@ -77,3 +77,73 @@ Response: `PlatformOutOfStockResponseDto`
 
 - `403 Forbidden`: usuario sin rol `SuperAdmin`.
 - `401 Unauthorized`: token inválido/ausente.
+
+
+## v2 Endpoints (executive metrics)
+
+> Todas las fechas/rangos de v2 se calculan en UTC y no requieren `X-Tenant-Id`.
+
+### GET `/api/v1/platform/dashboard/sales-trend`
+Query params:
+- `dateFrom` (`DateTimeOffset?`)
+- `dateTo` (`DateTimeOffset?`)
+- `granularity` (`day|week`, default `day`)
+
+Response: `PlatformSalesTrendResponseDto`
+- `items[]: PlatformSalesTrendPointDto`
+  - `bucketStartUtc`, `bucketLabel`
+  - `salesCount`, `salesAmount`, `voidedSalesCount`, `averageTicket`
+- `effectiveDateFromUtc`, `effectiveDateToUtc`, `granularity`
+
+### GET `/api/v1/platform/dashboard/top-void-tenants`
+Query params:
+- `dateFrom` (`DateTimeOffset?`)
+- `dateTo` (`DateTimeOffset?`)
+- `top` (`int`, default `10`, max `50`)
+
+Response: `PlatformTopVoidTenantsResponseDto`
+- `items[]: PlatformTopVoidTenantRowDto`
+  - `tenantId`, `tenantName`, `verticalId`, `verticalName`
+  - `voidedSalesCount`, `voidedSalesAmount`, `totalSalesCount`, `voidRate`, `storeCount`
+- `effectiveDateFromUtc`, `effectiveDateToUtc`, `top`
+
+### GET `/api/v1/platform/dashboard/stockout-hotspots`
+Query params:
+- `threshold` (`decimal`, default `5`)
+- `top` (`int`, default `10`, max `100`)
+- `itemType` (`string?`, `Product|Extra|OptionItem`)
+
+Response: `PlatformStockoutHotspotsResponseDto`
+- `items[]: PlatformStockoutHotspotRowDto`
+  - `tenantId`, `tenantName`, `storeId`, `storeName`
+  - `outOfStockItemsCount`, `lowStockItemsCount`, `lastInventoryMovementAtUtc`, `trackedItemsCount`
+- `threshold`, `top`, `itemType`
+
+### GET `/api/v1/platform/dashboard/activity-feed`
+Query params:
+- `take` (`int`, default `20`, max `100`)
+- `eventType` (`string?`, `SaleCreated|SaleVoided|InventoryAdjusted`)
+
+Response: `PlatformActivityFeedResponseDto`
+- `items[]: PlatformActivityFeedItemDto`
+  - `eventType`, `occurredAtUtc`
+  - `tenantId`, `tenantName`, `storeId`, `storeName`
+  - `title`, `description`, `referenceId`, `severity`, `actorUserId`
+- `take`, `eventType`
+
+### GET `/api/v1/platform/dashboard/executive-signals`
+Query params:
+- `dateFrom` (`DateTimeOffset?`)
+- `dateTo` (`DateTimeOffset?`)
+- `previousPeriodCompare` (`bool`, default `true`)
+
+Response: `PlatformExecutiveSignalsDto`
+- `fastestGrowingTenantId`, `fastestGrowingTenantName`
+- `salesGrowthRatePercent`, `voidRatePercent`
+- `tenantsWithNoSalesInRangeCount`
+- `storesWithNoAdminStoreCount`
+- `tenantsWithNoCatalogTemplateCount`
+- `storesWithOutOfStockCount`
+- `inventoryAdjustmentCountInRange`
+- `topRiskTenantId`, `topRiskTenantName`
+- `effectiveDateFromUtc`, `effectiveDateToUtc`, `previousPeriodCompare`

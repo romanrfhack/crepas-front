@@ -103,3 +103,20 @@ Contrato detallado en `docs/platform-dashboard-contract-sheet.md`.
   - `TenantAdmin`: tenant fijo (deshabilitado), store editable dentro de su alcance.
   - `AdminStore`: store fijo (deshabilitado), sin cambio de tenant.
 - Formulario inline de rol usa `admin-user-form-*` testids y muestra `admin-user-form-store-required` cuando el rol destino requiere `StoreId` (`AdminStore`, `Manager`, `Cashier`).
+
+
+## Platform Dashboard v2 (SuperAdmin)
+
+Se agregan endpoints ejecutivos cross-tenant sobre `/api/v1/platform/dashboard/*`:
+
+- `GET /api/v1/platform/dashboard/sales-trend`
+- `GET /api/v1/platform/dashboard/top-void-tenants`
+- `GET /api/v1/platform/dashboard/stockout-hotspots`
+- `GET /api/v1/platform/dashboard/activity-feed`
+- `GET /api/v1/platform/dashboard/executive-signals`
+
+Reglas v2:
+- policy `PlatformOnly` (acceso exclusivo `SuperAdmin`).
+- no requiere header `X-Tenant-Id`.
+- agregados/rangos calculados en UTC para consistencia global.
+- v1 (`summary`, `top-tenants`, `alerts`, `recent-inventory-adjustments`, `out-of-stock`) se mantiene intacto.
