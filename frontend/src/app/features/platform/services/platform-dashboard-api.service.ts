@@ -4,6 +4,8 @@ import { ApiClient } from '../../../core/services/api-client';
 import {
   PlatformActivityFeedQuery,
   PlatformActivityFeedResponseDto,
+  PlatformDashboardAlertDrilldownQuery,
+  PlatformDashboardAlertDrilldownResponseDto,
   PlatformDashboardAlertsResponseDto,
   PlatformExecutiveSignalsDto,
   PlatformExecutiveSignalsQuery,
@@ -16,7 +18,11 @@ import {
   PlatformSalesTrendResponseDto,
   PlatformStockoutHotspotsQuery,
   PlatformStockoutHotspotsResponseDto,
+  PlatformStoreStockoutDetailDto,
+  PlatformStoreStockoutDetailsQuery,
   PlatformSummaryQuery,
+  PlatformTenantOverviewDto,
+  PlatformTenantOverviewQuery,
   PlatformTopVoidTenantsQuery,
   PlatformTopVoidTenantsResponseDto,
   PlatformTopTenantsQuery,
@@ -42,6 +48,30 @@ export class PlatformDashboardApiService {
 
   getAlerts() {
     return firstValueFrom(this.apiClient.get<PlatformDashboardAlertsResponseDto>(`${this.basePath}/alerts`));
+  }
+
+  getAlertDrilldown(query: PlatformDashboardAlertDrilldownQuery) {
+    return firstValueFrom(
+      this.apiClient.get<PlatformDashboardAlertDrilldownResponseDto>(
+        this.buildPath('/alerts/drilldown', query),
+      ),
+    );
+  }
+
+  getTenantOverview(tenantId: string, query?: PlatformTenantOverviewQuery) {
+    return firstValueFrom(
+      this.apiClient.get<PlatformTenantOverviewDto>(
+        this.buildPath(`/tenants/${tenantId}/overview`, query),
+      ),
+    );
+  }
+
+  getStoreStockoutDetails(storeId: string, query?: PlatformStoreStockoutDetailsQuery) {
+    return firstValueFrom(
+      this.apiClient.get<PlatformStoreStockoutDetailDto>(
+        this.buildPath(`/stores/${storeId}/stockout-details`, query),
+      ),
+    );
   }
 
   getRecentInventoryAdjustments(query?: PlatformRecentInventoryAdjustmentsQuery) {

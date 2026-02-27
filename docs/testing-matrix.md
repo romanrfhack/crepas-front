@@ -128,3 +128,11 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 
 
 | Frontend `/app/platform/dashboard` v2 (executive signals, sales trend, top void tenants, stockout hotspots, activity feed) | `frontend/src/app/features/platform/services/platform-dashboard-api.service.spec.ts`, `frontend/src/app/features/platform/pages/dashboard/platform-dashboard.page.spec.ts`, `frontend/e2e/platform.dashboard.v2.contract.spec.ts` | Si cambia mapping/filtros, actualizar unit tests Vitest de query params y estado por bloque. Si cambia UX/flujo de dashboard, mantener Playwright UI-contract determinista con `route` a `/api/v1/platform/dashboard/**` y asserts por `data-testid`. |
+
+## 2026-02-27 — Platform Dashboard v3 frontend drilldown coverage
+
+- Frontend dashboard agrega drilldown accionable en alertas, top tenants y stockout hotspots.
+- Unit tests Vitest:
+  - `PlatformDashboardApiService`: query params de `alerts/drilldown`, `tenants/{tenantId}/overview`, `stores/{storeId}/stockout-details`.
+  - `PlatformDashboardPage`: apertura de paneles drilldown, estados loading/error/empty y filtros de stockout detail.
+- E2E Playwright UI-contract: `frontend/e2e/platform.dashboard.v3.contract.spec.ts` intercepta `**/api/v1/platform/dashboard/**` y valida drilldowns usando `data-testid`.

@@ -123,6 +123,91 @@ export interface PlatformDashboardAlertsResponseDto {
   alerts: PlatformDashboardAlertDto[];
 }
 
+export interface PlatformDashboardAlertDrilldownQuery {
+  code: string;
+  take?: number;
+  tenantId?: string;
+  storeId?: string;
+}
+
+export interface PlatformDashboardAlertDrilldownItemDto {
+  tenantId: string | null;
+  tenantName: string | null;
+  storeId: string | null;
+  storeName: string | null;
+  userId: string | null;
+  userName: string | null;
+  email: string | null;
+  role: string | null;
+  description: string;
+  reason: string | null;
+  metadata: Record<string, string | null> | null;
+}
+
+export interface PlatformDashboardAlertDrilldownResponseDto {
+  code: string;
+  items: PlatformDashboardAlertDrilldownItemDto[];
+}
+
+export interface PlatformTenantOverviewQuery {
+  dateFrom?: string;
+  dateTo?: string;
+  threshold?: number;
+}
+
+export interface PlatformTenantOverviewDto {
+  tenantId: string;
+  tenantName: string;
+  verticalId: string;
+  verticalName: string | null;
+  storeCount: number;
+  activeStoreCount: number;
+  totalUsers: number;
+  usersWithoutStoreAssignmentCount: number;
+  salesInRangeCount: number;
+  salesInRangeAmount: number;
+  voidedSalesCount: number;
+  outOfStockItemsCount: number;
+  lowStockItemsCount: number;
+  lastInventoryAdjustmentAtUtc: string | null;
+  hasCatalogTemplate: boolean;
+  storesWithoutAdminStoreCount: number;
+  effectiveDateFromUtc: string;
+  effectiveDateToUtc: string;
+  effectiveThreshold: number;
+}
+
+export type PlatformStockoutDetailsMode = 'out-of-stock' | 'low-stock' | 'all';
+
+export interface PlatformStoreStockoutDetailsQuery {
+  itemType?: PlatformDashboardItemType;
+  search?: string;
+  threshold?: number;
+  mode?: PlatformStockoutDetailsMode;
+  take?: number;
+}
+
+export interface PlatformStoreStockoutDetailItemDto {
+  itemType: PlatformDashboardItemType;
+  itemId: string;
+  itemName: string;
+  itemSku: string | null;
+  stockOnHandQty: number;
+  isInventoryTracked: boolean;
+  availabilityReason: string;
+  lastAdjustmentAtUtc: string | null;
+}
+
+export interface PlatformStoreStockoutDetailDto {
+  storeId: string;
+  storeName: string;
+  tenantId: string;
+  tenantName: string;
+  mode: PlatformStockoutDetailsMode;
+  effectiveThreshold: number;
+  items: PlatformStoreStockoutDetailItemDto[];
+}
+
 export interface PlatformRecentInventoryAdjustmentsQuery {
   take?: number;
   reason?: string;
