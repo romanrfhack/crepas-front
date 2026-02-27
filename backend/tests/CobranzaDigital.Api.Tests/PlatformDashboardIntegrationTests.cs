@@ -42,7 +42,10 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
                          "/api/v1/platform/dashboard/top-void-tenants",
                          "/api/v1/platform/dashboard/stockout-hotspots",
                          "/api/v1/platform/dashboard/activity-feed",
-                         "/api/v1/platform/dashboard/executive-signals"
+                         "/api/v1/platform/dashboard/executive-signals",
+                         "/api/v1/platform/dashboard/alerts/drilldown?code=TENANT_WITHOUT_TEMPLATE",
+                         $"/api/v1/platform/dashboard/tenants/{seed.Tenant1Id}/overview",
+                         $"/api/v1/platform/dashboard/stores/{seed.Store1Id}/stockout-details"
                      })
             {
                 using var forbiddenRequest = CreateAuthGet(path, token);
@@ -62,7 +65,10 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
                      "/api/v1/platform/dashboard/top-void-tenants",
                      "/api/v1/platform/dashboard/stockout-hotspots",
                      "/api/v1/platform/dashboard/activity-feed",
-                     "/api/v1/platform/dashboard/executive-signals"
+                     "/api/v1/platform/dashboard/executive-signals",
+                     "/api/v1/platform/dashboard/alerts/drilldown?code=TENANT_WITHOUT_TEMPLATE",
+                     $"/api/v1/platform/dashboard/tenants/{seed.Tenant1Id}/overview",
+                     $"/api/v1/platform/dashboard/stores/{seed.Store1Id}/stockout-details"
                  })
         {
             using var request = CreateAuthGet(path, superToken);
@@ -175,6 +181,93 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
         Assert.True(payload.InventoryAdjustmentCountInRange >= 1);
     }
 
+    [Fact]
+    public async Task PlatformDashboard_AlertsDrilldown_ReturnsExpectedRows_AndValidatesCode()
+    {
+        var seed = await GetSeedAsync();
+        var superToken = await LoginAsync(seed.SuperAdminEmail, seed.Password);
+
+        using var templateRequest = CreateAuthGet("/api/v1/platform/dashboard/alerts/drilldown?code=TENANT_WITHOUT_TEMPLATE", superToken);
+        using var templateResponse = await _client.SendAsync(templateRequest);
+        var templatePayload = await templateResponse.Content.ReadFromJsonAsync<PlatformDashboardAlertDrilldownResponseDto>();
+        Assert.Equal(HttpStatusCode.OK, templateResponse.StatusCode);
+        Assert.NotNull(templatePayload);
+        Assert.True(templatePayload!.Items.Count >= 2);
+
+        using var storesRequest = CreateAuthGet("/api/v1/platform/dashboard/alerts/drilldown?code=STORE_WITHOUT_ADMINSTORE", superToken);
+        using var storesResponse = await _client.SendAsync(storesRequest);
+        var storesPayload = await storesResponse.Content.ReadFromJsonAsync<PlatformDashboardAlertDrilldownResponseDto>();
+        Assert.Equal(HttpStatusCode.OK, storesResponse.StatusCode);
+        Assert.NotNull(storesPayload);
+        Assert.Contains(storesPayload!.Items, x => x.StoreId == seed.Store2Id);
+
+        using var usersRequest = CreateAuthGet($"/api/v1/platform/dashboard/alerts/drilldown?code=STORE_SCOPED_USER_WITHOUT_STORE&tenantId={seed.Tenant1Id}", superToken);
+        using var usersResponse = await _client.SendAsync(usersRequest);
+        var usersPayload = await usersResponse.Content.ReadFromJsonAsync<PlatformDashboardAlertDrilldownResponseDto>();
+        Assert.Equal(HttpStatusCode.OK, usersResponse.StatusCode);
+        Assert.NotNull(usersPayload);
+        Assert.Contains(usersPayload!.Items, x => x.Role == "Manager" && x.StoreId == null);
+
+        using var emptyRequest = CreateAuthGet($"/api/v1/platform/dashboard/alerts/drilldown?code=STORE_SCOPED_USER_WITHOUT_STORE&tenantId={Guid.NewGuid()}", superToken);
+        using var emptyResponse = await _client.SendAsync(emptyRequest);
+        var emptyPayload = await emptyResponse.Content.ReadFromJsonAsync<PlatformDashboardAlertDrilldownResponseDto>();
+        Assert.Equal(HttpStatusCode.OK, emptyResponse.StatusCode);
+        Assert.NotNull(emptyPayload);
+        Assert.Empty(emptyPayload!.Items);
+
+        using var invalidRequest = CreateAuthGet("/api/v1/platform/dashboard/alerts/drilldown?code=INVALID_CODE", superToken);
+        using var invalidResponse = await _client.SendAsync(invalidRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task PlatformDashboard_TenantOverview_ReturnsCoherentMetrics()
+    {
+        var seed = await GetSeedAsync();
+        var superToken = await LoginAsync(seed.SuperAdminEmail, seed.Password);
+
+        using var request = CreateAuthGet($"/api/v1/platform/dashboard/tenants/{seed.Tenant1Id}/overview?dateFrom={Uri.EscapeDataString(seed.RangeFrom.ToString("O"))}&dateTo={Uri.EscapeDataString(seed.RangeTo.ToString("O"))}&threshold=2", superToken);
+        using var response = await _client.SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<PlatformTenantOverviewDto>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal(seed.Tenant1Id, payload!.TenantId);
+        Assert.Equal(1, payload.StoreCount);
+        Assert.Equal(1, payload.UsersWithoutStoreAssignmentCount);
+        Assert.Equal(2, payload.SalesInRangeCount);
+        Assert.Equal(2, payload.VoidedSalesCount);
+        Assert.Equal(1, payload.OutOfStockItemsCount);
+        Assert.Equal(1, payload.LowStockItemsCount);
+        Assert.True(payload.HasCatalogTemplate);
+    }
+
+    [Fact]
+    public async Task PlatformDashboard_StoreStockoutDetails_ReturnsItems_AndAppliesFilters()
+    {
+        var seed = await GetSeedAsync();
+        var superToken = await LoginAsync(seed.SuperAdminEmail, seed.Password);
+
+        using var request = CreateAuthGet($"/api/v1/platform/dashboard/stores/{seed.Store1Id}/stockout-details?mode=all&threshold=2", superToken);
+        using var response = await _client.SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<PlatformStoreStockoutDetailDto>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal(seed.Store1Id, payload!.StoreId);
+        Assert.Equal("all", payload.Mode);
+        Assert.True(payload.Items.Count >= 2);
+        Assert.Contains(payload.Items, x => x.AvailabilityReason == "OutOfStock");
+        Assert.Contains(payload.Items, x => x.AvailabilityReason == "LowStock");
+
+        using var filteredRequest = CreateAuthGet($"/api/v1/platform/dashboard/stores/{seed.Store1Id}/stockout-details?mode=all&threshold=2&search=P2", superToken);
+        using var filteredResponse = await _client.SendAsync(filteredRequest);
+        var filteredPayload = await filteredResponse.Content.ReadFromJsonAsync<PlatformStoreStockoutDetailDto>();
+        Assert.Equal(HttpStatusCode.OK, filteredResponse.StatusCode);
+        Assert.NotNull(filteredPayload);
+        Assert.Single(filteredPayload!.Items);
+    }
+
     private async Task<SeedResult> SeedDashboardDataAsync()
     {
         using var scope = _factory.Services.CreateScope();
@@ -248,8 +341,9 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
         await CreateUserAsync(userManager, adminStoreEmail, password, ["AdminStore"], tenant1.Id, store1.Id);
         await CreateUserAsync(userManager, managerEmail, password, ["Manager"], tenant1.Id, store1.Id);
         await CreateUserAsync(userManager, cashierEmail, password, ["Cashier"], tenant1.Id, store1.Id);
+        await CreateUserAsync(userManager, $"mg-nostore-{Guid.NewGuid():N}@test.local", password, ["Manager"], tenant1.Id, null);
 
-        return new SeedResult(password, superEmail, tenantAdminEmail, adminStoreEmail, managerEmail, cashierEmail, tenant1.Id, baseDay.AddDays(-2), baseDay.AddDays(1), 3, 3);
+        return new SeedResult(password, superEmail, tenantAdminEmail, adminStoreEmail, managerEmail, cashierEmail, tenant1.Id, store1.Id, store2.Id, baseDay.AddDays(-2), baseDay.AddDays(1), 3, 3);
     }
 
     private Task<SeedResult> GetSeedAsync() => _seed.Value;
@@ -279,5 +373,5 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
     }
 
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
-    private sealed record SeedResult(string Password, string SuperAdminEmail, string TenantAdminEmail, string AdminStoreEmail, string ManagerEmail, string CashierEmail, Guid Tenant1Id, DateTimeOffset RangeFrom, DateTimeOffset RangeTo, int ExpectedCompletedSalesInRange, int ExpectedVoidsInRange);
+    private sealed record SeedResult(string Password, string SuperAdminEmail, string TenantAdminEmail, string AdminStoreEmail, string ManagerEmail, string CashierEmail, Guid Tenant1Id, Guid Store1Id, Guid Store2Id, DateTimeOffset RangeFrom, DateTimeOffset RangeTo, int ExpectedCompletedSalesInRange, int ExpectedVoidsInRange);
 }

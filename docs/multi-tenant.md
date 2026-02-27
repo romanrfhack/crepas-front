@@ -132,3 +132,19 @@ La UI de `/app/platform/dashboard` extiende v1 sin romper bloques existentes y a
 - `platform-activity-feed` con filtros `platform-activity-feed-filter-take|event-type`, filas `platform-activity-feed-row-{index}` y error `platform-activity-feed-error`.
 
 El botón global `platform-dashboard-refresh` vuelve a consultar bloques v1 + v2 de manera independiente (fallas aisladas por bloque).
+
+
+## Platform Dashboard v3 (drill-down accionable)
+
+Se agregan endpoints de detalle en `GET /api/v1/platform/dashboard/*`:
+
+- `GET /api/v1/platform/dashboard/alerts/drilldown`
+- `GET /api/v1/platform/dashboard/tenants/{tenantId}/overview`
+- `GET /api/v1/platform/dashboard/stores/{storeId}/stockout-details`
+
+Reglas:
+- Mantienen `PlatformOnly` (`SuperAdmin`) y respuesta `403` para cualquier otro rol.
+- No requieren `X-Tenant-Id` y operan cross-tenant.
+- Son aditivos (no rompen contratos v1/v2).
+
+Referencia de contrato: `docs/platform-dashboard-contract-sheet.md` (sección v3).

@@ -47,6 +47,63 @@ public sealed record PlatformDashboardAlertDto(
 
 public sealed record PlatformDashboardAlertsResponseDto(IReadOnlyList<PlatformDashboardAlertDto> Alerts);
 
+public sealed record PlatformDashboardAlertDrilldownResponseDto(
+    string Code,
+    IReadOnlyList<PlatformDashboardAlertDrilldownItemDto> Items);
+
+public sealed record PlatformDashboardAlertDrilldownItemDto(
+    Guid? TenantId,
+    string? TenantName,
+    Guid? StoreId,
+    string? StoreName,
+    Guid? UserId,
+    string? UserName,
+    string? Email,
+    string? Role,
+    string Description,
+    string? Reason,
+    IDictionary<string, string?>? Metadata);
+
+public sealed record PlatformTenantOverviewDto(
+    Guid TenantId,
+    string TenantName,
+    Guid VerticalId,
+    string? VerticalName,
+    int StoreCount,
+    int ActiveStoreCount,
+    int TotalUsers,
+    int UsersWithoutStoreAssignmentCount,
+    int SalesInRangeCount,
+    decimal SalesInRangeAmount,
+    int VoidedSalesCount,
+    int OutOfStockItemsCount,
+    int LowStockItemsCount,
+    DateTimeOffset? LastInventoryAdjustmentAtUtc,
+    bool HasCatalogTemplate,
+    int StoresWithoutAdminStoreCount,
+    DateTimeOffset EffectiveDateFromUtc,
+    DateTimeOffset EffectiveDateToUtc,
+    decimal EffectiveThreshold);
+
+public sealed record PlatformStoreStockoutDetailDto(
+    Guid StoreId,
+    string StoreName,
+    Guid TenantId,
+    string TenantName,
+    string Mode,
+    decimal EffectiveThreshold,
+    IReadOnlyList<PlatformStoreStockoutDetailItemDto> Items);
+
+public sealed record PlatformStoreStockoutDetailItemDto(
+    string ItemType,
+    Guid ItemId,
+    string ItemName,
+    string? ItemSku,
+    decimal StockOnHandQty,
+    bool IsInventoryTracked,
+    string AvailabilityReason,
+    DateTimeOffset? LastAdjustmentAtUtc);
+
 public sealed record PlatformRecentInventoryAdjustmentDto(
     Guid AdjustmentId,
     Guid TenantId,
