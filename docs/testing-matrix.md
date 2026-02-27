@@ -121,3 +121,5 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 - Unit (Vitest): `PlatformDashboardApiService` query mapping para `summary`, `top-tenants`, `alerts`, `recent-inventory-adjustments`, `out-of-stock`.
 - Unit (Vitest): `PlatformDashboardPage` render de KPI cards, errores por bloque, refresh global y filtros (`top-tenants`, `out-of-stock`).
 - E2E (Playwright UI-contract): `frontend/e2e/platform.dashboard.contract.spec.ts` interceptando `**/api/v1/platform/dashboard/**` con asserts por `data-testid`.
+
+| Admin users scoped UX v2 (`/app/admin/users`) | Frontend Unit: `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts`; E2E UI-contract: `frontend/e2e/admin.users.scoped-ux.contract.spec.ts` | Validar badges de alcance por rol (SuperAdmin/TenantAdmin/AdminStore), filtros tenant/store con visibilidad correcta, `StoreId` obligatorio visual para `AdminStore`/`Manager`/`Cashier`, y mensajes success/error por `data-testid`. |
