@@ -219,9 +219,14 @@ public sealed class UserAdminService : IUserAdminService
         var targetRoles = (await _userManager.GetRolesAsync(user).ConfigureAwait(false)).ToArray();
         ValidateTargetRoleForTemporaryPassword(actor, targetRoles);
 
-        var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user).ConfigureAwait(false);
-        var resetResult = await _userManager.ResetPasswordAsync(user, resetToken, temporaryPassword).ConfigureAwait(false);
-        EnsurePasswordChangeSuccess(resetResult);
+        if (await _userManager.HasPasswordAsync(user).ConfigureAwait(false))
+        {
+            var removePasswordResult = await _userManager.RemovePasswordAsync(user).ConfigureAwait(false);
+            EnsureIdentitySuccess(removePasswordResult, "Failed to clear existing password.");
+        }
+
+        var addPasswordResult = await _userManager.AddPasswordAsync(user, temporaryPassword).ConfigureAwait(false);
+        EnsurePasswordChangeSuccess(addPasswordResult);
 
         return new SetTemporaryPasswordResponseDto(
             user.Id.ToString(),
