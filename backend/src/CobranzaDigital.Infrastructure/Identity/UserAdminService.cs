@@ -34,6 +34,28 @@ public sealed class UserAdminService : IUserAdminService
         "Cashier"
     };
 
+    private static readonly HashSet<string> ResettableRolesBySuperAdmin = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TenantAdmin",
+        "AdminStore",
+        "Manager",
+        "Cashier"
+    };
+
+    private static readonly HashSet<string> ResettableRolesByTenantAdmin = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TenantAdmin",
+        "AdminStore",
+        "Manager",
+        "Cashier"
+    };
+
+    private static readonly HashSet<string> ResettableRolesByAdminStore = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Manager",
+        "Cashier"
+    };
+
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -180,6 +202,35 @@ public sealed class UserAdminService : IUserAdminService
         }
 
         return new PagedResult<AdminUserDto>(total, mapped);
+    }
+
+    public async Task<SetTemporaryPasswordResponseDto> SetTemporaryPasswordAsync(string userId, SetTemporaryPasswordRequestDto request, CancellationToken cancellationToken)
+    {
+        var temporaryPassword = request.TemporaryPassword.Trim();
+        if (string.IsNullOrWhiteSpace(temporaryPassword))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["temporaryPassword"] = ["TemporaryPassword is required."] });
+        }
+
+        var actor = await ResolveActorScopeAsync(cancellationToken).ConfigureAwait(false);
+        var user = await FindUserOrThrowAsync(userId).ConfigureAwait(false);
+        EnsureInScope(user, actor);
+
+        var targetRoles = await _userManager.GetRolesAsync(user).ConfigureAwait(false);
+        ValidateTargetRoleForTemporaryPassword(actor, targetRoles);
+
+        var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user).ConfigureAwait(false);
+        var resetResult = await _userManager.ResetPasswordAsync(user, resetToken, temporaryPassword).ConfigureAwait(false);
+        EnsurePasswordChangeSuccess(resetResult);
+
+        return new SetTemporaryPasswordResponseDto(
+            user.Id.ToString(),
+            user.Email ?? string.Empty,
+            user.UserName ?? string.Empty,
+            targetRoles.ToArray(),
+            user.TenantId,
+            user.StoreId,
+            "Temporary password updated successfully.");
     }
 
     public async Task<AdminUserDto> GetUserByIdAsync(string userId, CancellationToken cancellationToken)
@@ -459,6 +510,45 @@ public sealed class UserAdminService : IUserAdminService
         }
     }
 
+    private static void ValidateTargetRoleForTemporaryPassword(ActorScope actor, IReadOnlyCollection<string> targetRoles)
+    {
+        if (targetRoles.Count == 0)
+        {
+            throw new ForbiddenException("Target user has no roles assigned.");
+        }
+
+        if (targetRoles.Any(role => string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ForbiddenException("Resetting temporary password for SuperAdmin is not allowed.");
+        }
+
+        var allowed = actor.IsSuperAdmin
+            ? ResettableRolesBySuperAdmin
+            : actor.IsTenantAdmin
+                ? ResettableRolesByTenantAdmin
+                : actor.IsAdminStore
+                    ? ResettableRolesByAdminStore
+                    : throw new ForbiddenException("You do not have access to reset temporary passwords.");
+
+        var scopedRoles = targetRoles
+            .Where(role => string.Equals(role, "TenantAdmin", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(role, "Manager", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (scopedRoles.Length == 0)
+        {
+            throw new ForbiddenException("Target user role is outside temporary password reset scope.");
+        }
+
+        var disallowed = scopedRoles.Where(role => !allowed.Contains(role)).ToArray();
+        if (disallowed.Length > 0)
+        {
+            throw new ForbiddenException($"Target roles not allowed for your scope: {string.Join(", ", disallowed)}.");
+        }
+    }
+
     private async Task<ActorScope> ResolveActorScopeAsync(CancellationToken cancellationToken)
     {
         var user = _httpContextAccessor.HttpContext?.User ?? throw new ForbiddenException("Missing user context.");
@@ -504,6 +594,24 @@ public sealed class UserAdminService : IUserAdminService
             var errors = string.Join("; ", result.Errors.Select(error => error.Description));
             throw new DomainRuleException($"{message} {errors}".Trim());
         }
+    }
+
+    private static void EnsurePasswordChangeSuccess(IdentityResult result)
+    {
+        if (result.Succeeded)
+        {
+            return;
+        }
+
+        var errors = result.Errors
+            .Select(error => error.Description)
+            .Where(description => !string.IsNullOrWhiteSpace(description))
+            .ToArray();
+
+        throw new ValidationException(new Dictionary<string, string[]>
+        {
+            ["temporaryPassword"] = errors.Length == 0 ? ["TemporaryPassword does not satisfy password policy."] : errors
+        });
     }
 
     private sealed record ActorScope(bool IsSuperAdmin, bool IsTenantAdmin, bool IsAdminStore, Guid? TenantId, Guid? StoreId);

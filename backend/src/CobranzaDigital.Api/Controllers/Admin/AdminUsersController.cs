@@ -172,6 +172,49 @@ public sealed class AdminUsersController : ControllerBase
         return await SetLockInternal(id, request, cancellationToken).ConfigureAwait(false);
     }
 
+    [HttpPost("{id}/temporary-password")]
+    [ProducesResponseType(typeof(SetTemporaryPasswordResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetTemporaryPassword(
+        string id,
+        [FromBody] SetTemporaryPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _userAdminService.SetTemporaryPasswordAsync(
+            id,
+            new SetTemporaryPasswordRequestDto(request.TemporaryPassword),
+            cancellationToken).ConfigureAwait(false);
+
+        var correlationId = _auditRequestContextAccessor.GetCorrelationId();
+        var actorUserId = _auditRequestContextAccessor.GetUserId();
+
+        await _auditLogger.LogAsync(new AuditEntry(
+                AuditActions.ResetUserPassword,
+                actorUserId,
+                correlationId,
+                EntityType: "User",
+                EntityId: result.Id,
+                Before: null,
+                After: new
+                {
+                    action = "temporary password reset",
+                    result.Email,
+                    result.UserName,
+                    roles = result.Roles,
+                    result.TenantId,
+                    result.StoreId
+                },
+                Source: "Api",
+                Notes: null),
+            cancellationToken).ConfigureAwait(false);
+
+        LogAuditWritten(_logger, AuditActions.ResetUserPassword, "User", result.Id, correlationId, actorUserId);
+        return Ok(result);
+    }
+
     [HttpPut("{id}/lock")]
     [ProducesResponseType(typeof(AdminUserDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -266,4 +309,11 @@ public sealed class CreateAdminUserRequest
 public sealed class SetUserLockRequest
 {
     public bool Lock { get; init; }
+}
+
+public sealed class SetTemporaryPasswordRequest
+{
+    [Required]
+    [MinLength(8)]
+    public string TemporaryPassword { get; init; } = string.Empty;
 }
