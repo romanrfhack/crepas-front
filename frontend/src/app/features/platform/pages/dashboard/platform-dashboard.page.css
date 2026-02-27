@@ -1,0 +1,9 @@
+:host { display:block; }
+.platform-dashboard { display:grid; gap:1rem; }
+.toolbar { display:flex; justify-content:space-between; align-items:center; }
+.kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.5rem; }
+.card { background:#fff; border:1px solid #ddd; border-radius:8px; padding:1rem; }
+.filters { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.5rem; }
+.severity-high { border-left:4px solid #dc2626; padding-left:.5rem; }
+.severity-medium { border-left:4px solid #f59e0b; padding-left:.5rem; }
+.severity-low { border-left:4px solid #22c55e; padding-left:.5rem; }

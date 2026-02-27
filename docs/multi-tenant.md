@@ -77,3 +77,13 @@ Endpoints v1:
 - `GET /api/v1/platform/dashboard/out-of-stock`
 
 Contrato detallado en `docs/platform-dashboard-contract-sheet.md`.
+
+## Frontend Plataforma Dashboard v1 (SuperAdmin)
+
+- Nueva ruta: `/app/platform/dashboard` (lazy y protegida para `SuperAdmin`).
+- Usa exclusivamente `/api/v1/platform/dashboard/*` en modo cross-tenant.
+- Test ids contractuales clave:
+  - Página/acciones: `platform-dashboard-page`, `platform-dashboard-refresh`
+  - KPIs: `platform-kpi-*`
+  - Bloques: `platform-top-tenants`, `platform-alerts`, `platform-recent-adjustments`, `platform-out-of-stock`
+  - Errores por bloque: `platform-top-tenants-error`, `platform-alerts-error`, `platform-recent-adjustments-error`, `platform-out-of-stock-error`

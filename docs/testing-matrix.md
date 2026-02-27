@@ -115,3 +115,9 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 | Admin users scoping (`GET/PUT /api/v1/admin/users*`) | Integration backend (authz + tenant/store scope), frontend unit guards/users mapping, E2E UI-contract de visibilidad por rol | Validar matrix SuperAdmin/TenantAdmin/AdminStore vs Manager/Cashier, filtros tenant/store, y compat temporal `Admin` legado. |
 
 | Platform Dashboard v1 (`/api/v1/platform/dashboard/*`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformDashboardIntegrationTests.cs` | Validar acceso `SuperAdmin` vs demás roles (403), summary/top-tenants/alerts, recent adjustments y out-of-stock con filtros cross-tenant. |
+
+## Platform Dashboard v1 (SuperAdmin)
+
+- Unit (Vitest): `PlatformDashboardApiService` query mapping para `summary`, `top-tenants`, `alerts`, `recent-inventory-adjustments`, `out-of-stock`.
+- Unit (Vitest): `PlatformDashboardPage` render de KPI cards, errores por bloque, refresh global y filtros (`top-tenants`, `out-of-stock`).
+- E2E (Playwright UI-contract): `frontend/e2e/platform.dashboard.contract.spec.ts` interceptando `**/api/v1/platform/dashboard/**` con asserts por `data-testid`.

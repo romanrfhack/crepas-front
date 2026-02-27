@@ -1,0 +1,123 @@
+<div class="platform-dashboard" data-testid="platform-dashboard-page">
+  <header class="toolbar">
+    <h2>Dashboard de Plataforma</h2>
+    <button type="button" data-testid="platform-dashboard-refresh" (click)="refreshAll()">Recargar</button>
+  </header>
+
+  <section class="card">
+    <h3>KPIs</h3>
+    @if (summaryLoading()) {
+      <p>Cargando KPIs...</p>
+    } @else if (summaryError()) {
+      <p>{{ summaryError() }}</p>
+    } @else {
+      <div class="kpi-grid">
+        <article data-testid="platform-kpi-active-tenants">{{ summary().activeTenants }}</article>
+        <article data-testid="platform-kpi-active-stores">{{ summary().activeStores }}</article>
+        <article data-testid="platform-kpi-total-users">{{ summary().totalUsers }}</article>
+        <article data-testid="platform-kpi-sales-today">{{ money(summary().salesTodayAmount) }}</article>
+        <article data-testid="platform-kpi-sales-last7days">{{ money(summary().salesLast7DaysAmount) }}</article>
+        <article data-testid="platform-kpi-open-shifts">{{ summary().openShiftsCount }}</article>
+        <article data-testid="platform-kpi-out-of-stock">{{ summary().outOfStockItemsCount }}</article>
+        <article data-testid="platform-kpi-low-stock">{{ summary().lowStockItemsCount }}</article>
+      </div>
+    }
+  </section>
+
+  <section class="card" data-testid="platform-top-tenants">
+    <h3>Top tenants por ventas</h3>
+    <div class="filters">
+      <input type="date" data-testid="platform-top-tenants-filter-date-from" [ngModel]="topTenantsDateFrom()" (ngModelChange)="topTenantsDateFrom.set($event)" />
+      <input type="date" data-testid="platform-top-tenants-filter-date-to" [ngModel]="topTenantsDateTo()" (ngModelChange)="topTenantsDateTo.set($event)" />
+      <input type="number" min="1" max="50" data-testid="platform-top-tenants-filter-top" [ngModel]="topTenantsTop()" (ngModelChange)="topTenantsTop.set(+$event || 10)" />
+      <button type="button" (click)="loadTopTenants()">Aplicar</button>
+    </div>
+    @if (topTenantsLoading()) {
+      <p>Cargando top tenants...</p>
+    } @else if (topTenantsError()) {
+      <p data-testid="platform-top-tenants-error">{{ topTenantsError() }}</p>
+    } @else if (!topTenants().length) {
+      <p>Sin resultados.</p>
+    } @else {
+      <table>
+        <tbody>
+          @for (row of topTenants(); track row.tenantId) {
+            <tr [attr.data-testid]="'platform-top-tenants-row-' + row.tenantId">
+              <td>{{ row.tenantName }}</td>
+              <td>{{ money(row.salesAmount) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+
+  <section class="card" data-testid="platform-alerts">
+    <h3>Alertas</h3>
+    @if (alertsLoading()) {
+      <p>Cargando alertas...</p>
+    } @else if (alertsError()) {
+      <p data-testid="platform-alerts-error">{{ alertsError() }}</p>
+    } @else if (!alerts().length) {
+      <p>Sin alertas.</p>
+    } @else {
+      @for (alert of alerts(); track alert.code) {
+        <div [attr.data-testid]="'platform-alert-row-' + alert.code" [class]="severityClass(alert.severity)">
+          <strong>{{ alert.code }}</strong> · {{ alert.count }}
+        </div>
+      }
+    }
+  </section>
+
+  <section class="card" data-testid="platform-recent-adjustments">
+    <h3>Recent inventory adjustments</h3>
+    <div class="filters">
+      <input type="number" [ngModel]="recentTake()" (ngModelChange)="recentTake.set(+$event || 20)" />
+      <input type="text" placeholder="reason" [ngModel]="recentReason()" (ngModelChange)="recentReason.set($event)" />
+      <input type="text" placeholder="tenantId" [ngModel]="recentTenantId()" (ngModelChange)="recentTenantId.set($event)" />
+      <input type="text" placeholder="storeId" [ngModel]="recentStoreId()" (ngModelChange)="recentStoreId.set($event)" />
+      <button type="button" (click)="loadRecentAdjustments()">Aplicar</button>
+    </div>
+    @if (recentAdjustmentsLoading()) {
+      <p>Cargando ajustes...</p>
+    } @else if (recentAdjustmentsError()) {
+      <p data-testid="platform-recent-adjustments-error">{{ recentAdjustmentsError() }}</p>
+    } @else if (!recentAdjustments().length) {
+      <p>Sin ajustes recientes.</p>
+    } @else {
+      @for (row of recentAdjustments(); track row.adjustmentId) {
+        <div [attr.data-testid]="'platform-recent-adjustment-row-' + row.adjustmentId">{{ row.itemName }} ({{ row.qtyDelta }})</div>
+      }
+    }
+  </section>
+
+  <section class="card" data-testid="platform-out-of-stock">
+    <h3>Out of stock</h3>
+    <div class="filters">
+      <input type="text" placeholder="tenantId" [ngModel]="outTenantId()" (ngModelChange)="outTenantId.set($event)" />
+      <input type="text" placeholder="storeId" [ngModel]="outStoreId()" (ngModelChange)="outStoreId.set($event)" />
+      <select [ngModel]="outItemType()" (ngModelChange)="outItemType.set($event)">
+        <option value="">Todos</option>
+        <option value="Product">Product</option>
+        <option value="Extra">Extra</option>
+        <option value="OptionItem">OptionItem</option>
+      </select>
+      <input type="text" placeholder="search" [ngModel]="outSearch()" (ngModelChange)="outSearch.set($event)" />
+      <input type="number" [ngModel]="outTop()" (ngModelChange)="outTop.set(+$event || 50)" />
+      <button type="button" (click)="loadOutOfStock()">Aplicar</button>
+    </div>
+    @if (outOfStockLoading()) {
+      <p>Cargando out-of-stock...</p>
+    } @else if (outOfStockError()) {
+      <p data-testid="platform-out-of-stock-error">{{ outOfStockError() }}</p>
+    } @else if (!outOfStock().length) {
+      <p>Sin elementos agotados.</p>
+    } @else {
+      @for (row of outOfStock(); track row.itemId + '-' + row.storeId) {
+        <div [attr.data-testid]="'platform-out-of-stock-row-' + row.itemType + '-' + row.itemId + '-' + row.storeId">
+          {{ row.itemName }}
+        </div>
+      }
+    }
+  </section>
+</div>
