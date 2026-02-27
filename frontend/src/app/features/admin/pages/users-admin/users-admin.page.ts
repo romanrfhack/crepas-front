@@ -49,7 +49,85 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
         }
 
         <button type="submit">Buscar</button>
+        <button
+          type="button"
+          data-testid="admin-users-create-open"
+          [disabled]="scope() === 'none'"
+          (click)="openCreateFormFromContext()"
+        >
+          Nuevo usuario
+        </button>
       </form>
+
+      @if (createFormVisible()) {
+        <section class="create-panel" data-testid="admin-users-create-context-badge">
+          <p>{{ createContextMessage() }}</p>
+          <p data-testid="admin-users-create-context-tenant">
+            Tenant: {{ createTenantControl.value || 'N/A' }}
+          </p>
+          <p data-testid="admin-users-create-context-store">
+            Store: {{ createStoreControl.value || 'N/A' }}
+          </p>
+
+          <form class="inline-form" data-testid="admin-user-form" (submit)="onSubmitCreate($event)">
+            <label>
+              Rol sugerido
+              <select [formControl]="createRoleControl" data-testid="admin-user-form-role">
+                <option value="">Selecciona un rol</option>
+                @for (role of assignableRoles(); track role) {
+                  <option [value]="role">{{ role }}</option>
+                }
+              </select>
+            </label>
+            <small data-testid="admin-user-form-role-suggestion">
+              {{
+                createSuggestedRole()
+                  ? 'Sugerido por contexto: ' + createSuggestedRole()
+                  : 'Sin rol sugerido por contexto.'
+              }}
+            </small>
+
+            <label>
+              Tenant
+              <input
+                type="text"
+                [formControl]="createTenantControl"
+                data-testid="admin-user-form-tenant"
+              />
+            </label>
+
+            <label>
+              Store
+              <input
+                type="text"
+                [formControl]="createStoreControl"
+                data-testid="admin-user-form-store"
+              />
+            </label>
+
+            @if (roleRequiresStore(createRoleControl.value)) {
+              <small data-testid="admin-user-form-store-required"
+                >El rol AdminStore requiere sucursal.</small
+              >
+            }
+
+            @if (!createUserAvailable) {
+              <small data-testid="admin-user-form-create-unavailable">
+                La creación de usuarios no está disponible porque no existe endpoint backend de
+                alta de usuarios en /api/v1/admin/users.
+              </small>
+            }
+
+            <button
+              type="submit"
+              data-testid="admin-user-form-submit"
+              [disabled]="loading() || !createUserAvailable"
+            >
+              Crear usuario
+            </button>
+          </form>
+        </section>
+      }
 
       @if (successMessage()) {
         <div class="success" data-testid="admin-user-form-success">{{ successMessage() }}</div>
@@ -70,9 +148,7 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
                 <p>{{ displayName(user) }}</p>
                 <p>{{ user.email }}</p>
                 <p>{{ primaryRole(user) }}</p>
-                <p [attr.data-testid]="'admin-users-role-' + user.id">
-                  Rol: {{ primaryRole(user) }}
-                </p>
+                <p [attr.data-testid]="'admin-users-role-' + user.id">Rol: {{ primaryRole(user) }}</p>
                 <p>Tenant: {{ user.tenantId ?? 'N/A' }}</p>
                 <p [attr.data-testid]="'admin-users-store-' + user.id">
                   Store: {{ user.storeId ?? 'N/A' }}
@@ -164,6 +240,14 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
       gap: 0.5rem;
       flex-wrap: wrap;
     }
+    .create-panel {
+      border: 1px solid #e4e4e7;
+      border-radius: 0.75rem;
+      padding: 0.75rem;
+      display: grid;
+      gap: 0.5rem;
+      max-width: 420px;
+    }
     .user-list {
       list-style: none;
       margin: 0;
@@ -202,12 +286,23 @@ export class UsersAdminPage {
   readonly tenantFilterControl = new FormControl('', { nonNullable: true });
   readonly storeFilterControl = new FormControl('', { nonNullable: true });
 
+  readonly createTenantControl = new FormControl('', { nonNullable: true });
+  readonly createStoreControl = new FormControl('', { nonNullable: true });
+  readonly createRoleControl = new FormControl('', { nonNullable: true });
+
   readonly users = signal<UserSummary[]>([]);
   readonly loading = signal(false);
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
   readonly roleOptions = signal<string[]>([]);
+  readonly createFormVisible = signal(false);
+  readonly createContextMessage = signal('');
+  readonly createSuggestedRole = signal('');
+
   private readonly roleDrafts = signal<Record<string, FormControl<string>>>({});
+  readonly createUserAvailable = false;
+  private readonly initialTenantQuery = this.route.snapshot.queryParamMap.get('tenantId')?.trim() ?? '';
+  private readonly initialStoreQuery = this.route.snapshot.queryParamMap.get('storeId')?.trim() ?? '';
 
   readonly scope = computed<AdminScope>(() => {
     if (this.authService.hasRole('SuperAdmin')) return 'global';
@@ -230,8 +325,8 @@ export class UsersAdminPage {
   });
 
   constructor() {
-    const tenantIdQuery = this.route.snapshot.queryParamMap.get('tenantId')?.trim() ?? '';
-    const storeIdQuery = this.route.snapshot.queryParamMap.get('storeId')?.trim() ?? '';
+    const tenantIdQuery = this.initialTenantQuery;
+    const storeIdQuery = this.initialStoreQuery;
     const searchQuery = this.route.snapshot.queryParamMap.get('search')?.trim() ?? '';
 
     this.searchControl.setValue(searchQuery);
@@ -339,6 +434,14 @@ export class UsersAdminPage {
     }
   }
 
+  onSubmitCreate(event: Event) {
+    event.preventDefault();
+    if (!this.createUserAvailable) {
+      this.errorMessage.set('No existe endpoint backend para crear usuarios en el módulo de administración.');
+      this.successMessage.set('');
+    }
+  }
+
   async onToggleLock(user: UserSummary) {
     try {
       const updated = await this.adminUsersService.setUserLockState(user.id, !this.isLocked(user));
@@ -362,6 +465,26 @@ export class UsersAdminPage {
     void this.loadUsers();
   }
 
+  openCreateFormFromContext() {
+    const context = this.resolveContextFromFilters();
+    this.createTenantControl.setValue(context.tenantId);
+    this.createStoreControl.setValue(context.storeId);
+
+    const suggestedRole = this.suggestRoleForContext(context.tenantId, context.storeId);
+    this.createSuggestedRole.set(suggestedRole);
+    this.createRoleControl.setValue(suggestedRole);
+
+    if (context.tenantId && context.storeId) {
+      this.createContextMessage.set('Se precargó la sucursal según el contexto actual.');
+    } else if (context.tenantId) {
+      this.createContextMessage.set('Se precargó el tenant según el contexto actual.');
+    } else {
+      this.createContextMessage.set('Formulario iniciado con valores neutros según tu alcance actual.');
+    }
+
+    this.createFormVisible.set(true);
+  }
+
   private async loadRoles() {
     try {
       const roles = await this.adminRolesService.getRoles();
@@ -382,5 +505,30 @@ export class UsersAdminPage {
     if (!payload) return fallback;
     const firstFieldError = payload.errors ? Object.values(payload.errors).flat()[0] : null;
     return firstFieldError || payload.detail || fallback;
+  }
+
+  private resolveContextFromFilters() {
+    const tenantId =
+      this.scope() === 'tenant' ? (this.authService.getTenantId() ?? '') : this.tenantFilterControl.value.trim();
+    const storeId =
+      this.scope() === 'store' ? (this.authService.getStoreId() ?? '') : this.storeFilterControl.value.trim();
+
+    return {
+      tenantId: tenantId || '',
+      storeId: storeId || '',
+    };
+  }
+
+  private suggestRoleForContext(tenantId: string, storeId: string) {
+    if (tenantId && storeId) {
+      if (this.scope() === 'store') {
+        return 'Cashier';
+      }
+      return 'AdminStore';
+    }
+    if (tenantId) {
+      return 'TenantAdmin';
+    }
+    return '';
   }
 }

@@ -131,3 +131,81 @@ test('TenantAdmin and AdminStore stay scoped by tenant/store filters', async ({ 
   await expect(page.getByTestId('admin-users-filter-store')).toBeDisabled();
   await expect(page.getByTestId('admin-users-scope-badge')).toContainText('Vista de sucursal');
 });
+
+test('opens contextual create form with tenant+store and suggests AdminStore', async ({ page }) => {
+  await page.addInitScript(
+    (token: string) => {
+      localStorage.setItem('access_token', token);
+      localStorage.setItem('refresh_token', 'refresh-e2e');
+    },
+    buildJwt(['SuperAdmin']),
+  );
+
+  await page.route('**/api/v1/admin/roles', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { name: 'SuperAdmin' },
+        { name: 'TenantAdmin' },
+        { name: 'AdminStore' },
+        { name: 'Manager' },
+        { name: 'Cashier' },
+      ]),
+    }),
+  );
+  await page.route('**/api/v1/admin/users**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(usersResponse),
+    }),
+  );
+
+  await page.goto('/app/admin/users?tenantId=tenant-ctx&storeId=store-ctx');
+  await page.getByTestId('admin-users-create-open').click();
+
+  const createPanel = page.getByTestId('admin-users-create-context-badge');
+  await expect(createPanel).toBeVisible();
+  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('tenant-ctx');
+  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('store-ctx');
+  await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('AdminStore');
+  await expect(page.getByTestId('admin-user-form-create-unavailable')).toBeVisible();
+});
+
+test('opens contextual create form with tenant-only filter', async ({ page }) => {
+  await page.addInitScript(
+    (token: string) => {
+      localStorage.setItem('access_token', token);
+      localStorage.setItem('refresh_token', 'refresh-e2e');
+    },
+    buildJwt(['SuperAdmin']),
+  );
+
+  await page.route('**/api/v1/admin/roles', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        { name: 'SuperAdmin' },
+        { name: 'TenantAdmin' },
+        { name: 'AdminStore' },
+        { name: 'Manager' },
+        { name: 'Cashier' },
+      ]),
+    }),
+  );
+  await page.route('**/api/v1/admin/users**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(usersResponse),
+    }),
+  );
+
+  await page.goto('/app/admin/users?tenantId=tenant-only');
+  await page.getByTestId('admin-users-create-open').click();
+
+  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('tenant-only');
+  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('N/A');
+});

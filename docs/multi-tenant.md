@@ -172,3 +172,13 @@ Referencia de contrato: `docs/platform-dashboard-contract-sheet.md` (sección v3
   - Alert action disabled: `platform-alert-drilldown-action-disabled-{code}-{index}`.
   - Tenant overview action: `platform-tenant-overview-action-users`.
   - Store stockout action: `platform-store-stockout-action-users`.
+
+
+## Frontend UX admin users v3: creación contextual (prefill)
+
+- En `/app/admin/users`, el botón `admin-users-create-open` abre formulario contextual usando filtros actuales y/o query params (`tenantId`, `storeId`).
+- Heurística de sugerencia de rol (no forzada):
+  - `tenantId + storeId` → `AdminStore` (o `Cashier` cuando el operador actual es `AdminStore`).
+  - solo `tenantId` → `TenantAdmin`.
+- Se mantienen testids contractuales para contexto y formulario (`admin-users-create-context-*`, `admin-user-form-*`).
+- Estado actual de backend: no existe endpoint de alta de usuarios en `/api/v1/admin/users`; el frontend renderiza estado estable `admin-user-form-create-unavailable` y no envía creación.
