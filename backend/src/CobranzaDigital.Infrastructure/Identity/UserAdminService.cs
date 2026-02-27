@@ -216,7 +216,7 @@ public sealed class UserAdminService : IUserAdminService
         var user = await FindUserOrThrowAsync(userId).ConfigureAwait(false);
         EnsureInScope(user, actor);
 
-        var targetRoles = await _userManager.GetRolesAsync(user).ConfigureAwait(false);
+        var targetRoles = (await _userManager.GetRolesAsync(user).ConfigureAwait(false)).ToArray();
         ValidateTargetRoleForTemporaryPassword(actor, targetRoles);
 
         var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user).ConfigureAwait(false);
@@ -510,9 +510,9 @@ public sealed class UserAdminService : IUserAdminService
         }
     }
 
-    private static void ValidateTargetRoleForTemporaryPassword(ActorScope actor, IReadOnlyCollection<string> targetRoles)
+    private static void ValidateTargetRoleForTemporaryPassword(ActorScope actor, string[] targetRoles)
     {
-        if (targetRoles.Count == 0)
+        if (targetRoles.Length == 0)
         {
             throw new ForbiddenException("Target user has no roles assigned.");
         }
