@@ -141,4 +141,25 @@ describe('PosCatalogSnapshotService', () => {
     secondReq.flush({ ...snapshotFixture, storeId: 'store-2' }, { status: 200, statusText: 'OK' });
     await second;
   });
+
+  it('retries without storeId when API reports multi-store disabled', async () => {
+    const request = firstValueFrom(service.getSnapshot());
+    const scopedReq = httpMock.expectOne(
+      `${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=context-store`,
+    );
+    scopedReq.flush(
+      {
+        errors: {
+          storeId: ['Multi-store is disabled.'],
+        },
+      },
+      { status: 400, statusText: 'Bad Request' },
+    );
+
+    const fallbackReq = httpMock.expectOne(`${environment.apiBaseUrl}/v1/pos/catalog/snapshot`);
+    fallbackReq.flush(snapshotFixture, { status: 200, statusText: 'OK' });
+
+    await expect(request).resolves.toEqual(snapshotFixture);
+    expect(storeContext.getActiveStoreId()).toBeNull();
+  });
 });
