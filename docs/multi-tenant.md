@@ -181,4 +181,43 @@ Referencia de contrato: `docs/platform-dashboard-contract-sheet.md` (sección v3
   - `tenantId + storeId` → `AdminStore` (o `Cashier` cuando el operador actual es `AdminStore`).
   - solo `tenantId` → `TenantAdmin`.
 - Se mantienen testids contractuales para contexto y formulario (`admin-users-create-context-*`, `admin-user-form-*`).
-- Estado actual de backend: no existe endpoint de alta de usuarios en `/api/v1/admin/users`; el frontend renderiza estado estable `admin-user-form-create-unavailable` y no envía creación.
+- Backend `AdminUsersController` ahora expone `POST /api/v1/admin/users` para alta real con scoping tenant/store y validaciones por rol destino. El frontend puede conectar submit en una iteración posterior.
+
+
+## Backend Admin Users v4: alta real (`POST /api/v1/admin/users`)
+
+Contrato de request:
+
+- `email` (required, único)
+- `userName` (required, único)
+- `role` (required; válidos para creación: `TenantAdmin`, `AdminStore`, `Manager`, `Cashier`)
+- `tenantId` (required para todos los roles creados en v4)
+- `storeId` (required para `AdminStore`/`Manager`/`Cashier`; opcional para `TenantAdmin`)
+- `temporaryPassword` (required)
+
+Contrato de response (201 Created):
+
+- `id`, `email`, `userName`, `roles`, `tenantId`, `storeId`, `isLockedOut`
+
+Reglas de autorización por actor:
+
+- `SuperAdmin`: puede crear `TenantAdmin`, `AdminStore`, `Manager`, `Cashier` en cualquier tenant/store válido.
+- `TenantAdmin`: puede crear los mismos roles, pero únicamente dentro de su propio tenant.
+- `AdminStore`: solo puede crear `Manager`/`Cashier` y únicamente dentro de su misma store.
+- `Manager`/`Cashier`: sin acceso por policy (`403`).
+
+Validaciones de scoping:
+
+- `storeId` debe pertenecer al `tenantId` informado.
+- Intentos fuera de alcance del actor retornan `403`.
+- Combinaciones inválidas de tenant/store retornan `400`.
+- Email/username duplicados retornan `409`.
+
+Auditoría:
+
+- Se registra `AuditActions.CreateUser` (`Action = "CreateUser"`) con `EntityType = "User"` y metadatos de usuario creado.
+
+Decisión de password inicial:
+
+- `temporaryPassword` es obligatorio en el request.
+- El usuario se crea activo y no bloqueado (`isLockedOut = false` por default).

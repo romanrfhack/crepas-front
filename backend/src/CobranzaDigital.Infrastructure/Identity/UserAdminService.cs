@@ -26,6 +26,14 @@ public sealed class UserAdminService : IUserAdminService
         "Cashier"
     };
 
+    private static readonly HashSet<string> CreatableRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TenantAdmin",
+        "AdminStore",
+        "Manager",
+        "Cashier"
+    };
+
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<ApplicationRole> _roleManager;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -37,6 +45,94 @@ public sealed class UserAdminService : IUserAdminService
         _roleManager = roleManager;
         _httpContextAccessor = httpContextAccessor;
         _db = db;
+    }
+
+    public async Task<CreateAdminUserResponseDto> CreateUserAsync(CreateAdminUserRequestDto request, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = request.Email.Trim();
+        var normalizedUserName = request.UserName.Trim();
+        var normalizedRole = request.Role.Trim();
+        var temporaryPassword = request.TemporaryPassword.Trim();
+
+        var errors = new Dictionary<string, string[]>();
+        if (string.IsNullOrWhiteSpace(normalizedEmail))
+        {
+            errors["email"] = ["Email is required."];
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedUserName))
+        {
+            errors["userName"] = ["UserName is required."];
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedRole))
+        {
+            errors["role"] = ["Role is required."];
+        }
+
+        if (string.IsNullOrWhiteSpace(temporaryPassword))
+        {
+            errors["temporaryPassword"] = ["TemporaryPassword is required."];
+        }
+
+        if (errors.Count > 0)
+        {
+            throw new ValidationException(errors);
+        }
+
+        if (!CreatableRoles.Contains(normalizedRole))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["role"] = ["Role is invalid for user creation."] });
+        }
+
+        if (!await _roleManager.RoleExistsAsync(normalizedRole).ConfigureAwait(false))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["role"] = ["Role does not exist."] });
+        }
+
+        var actor = await ResolveActorScopeAsync(cancellationToken).ConfigureAwait(false);
+        ValidateRoleCreation(actor, normalizedRole);
+
+        var (tenantId, storeId) = await ResolveCreateScopeAsync(actor, normalizedRole, request.TenantId, request.StoreId, cancellationToken).ConfigureAwait(false);
+
+        var existingByEmail = await _userManager.FindByEmailAsync(normalizedEmail).ConfigureAwait(false);
+        if (existingByEmail is not null)
+        {
+            throw new ConflictException($"User with email '{normalizedEmail}' already exists.");
+        }
+
+        var existingByUserName = await _userManager.FindByNameAsync(normalizedUserName).ConfigureAwait(false);
+        if (existingByUserName is not null)
+        {
+            throw new ConflictException($"User with userName '{normalizedUserName}' already exists.");
+        }
+
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            Email = normalizedEmail,
+            UserName = normalizedUserName,
+            TenantId = tenantId,
+            StoreId = storeId,
+            LockoutEnd = null
+        };
+
+        EnsureIdentitySuccess(await _userManager.CreateAsync(user, temporaryPassword).ConfigureAwait(false), "Failed to create user.");
+        var addRoleResult = await _userManager.AddToRoleAsync(user, normalizedRole).ConfigureAwait(false);
+        if (!addRoleResult.Succeeded)
+        {
+            _ = await _userManager.DeleteAsync(user).ConfigureAwait(false);
+            EnsureIdentitySuccess(addRoleResult, "Failed to assign role to user.");
+        }
+
+        return new CreateAdminUserResponseDto(
+            user.Id.ToString(),
+            user.Email ?? string.Empty,
+            user.UserName ?? string.Empty,
+            [normalizedRole],
+            user.TenantId,
+            user.StoreId,
+            false);
     }
 
     public async Task<PagedResult<AdminUserDto>> GetUsersAsync(string? search, Guid? tenantId, Guid? storeId, int page, int pageSize, CancellationToken cancellationToken)
@@ -188,6 +284,80 @@ public sealed class UserAdminService : IUserAdminService
         }
 
         EnsureIdentitySuccess(await _roleManager.DeleteAsync(role).ConfigureAwait(false), $"Failed to delete role '{normalizedRoleName}'.");
+    }
+
+    private static void ValidateRoleCreation(ActorScope actor, string role)
+    {
+        var allowed = actor.IsSuperAdmin
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TenantAdmin", "AdminStore", "Manager", "Cashier" }
+            : actor.IsTenantAdmin
+                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TenantAdmin", "AdminStore", "Manager", "Cashier" }
+                : actor.IsAdminStore
+                    ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Manager", "Cashier" }
+                    : throw new ForbiddenException("You do not have access to user administration.");
+
+        if (!allowed.Contains(role))
+        {
+            throw new ForbiddenException($"Role '{role}' is outside your creation scope.");
+        }
+    }
+
+    private async Task<(Guid tenantId, Guid? storeId)> ResolveCreateScopeAsync(
+        ActorScope actor,
+        string role,
+        Guid? requestedTenantId,
+        Guid? requestedStoreId,
+        CancellationToken cancellationToken)
+    {
+        var requiresStore = RolesRequiringStore.Contains(role);
+
+        if (!requestedTenantId.HasValue)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["tenantId"] = ["TenantId is required for selected role."] });
+        }
+
+        if (requiresStore && !requestedStoreId.HasValue)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["storeId"] = ["StoreId is required for selected role."] });
+        }
+
+        if (actor.IsTenantAdmin && actor.TenantId != requestedTenantId)
+        {
+            throw new ForbiddenException("Target user is outside your tenant scope.");
+        }
+
+        if (actor.IsAdminStore)
+        {
+            if (actor.TenantId != requestedTenantId)
+            {
+                throw new ForbiddenException("Target user is outside your tenant scope.");
+            }
+
+            if (!requestedStoreId.HasValue || actor.StoreId != requestedStoreId)
+            {
+                throw new ForbiddenException("Target user is outside your store scope.");
+            }
+        }
+
+        var tenantExists = await _db.Tenants.AsNoTracking().AnyAsync(x => x.Id == requestedTenantId.Value, cancellationToken).ConfigureAwait(false);
+        if (!tenantExists)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["tenantId"] = ["Tenant does not exist."] });
+        }
+
+        if (requestedStoreId.HasValue)
+        {
+            var storeBelongsToTenant = await _db.Stores.AsNoTracking()
+                .AnyAsync(x => x.Id == requestedStoreId.Value && x.TenantId == requestedTenantId.Value, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!storeBelongsToTenant)
+            {
+                throw new ValidationException(new Dictionary<string, string[]> { ["storeId"] = ["Store does not belong to tenant."] });
+            }
+        }
+
+        return (requestedTenantId.Value, requestedStoreId);
     }
 
     private static IQueryable<ApplicationUser> ApplyScope(IQueryable<ApplicationUser> query, ActorScope actor)
