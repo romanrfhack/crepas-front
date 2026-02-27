@@ -309,7 +309,7 @@ public sealed class AdminUsersCreateIntegrationTests : IClassFixture<CobranzaDig
 
     private async Task<HttpResponseMessage> CreateAdminUserAsync(string token, CreateUserRequest request)
     {
-        var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/admin/users");
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/admin/users");
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         message.Content = JsonContent.Create(request);
         return await _client.SendAsync(message);
