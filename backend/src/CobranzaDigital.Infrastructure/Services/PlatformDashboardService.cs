@@ -205,6 +205,278 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
         return new PlatformDashboardAlertsResponseDto(alerts);
     }
 
+    public async Task<PlatformDashboardAlertDrilldownResponseDto> GetAlertsDrilldownAsync(string code, int take, Guid? tenantId, Guid? storeId, CancellationToken ct)
+    {
+        var normalizedCode = code.Trim().ToUpperInvariant();
+        var normalizedTake = Math.Clamp(take <= 0 ? 100 : take, 1, 500);
+
+        if (normalizedCode == "TENANT_WITHOUT_TEMPLATE")
+        {
+            var query = from tenant in _db.Tenants.AsNoTracking()
+                        join mapping in _db.TenantCatalogTemplates.AsNoTracking() on tenant.Id equals mapping.TenantId into mappings
+                        where !mappings.Any(x => x.CatalogTemplateId.HasValue)
+                        select tenant;
+
+            if (tenantId.HasValue)
+            {
+                query = query.Where(x => x.Id == tenantId.Value);
+            }
+
+            var items = await query.OrderBy(x => x.Name).Take(normalizedTake)
+                .Select(x => new PlatformDashboardAlertDrilldownItemDto(
+                    x.Id,
+                    x.Name,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "Tenant does not have catalog template assignment.",
+                    "MissingCatalogTemplate",
+                    null))
+                .ToListAsync(ct).ConfigureAwait(false);
+
+            return new PlatformDashboardAlertDrilldownResponseDto(normalizedCode, items);
+        }
+
+        if (normalizedCode == "STORE_WITHOUT_ADMINSTORE")
+        {
+            var stores = _db.Stores.AsNoTracking().AsQueryable();
+            if (tenantId.HasValue)
+            {
+                stores = stores.Where(x => x.TenantId == tenantId.Value);
+            }
+
+            if (storeId.HasValue)
+            {
+                stores = stores.Where(x => x.Id == storeId.Value);
+            }
+
+            var usersByStore = await _db.Users.AsNoTracking()
+                .Where(x => x.StoreId != null)
+                .GroupBy(x => x.StoreId!.Value)
+                .Select(x => new { StoreId = x.Key, Count = x.Count() })
+                .ToDictionaryAsync(x => x.StoreId, x => x.Count, ct).ConfigureAwait(false);
+            var tenantMap = await _db.Tenants.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
+
+            var items = await stores.OrderBy(x => x.Name).Take(normalizedTake).ToListAsync(ct).ConfigureAwait(false);
+            var result = items
+                .Where(x => !usersByStore.ContainsKey(x.Id))
+                .Select(x => new PlatformDashboardAlertDrilldownItemDto(
+                    x.TenantId,
+                    tenantMap.GetValueOrDefault(x.TenantId, "Unknown"),
+                    x.Id,
+                    x.Name,
+                    null,
+                    null,
+                    null,
+                    "AdminStore",
+                    "Store has no assigned users.",
+                    "MissingAdminStore",
+                    null))
+                .ToList();
+
+            return new PlatformDashboardAlertDrilldownResponseDto(normalizedCode, result);
+        }
+
+        if (normalizedCode == "STORE_SCOPED_USER_WITHOUT_STORE")
+        {
+            var roleIds = await _db.Roles.AsNoTracking()
+                .Where(x => x.Name == "AdminStore" || x.Name == "Manager" || x.Name == "Cashier")
+                .Select(x => x.Id)
+                .ToListAsync(ct).ConfigureAwait(false);
+
+            var query = _db.UserRoles.AsNoTracking()
+                .Where(x => roleIds.Contains(x.RoleId))
+                .Join(_db.Users.AsNoTracking(), ur => ur.UserId, u => u.Id, (ur, u) => new { ur.UserId, ur.RoleId, u.Email, u.UserName, u.TenantId, u.StoreId })
+                .Where(x => x.StoreId == null);
+
+            if (tenantId.HasValue)
+            {
+                query = query.Where(x => x.TenantId == tenantId.Value);
+            }
+
+            var roleMap = await _db.Roles.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
+            var tenantMap = await _db.Tenants.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
+
+            var users = await query.OrderBy(x => x.Email).Take(normalizedTake).ToListAsync(ct).ConfigureAwait(false);
+            var items = users.Select(x => new PlatformDashboardAlertDrilldownItemDto(
+                    x.TenantId,
+                    x.TenantId.HasValue ? tenantMap.GetValueOrDefault(x.TenantId.Value, "Unknown") : null,
+                    null,
+                    null,
+                    x.UserId,
+                    x.UserName,
+                    x.Email,
+                    roleMap.GetValueOrDefault(x.RoleId, "Unknown"),
+                    "Store scoped user does not have StoreId assigned.",
+                    "MissingStoreAssignment",
+                    null))
+                .ToList();
+
+            return new PlatformDashboardAlertDrilldownResponseDto(normalizedCode, items);
+        }
+
+        throw new ArgumentException($"Unsupported alert code '{code}'.", nameof(code));
+    }
+
+    public async Task<PlatformTenantOverviewDto> GetTenantOverviewAsync(Guid tenantId, DateTimeOffset? dateFrom, DateTimeOffset? dateTo, decimal threshold, CancellationToken ct)
+    {
+        var tenant = await (from t in _db.Tenants.AsNoTracking()
+                            join v in _db.Verticals.AsNoTracking() on t.VerticalId equals v.Id into verticalJoin
+                            from v in verticalJoin.DefaultIfEmpty()
+                            where t.Id == tenantId
+                            select new { t.Id, t.Name, t.VerticalId, VerticalName = v != null ? v.Name : null })
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? throw new KeyNotFoundException($"Tenant '{tenantId}' was not found.");
+
+        var (effectiveFrom, effectiveTo) = ResolveRange(dateFrom, dateTo, 7);
+        var normalizedThreshold = threshold > 0m ? threshold : DefaultLowStockThreshold;
+
+        var stores = _db.Stores.AsNoTracking().Where(x => x.TenantId == tenantId);
+        var storeIds = await stores.Select(x => x.Id).ToListAsync(ct).ConfigureAwait(false);
+        var storeCount = storeIds.Count;
+        var activeStoreCount = await stores.CountAsync(x => x.IsActive, ct).ConfigureAwait(false);
+
+        var totalUsers = await _db.Users.AsNoTracking().CountAsync(x => x.TenantId == tenantId, ct).ConfigureAwait(false);
+
+        var storeScopedRoleIds = await _db.Roles.AsNoTracking()
+            .Where(x => x.Name == "AdminStore" || x.Name == "Manager" || x.Name == "Cashier")
+            .Select(x => x.Id)
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        var usersWithoutStoreAssignmentCount = await _db.UserRoles.AsNoTracking()
+            .Where(x => storeScopedRoleIds.Contains(x.RoleId))
+            .Join(_db.Users.AsNoTracking(), ur => ur.UserId, u => u.Id, (ur, u) => new { u.Id, u.TenantId, u.StoreId })
+            .Where(x => x.TenantId == tenantId && x.StoreId == null)
+            .Select(x => x.Id)
+            .Distinct()
+            .CountAsync(ct).ConfigureAwait(false);
+
+        var salesInRange = await _db.Sales.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.Status == SaleStatus.Completed && x.OccurredAtUtc >= effectiveFrom && x.OccurredAtUtc <= effectiveTo)
+            .GroupBy(_ => 1)
+            .Select(g => new { Count = g.Count(), Amount = g.Sum(x => x.Total) })
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+
+        var voidedSalesCount = await _db.Sales.AsNoTracking()
+            .CountAsync(x => x.TenantId == tenantId && x.Status == SaleStatus.Void && x.OccurredAtUtc >= effectiveFrom && x.OccurredAtUtc <= effectiveTo, ct).ConfigureAwait(false);
+
+        var outOfStockItemsCount = await _db.CatalogInventoryBalances.AsNoTracking()
+            .CountAsync(x => x.TenantId == tenantId && x.OnHandQty <= 0m, ct).ConfigureAwait(false);
+
+        var lowStockItemsCount = await _db.CatalogInventoryBalances.AsNoTracking()
+            .CountAsync(x => x.TenantId == tenantId && x.OnHandQty > 0m && x.OnHandQty <= normalizedThreshold, ct).ConfigureAwait(false);
+
+        var lastInventoryAdjustmentAtUtc = await _db.CatalogInventoryAdjustments.AsNoTracking()
+            .Where(x => x.TenantId == tenantId)
+            .MaxAsync(x => (DateTimeOffset?)x.CreatedAtUtc, ct).ConfigureAwait(false);
+
+        var hasCatalogTemplate = await _db.TenantCatalogTemplates.AsNoTracking()
+            .AnyAsync(x => x.TenantId == tenantId && x.CatalogTemplateId.HasValue, ct).ConfigureAwait(false);
+
+        var storesWithoutAdminStoreCount = await _db.Stores.AsNoTracking()
+            .Where(x => x.TenantId == tenantId)
+            .GroupJoin(_db.Users.AsNoTracking(), s => s.Id, u => u.StoreId, (store, users) => new { users })
+            .CountAsync(x => !x.users.Any(), ct).ConfigureAwait(false);
+
+        return new PlatformTenantOverviewDto(
+            tenant.Id,
+            tenant.Name,
+            tenant.VerticalId,
+            tenant.VerticalName,
+            storeCount,
+            activeStoreCount,
+            totalUsers,
+            usersWithoutStoreAssignmentCount,
+            salesInRange?.Count ?? 0,
+            salesInRange?.Amount ?? 0m,
+            voidedSalesCount,
+            outOfStockItemsCount,
+            lowStockItemsCount,
+            lastInventoryAdjustmentAtUtc,
+            hasCatalogTemplate,
+            storesWithoutAdminStoreCount,
+            effectiveFrom,
+            effectiveTo,
+            normalizedThreshold);
+    }
+
+    public async Task<PlatformStoreStockoutDetailDto> GetStoreStockoutDetailsAsync(Guid storeId, string? itemType, string? search, decimal threshold, string? mode, int take, CancellationToken ct)
+    {
+        var parsedItemType = ParseItemType(itemType);
+        var normalizedThreshold = threshold > 0m ? threshold : DefaultLowStockThreshold;
+        var normalizedMode = NormalizeStockoutMode(mode);
+        var normalizedTake = Math.Clamp(take <= 0 ? 200 : take, 1, 500);
+
+        var store = await _db.Stores.AsNoTracking().FirstOrDefaultAsync(x => x.Id == storeId, ct).ConfigureAwait(false)
+            ?? throw new KeyNotFoundException($"Store '{storeId}' was not found.");
+        var tenantName = await _db.Tenants.AsNoTracking().Where(x => x.Id == store.TenantId).Select(x => x.Name).FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? "Unknown";
+
+        var balancesQuery = _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.StoreId == storeId);
+        if (parsedItemType.HasValue)
+        {
+            balancesQuery = balancesQuery.Where(x => x.ItemType == parsedItemType.Value);
+        }
+
+        balancesQuery = normalizedMode switch
+        {
+            "low-stock" => balancesQuery.Where(x => x.OnHandQty > 0m && x.OnHandQty <= normalizedThreshold),
+            "all" => balancesQuery.Where(x => x.OnHandQty <= normalizedThreshold),
+            _ => balancesQuery.Where(x => x.OnHandQty <= 0m)
+        };
+
+        var balances = await balancesQuery.OrderBy(x => x.OnHandQty).Take(normalizedTake).ToListAsync(ct).ConfigureAwait(false);
+        var productIds = balances.Where(x => x.ItemType == CatalogItemType.Product).Select(x => x.ItemId).Distinct().ToList();
+        var extraIds = balances.Where(x => x.ItemType == CatalogItemType.Extra).Select(x => x.ItemId).Distinct().ToList();
+
+        var products = await _db.Products.AsNoTracking().Where(x => productIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new { x.Name, x.ExternalCode, x.IsInventoryTracked }, ct).ConfigureAwait(false);
+        var extras = await _db.Extras.AsNoTracking().Where(x => extraIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new { x.Name, x.IsInventoryTracked }, ct).ConfigureAwait(false);
+        var lastAdjustments = await _db.CatalogInventoryAdjustments.AsNoTracking()
+            .Where(x => x.StoreId == storeId)
+            .GroupBy(x => new { x.ItemType, x.ItemId })
+            .Select(x => new { x.Key.ItemType, x.Key.ItemId, LastAdjustmentAtUtc = x.Max(y => y.CreatedAtUtc) })
+            .ToDictionaryAsync(x => (x.ItemType, x.ItemId), x => (DateTimeOffset?)x.LastAdjustmentAtUtc, ct).ConfigureAwait(false);
+
+        var items = balances.Select(x =>
+        {
+            var itemName = "Unknown";
+            string? itemSku = null;
+            var isTracked = true;
+            if (x.ItemType == CatalogItemType.Product && products.TryGetValue(x.ItemId, out var product))
+            {
+                itemName = product.Name;
+                itemSku = product.ExternalCode;
+                isTracked = product.IsInventoryTracked;
+            }
+
+            if (x.ItemType == CatalogItemType.Extra && extras.TryGetValue(x.ItemId, out var extra))
+            {
+                itemName = extra.Name;
+                isTracked = extra.IsInventoryTracked;
+            }
+
+            var reason = x.OnHandQty <= 0m ? "OutOfStock" : (x.OnHandQty <= normalizedThreshold ? "LowStock" : "InStock");
+
+            return new PlatformStoreStockoutDetailItemDto(
+                x.ItemType.ToString(),
+                x.ItemId,
+                itemName,
+                itemSku,
+                x.OnHandQty,
+                isTracked,
+                reason,
+                lastAdjustments.GetValueOrDefault((x.ItemType, x.ItemId)));
+        }).ToList();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            items = items.Where(x => x.ItemName.Contains(search, StringComparison.OrdinalIgnoreCase) || (x.ItemSku?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+        }
+
+        return new PlatformStoreStockoutDetailDto(store.Id, store.Name, store.TenantId, tenantName, normalizedMode, normalizedThreshold, items);
+    }
+
     public async Task<PlatformRecentInventoryAdjustmentsResponseDto> GetRecentInventoryAdjustmentsAsync(int take, string? reason, Guid? tenantId, Guid? storeId, CancellationToken ct)
     {
         var normalizedTake = Math.Clamp(take <= 0 ? 20 : take, 1, 100);
@@ -649,6 +921,21 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
             effectiveFrom,
             effectiveTo,
             previousPeriodCompare);
+    }
+
+    private static string NormalizeStockoutMode(string? mode)
+    {
+        if (string.Equals(mode, "low-stock", StringComparison.OrdinalIgnoreCase))
+        {
+            return "low-stock";
+        }
+
+        if (string.Equals(mode, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            return "all";
+        }
+
+        return "out-of-stock";
     }
 
     private static CatalogItemType? ParseItemType(string? itemType)

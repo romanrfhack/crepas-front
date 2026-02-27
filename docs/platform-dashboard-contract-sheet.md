@@ -147,3 +147,62 @@ Response: `PlatformExecutiveSignalsDto`
 - `inventoryAdjustmentCountInRange`
 - `topRiskTenantId`, `topRiskTenantName`
 - `effectiveDateFromUtc`, `effectiveDateToUtc`, `previousPeriodCompare`
+
+
+## v3 Endpoints (drill-down accionable)
+
+### GET `/api/v1/platform/dashboard/alerts/drilldown`
+Query params:
+- `code` (`string`, required)
+- `take` (`int`, default `100`, max `500`)
+- `tenantId` (`Guid?`)
+- `storeId` (`Guid?`)
+
+Response: `PlatformDashboardAlertDrilldownResponseDto`
+- `code`
+- `items[]: PlatformDashboardAlertDrilldownItemDto`
+  - `tenantId`, `tenantName`, `storeId`, `storeName`
+  - `userId`, `userName`, `email`, `role`
+  - `description`, `reason`, `metadata`
+
+Supported codes v3:
+- `TENANT_WITHOUT_TEMPLATE`
+- `STORE_WITHOUT_ADMINSTORE`
+- `STORE_SCOPED_USER_WITHOUT_STORE`
+
+Notas:
+- code inválido devuelve `400 BadRequest` con mensaje estable.
+- code válido sin hallazgos devuelve `items: []`.
+
+### GET `/api/v1/platform/dashboard/tenants/{tenantId}/overview`
+Query params:
+- `dateFrom` (`DateTimeOffset?`)
+- `dateTo` (`DateTimeOffset?`)
+- `threshold` (`decimal`, default `5`)
+
+Response: `PlatformTenantOverviewDto`
+- `tenantId`, `tenantName`, `verticalId`, `verticalName`
+- `storeCount`, `activeStoreCount`, `totalUsers`, `usersWithoutStoreAssignmentCount`
+- `salesInRangeCount`, `salesInRangeAmount`, `voidedSalesCount`
+- `outOfStockItemsCount`, `lowStockItemsCount`, `lastInventoryAdjustmentAtUtc`
+- `hasCatalogTemplate`, `storesWithoutAdminStoreCount`
+- `effectiveDateFromUtc`, `effectiveDateToUtc`, `effectiveThreshold`
+
+### GET `/api/v1/platform/dashboard/stores/{storeId}/stockout-details`
+Query params:
+- `itemType` (`string?`, `Product|Extra|OptionItem`)
+- `search` (`string?`)
+- `threshold` (`decimal`, default `5`)
+- `mode` (`out-of-stock|low-stock|all`, default `out-of-stock`)
+- `take` (`int`, default `200`, max `500`)
+
+Response: `PlatformStoreStockoutDetailDto`
+- `storeId`, `storeName`, `tenantId`, `tenantName`
+- `mode`, `effectiveThreshold`
+- `items[]: PlatformStoreStockoutDetailItemDto`
+  - `itemType`, `itemId`, `itemName`, `itemSku`
+  - `stockOnHandQty`, `isInventoryTracked`, `availabilityReason`, `lastAdjustmentAtUtc`
+
+Decisión MVP v3:
+- Se implementan A + B + D para priorizar drill-down accionable inmediato.
+- `tenant void-details` y `tenant stockout-details` quedan fuera de este corte para evitar duplicidad de contrato con B/D y mantener v3 aditivo/simple.

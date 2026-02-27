@@ -116,6 +116,7 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 
 | Platform Dashboard v1 (`/api/v1/platform/dashboard/*`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformDashboardIntegrationTests.cs` | Validar acceso `SuperAdmin` vs demás roles (403), summary/top-tenants/alerts, recent adjustments y out-of-stock con filtros cross-tenant. |
 | Platform Dashboard v2 (`/api/v1/platform/dashboard/sales-trend|top-void-tenants|stockout-hotspots|activity-feed|executive-signals`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformDashboardIntegrationTests.cs` | Validar authz `SuperAdmin` only (403 para demás), buckets/rangos de `sales-trend`, orden/top en `top-void-tenants`, filtros en `stockout-hotspots`, mezcla/filtro en `activity-feed` y coherencia de `executive-signals`. |
+| Platform Dashboard v3 (`/api/v1/platform/dashboard/alerts/drilldown|tenants/{tenantId}/overview|stores/{storeId}/stockout-details`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformDashboardIntegrationTests.cs` | Validar authz `SuperAdmin` only (403 para demás), alert drilldown por códigos soportados + invalid code (400), tenant overview coherente con seed multi-tenant y stockout details con filtros `mode/search/threshold`. |
 
 ## Platform Dashboard v1 (SuperAdmin)
 

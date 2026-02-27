@@ -30,6 +30,32 @@ public sealed class PlatformDashboardController : ControllerBase
     public Task<PlatformDashboardAlertsResponseDto> GetAlerts(CancellationToken ct = default) =>
         _service.GetAlertsAsync(ct);
 
+    [HttpGet("alerts/drilldown")]
+    public async Task<ActionResult<PlatformDashboardAlertDrilldownResponseDto>> GetAlertsDrilldown([FromQuery] string code, [FromQuery] int take = 100, [FromQuery] Guid? tenantId = null, [FromQuery] Guid? storeId = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return BadRequest("Query param 'code' is required.");
+        }
+
+        try
+        {
+            return Ok(await _service.GetAlertsDrilldownAsync(code, take, tenantId, storeId, ct));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpGet("tenants/{tenantId:guid}/overview")]
+    public Task<PlatformTenantOverviewDto> GetTenantOverview(Guid tenantId, [FromQuery] DateTimeOffset? dateFrom, [FromQuery] DateTimeOffset? dateTo, [FromQuery] decimal threshold = 5m, CancellationToken ct = default) =>
+        _service.GetTenantOverviewAsync(tenantId, dateFrom, dateTo, threshold, ct);
+
+    [HttpGet("stores/{storeId:guid}/stockout-details")]
+    public Task<PlatformStoreStockoutDetailDto> GetStoreStockoutDetails(Guid storeId, [FromQuery] string? itemType = null, [FromQuery] string? search = null, [FromQuery] decimal threshold = 5m, [FromQuery] string? mode = null, [FromQuery] int take = 200, CancellationToken ct = default) =>
+        _service.GetStoreStockoutDetailsAsync(storeId, itemType, search, threshold, mode, take, ct);
+
     [HttpGet("recent-inventory-adjustments")]
     public Task<PlatformRecentInventoryAdjustmentsResponseDto> GetRecentInventoryAdjustments([FromQuery] int take = 20, [FromQuery] string? reason = null, [FromQuery] Guid? tenantId = null, [FromQuery] Guid? storeId = null, CancellationToken ct = default) =>
         _service.GetRecentInventoryAdjustmentsAsync(take, reason, tenantId, storeId, ct);
