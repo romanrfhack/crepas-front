@@ -157,13 +157,15 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
         var store1 = new Store { Id = Guid.NewGuid(), TenantId = tenant1.Id, Name = "Store 1", IsActive = true, TimeZoneId = "America/Mexico_City", CreatedAtUtc = now, UpdatedAtUtc = now };
         var store2 = new Store { Id = Guid.NewGuid(), TenantId = tenant2.Id, Name = "Store 2", IsActive = true, TimeZoneId = "America/Mexico_City", CreatedAtUtc = now, UpdatedAtUtc = now };
 
-        tenant1.DefaultStoreId = store1.Id;
-        tenant2.DefaultStoreId = store2.Id;
-
         var template = new CatalogTemplate { Id = Guid.NewGuid(), VerticalId = vertical.Id, Name = "Template", Version = "1", IsActive = true, CreatedAtUtc = now, UpdatedAtUtc = now };
         db.Verticals.Add(vertical);
         db.Tenants.AddRange(tenant1, tenant2);
         db.Stores.AddRange(store1, store2);
+        await db.SaveChangesAsync();
+
+        tenant1.DefaultStoreId = store1.Id;
+        tenant2.DefaultStoreId = store2.Id;
+
         db.CatalogTemplates.Add(template);
         db.TenantCatalogTemplates.Add(new TenantCatalogTemplate { TenantId = tenant1.Id, CatalogTemplateId = template.Id, UpdatedAtUtc = now });
 
