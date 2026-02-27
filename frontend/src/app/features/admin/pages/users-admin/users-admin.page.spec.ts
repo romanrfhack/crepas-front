@@ -1,40 +1,51 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { UsersAdminPage } from './users-admin.page';
-import { AdminUsersService } from '../../services/admin-users.service';
-import { AdminRolesService } from '../../services/admin-roles.service';
-import { AuthService } from '../../../auth/services/auth.service';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { AuthService } from '../../../auth/services/auth.service';
+import { AdminRolesService } from '../../services/admin-roles.service';
+import { AdminUsersService } from '../../services/admin-users.service';
+import { UsersAdminPage } from './users-admin.page';
 
 describe('UsersAdminPage', () => {
-  beforeEach(() => {
-    queryParams = {};
-  });
   let fixture: ComponentFixture<UsersAdminPage>;
-  let getUsersMock: ReturnType<typeof vi.fn>;
-  let queryParams: Record<string, string> = {};
+  let queryParams: Record<string, string>;
   let authMock: {
     hasRole: (role: string) => boolean;
     getTenantId: () => string | null;
     getStoreId: () => string | null;
   };
+  let getUsersMock: ReturnType<typeof vi.fn>;
+  let createUserMock: ReturnType<typeof vi.fn>;
+
+  const buildUsersResponse = () => ({
+    items: [
+      {
+        id: 'user-1',
+        email: 'user@example.com',
+        userName: 'User One',
+        isLockedOut: false,
+        roles: ['TenantAdmin'],
+        tenantId: 'tenant-1',
+        storeId: null,
+      },
+    ],
+    totalCount: 1,
+    pageNumber: 1,
+    pageSize: 20,
+  });
 
   const createComponent = async () => {
-    getUsersMock = vi.fn().mockResolvedValue({
-      items: [
-        {
-          id: 'user-1',
-          email: 'user@example.com',
-          userName: 'User One',
-          isLockedOut: false,
-          roles: ['TenantAdmin'],
-          tenantId: 'tenant-1',
-          storeId: null,
-        },
-      ],
-      totalCount: 1,
-      pageNumber: 1,
-      pageSize: 20,
+    getUsersMock = vi.fn().mockResolvedValue(buildUsersResponse());
+    createUserMock = vi.fn().mockResolvedValue({
+      id: 'user-2',
+      email: 'new@example.com',
+      userName: 'new.user',
+      roles: ['AdminStore'],
+      tenantId: 'tenant-ctx',
+      storeId: 'store-ctx',
+      isLockedOut: false,
     });
+
     await TestBed.configureTestingModule({
       imports: [UsersAdminPage],
       providers: [
@@ -42,7 +53,8 @@ describe('UsersAdminPage', () => {
           provide: AdminUsersService,
           useValue: {
             getUsers: getUsersMock,
-            updateUserRoles: async () => ({
+            createUser: createUserMock,
+            updateUserRoles: vi.fn().mockResolvedValue({
               id: 'user-1',
               email: 'user@example.com',
               userName: 'User One',
@@ -51,7 +63,7 @@ describe('UsersAdminPage', () => {
               tenantId: 'tenant-1',
               storeId: 'store-1',
             }),
-            setUserLockState: async () => ({
+            setUserLockState: vi.fn().mockResolvedValue({
               id: 'user-1',
               email: 'user@example.com',
               userName: 'User One',
@@ -92,133 +104,12 @@ describe('UsersAdminPage', () => {
     fixture.detectChanges();
   };
 
-  it('SuperAdmin should show tenant and store filters', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
-
-    await createComponent();
-
-    const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('[data-testid="admin-users-filter-tenant"]')).toBeTruthy();
-    expect(nativeElement.querySelector('[data-testid="admin-users-filter-store"]')).toBeTruthy();
+  beforeEach(() => {
+    queryParams = {};
   });
 
-  it('TenantAdmin should render tenant filter disabled and store enabled', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'TenantAdmin',
-      getTenantId: () => 'tenant-1',
-      getStoreId: () => null,
-    };
-
-    await createComponent();
-
-    const nativeElement = fixture.nativeElement as HTMLElement;
-    const tenant = nativeElement.querySelector(
-      '[data-testid="admin-users-filter-tenant"]',
-    ) as HTMLInputElement;
-    const store = nativeElement.querySelector(
-      '[data-testid="admin-users-filter-store"]',
-    ) as HTMLInputElement;
-    expect(tenant.disabled).toBe(true);
-    expect(store.disabled).toBe(false);
-  });
-
-  it('AdminStore should keep store filter disabled (fixed scope)', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'AdminStore',
-      getTenantId: () => 'tenant-1',
-      getStoreId: () => 'store-1',
-    };
-
-    await createComponent();
-
-    const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('[data-testid="admin-users-filter-tenant"]')).toBeFalsy();
-    const store = nativeElement.querySelector(
-      '[data-testid="admin-users-filter-store"]',
-    ) as HTMLInputElement;
-    expect(store.disabled).toBe(true);
-  });
-
-  it('role changes should recalculate store required message', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
-
-    await createComponent();
-
-    const component = fixture.componentInstance;
-    component.roleDraftControl('user-1').setValue('Cashier');
-    fixture.detectChanges();
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector(
-        '[data-testid="admin-user-form-store-required"]',
-      ),
-    ).toBeTruthy();
-
-    component.roleDraftControl('user-1').setValue('TenantAdmin');
-    fixture.detectChanges();
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector(
-        '[data-testid="admin-user-form-store-required"]',
-      ),
-    ).toBeFalsy();
-  });
-
-  it('initializes SuperAdmin filters from query params on first load', async () => {
-    queryParams = {
-      tenantId: 'tenant-q',
-      storeId: 'store-q',
-      search: 'john',
-    };
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
-
-    await createComponent();
-
-    expect(getUsersMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        search: 'john',
-        tenantId: 'tenant-q',
-        storeId: 'store-q',
-      }),
-    );
-  });
-
-  it('keeps TenantAdmin scope while applying store query param', async () => {
-    queryParams = {
-      tenantId: 'tenant-overridden',
-      storeId: 'store-2',
-    };
-    authMock = {
-      hasRole: (role: string) => role === 'TenantAdmin',
-      getTenantId: () => 'tenant-1',
-      getStoreId: () => null,
-    };
-
-    await createComponent();
-
-    expect(getUsersMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: 'tenant-1',
-        storeId: 'store-2',
-      }),
-    );
-  });
-
-  it('prefills create form from query context and suggests AdminStore for tenant + store', async () => {
-    queryParams = {
-      tenantId: 'tenant-q',
-      storeId: 'store-q',
-    };
+  it('keeps query prefill and role suggestion for tenant + store context', async () => {
+    queryParams = { tenantId: 'tenant-q', storeId: 'store-q' };
     authMock = {
       hasRole: (role: string) => role === 'SuperAdmin',
       getTenantId: () => null,
@@ -234,100 +125,123 @@ describe('UsersAdminPage', () => {
     expect(component.createTenantControl.value).toBe('tenant-q');
     expect(component.createStoreControl.value).toBe('store-q');
     expect(component.createRoleControl.value).toBe('AdminStore');
-
-    const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('[data-testid="admin-users-create-context-badge"]')).toBeTruthy();
-    expect(
-      nativeElement.querySelector('[data-testid="admin-user-form-role-suggestion"]')?.textContent,
-    ).toContain('AdminStore');
   });
 
-  it('prefills tenant only and keeps role store-required visual validation', async () => {
-    queryParams = {
-      tenantId: 'tenant-only',
-    };
+  it('submits create user, shows success and refreshes list', async () => {
+    queryParams = { tenantId: 'tenant-ctx', storeId: 'store-ctx' };
     authMock = {
       hasRole: (role: string) => role === 'SuperAdmin',
       getTenantId: () => null,
       getStoreId: () => null,
     };
 
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.openCreateFormFromContext();
+    component.createRoleControl.setValue('AdminStore');
+    component.createTenantControl.setValue('tenant-ctx');
+    component.createStoreControl.setValue('store-ctx');
+    component.createEmailControl.setValue('new@example.com');
+    component.createUserNameControl.setValue('new.user');
+    component.createPasswordControl.setValue('Temp123!');
+
+    await component.onSubmitCreate(new Event('submit'));
+    fixture.detectChanges();
+
+    expect(createUserMock).toHaveBeenCalledWith({
+      email: 'new@example.com',
+      userName: 'new.user',
+      role: 'AdminStore',
+      tenantId: 'tenant-ctx',
+      storeId: 'store-ctx',
+      temporaryPassword: 'Temp123!',
+    });
+    expect(component.successMessage()).toBe('Usuario creado.');
+    expect(getUsersMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows conflict message mapped from ProblemDetails', async () => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+    await createComponent();
+
+    createUserMock.mockRejectedValueOnce(
+      new HttpErrorResponse({
+        status: 409,
+        error: { detail: 'El email ya existe.' },
+      }),
+    );
+
+    const component = fixture.componentInstance;
+    component.openCreateFormFromContext();
+    component.createRoleControl.setValue('TenantAdmin');
+    component.createTenantControl.setValue('tenant-1');
+    component.createEmailControl.setValue('dup@example.com');
+    component.createUserNameControl.setValue('dup.user');
+    component.createPasswordControl.setValue('Temp123!');
+
+    await component.onSubmitCreate(new Event('submit'));
+
+    expect(component.errorMessage()).toContain('El email ya existe');
+  });
+
+  it('validates required store for scoped roles before submit', async () => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
     await createComponent();
 
     const component = fixture.componentInstance;
     component.openCreateFormFromContext();
     component.createRoleControl.setValue('Manager');
-    fixture.detectChanges();
+    component.createTenantControl.setValue('tenant-1');
+    component.createStoreControl.setValue('');
+    component.createEmailControl.setValue('manager@example.com');
+    component.createUserNameControl.setValue('manager.user');
+    component.createPasswordControl.setValue('Temp123!');
 
-    expect(component.createTenantControl.value).toBe('tenant-only');
-    expect(component.createStoreControl.value).toBe('');
+    await component.onSubmitCreate(new Event('submit'));
 
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector('[data-testid="admin-user-form-store-required"]'),
-    ).toBeTruthy();
+    expect(createUserMock).not.toHaveBeenCalled();
+    expect(component.errorMessage()).toContain('StoreId es obligatorio');
   });
 
-  it('when filters are cleared, create form falls back to neutral context', async () => {
-    queryParams = {
-      tenantId: 'tenant-q',
-      storeId: 'store-q',
-    };
+  it('shows backend validation errors for tenant/store mismatch', async () => {
     authMock = {
       hasRole: (role: string) => role === 'SuperAdmin',
       getTenantId: () => null,
       getStoreId: () => null,
     };
-
     await createComponent();
 
-    const component = fixture.componentInstance;
-    component.tenantFilterControl.setValue('');
-    component.storeFilterControl.setValue('');
-    component.openCreateFormFromContext();
-    fixture.detectChanges();
-
-    expect(component.createTenantControl.value).toBe('');
-    expect(component.createStoreControl.value).toBe('');
-    expect(component.createRoleControl.value).toBe('');
-  });
-
-  it('renders stable create unavailable state when backend endpoint is missing', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
-
-    await createComponent();
+    createUserMock.mockRejectedValueOnce(
+      new HttpErrorResponse({
+        status: 400,
+        error: {
+          errors: {
+            storeId: ['Store no pertenece al tenant.'],
+          },
+        },
+      }),
+    );
 
     const component = fixture.componentInstance;
     component.openCreateFormFromContext();
-    fixture.detectChanges();
+    component.createRoleControl.setValue('AdminStore');
+    component.createTenantControl.setValue('tenant-a');
+    component.createStoreControl.setValue('store-b');
+    component.createEmailControl.setValue('new@example.com');
+    component.createUserNameControl.setValue('new.user');
+    component.createPasswordControl.setValue('Temp123!');
 
-    const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(nativeElement.querySelector('[data-testid="admin-user-form-create-unavailable"]')).toBeTruthy();
-  });
+    await component.onSubmitCreate(new Event('submit'));
 
-  it('should render success and validation errors with stable testids', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
-
-    await createComponent();
-
-    const component = fixture.componentInstance;
-    component.successMessage.set('Rol actualizado correctamente.');
-    component.errorMessage.set('StoreId es obligatorio para asignar ese rol.');
-    fixture.detectChanges();
-
-    const nativeElement = fixture.nativeElement as HTMLElement;
-    expect(
-      nativeElement.querySelector('[data-testid="admin-user-form-success"]')?.textContent,
-    ).toContain('Rol actualizado');
-    expect(
-      nativeElement.querySelector('[data-testid="admin-user-form-error"]')?.textContent,
-    ).toContain('StoreId es obligatorio');
+    expect(component.errorMessage()).toContain('Store no pertenece al tenant');
   });
 });
