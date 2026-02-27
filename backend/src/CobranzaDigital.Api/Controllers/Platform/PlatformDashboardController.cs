@@ -37,4 +37,25 @@ public sealed class PlatformDashboardController : ControllerBase
     [HttpGet("out-of-stock")]
     public Task<PlatformOutOfStockResponseDto> GetOutOfStock([FromQuery] Guid? tenantId = null, [FromQuery] Guid? storeId = null, [FromQuery] string? itemType = null, [FromQuery] string? search = null, [FromQuery] bool onlyTracked = true, [FromQuery] int top = 50, CancellationToken ct = default) =>
         _service.GetOutOfStockAsync(tenantId, storeId, itemType, search, onlyTracked, top, ct);
+
+
+    [HttpGet("sales-trend")]
+    public Task<PlatformSalesTrendResponseDto> GetSalesTrend([FromQuery] DateTimeOffset? dateFrom, [FromQuery] DateTimeOffset? dateTo, [FromQuery] string? granularity = null, CancellationToken ct = default) =>
+        _service.GetSalesTrendAsync(dateFrom, dateTo, granularity, ct);
+
+    [HttpGet("top-void-tenants")]
+    public Task<PlatformTopVoidTenantsResponseDto> GetTopVoidTenants([FromQuery] DateTimeOffset? dateFrom, [FromQuery] DateTimeOffset? dateTo, [FromQuery] int top = 10, CancellationToken ct = default) =>
+        _service.GetTopVoidTenantsAsync(dateFrom, dateTo, top, ct);
+
+    [HttpGet("stockout-hotspots")]
+    public Task<PlatformStockoutHotspotsResponseDto> GetStockoutHotspots([FromQuery] decimal threshold = 5m, [FromQuery] int top = 10, [FromQuery] string? itemType = null, CancellationToken ct = default) =>
+        _service.GetStockoutHotspotsAsync(threshold, top, itemType, ct);
+
+    [HttpGet("activity-feed")]
+    public Task<PlatformActivityFeedResponseDto> GetActivityFeed([FromQuery] int take = 20, [FromQuery] string? eventType = null, CancellationToken ct = default) =>
+        _service.GetActivityFeedAsync(take, eventType, ct);
+
+    [HttpGet("executive-signals")]
+    public Task<PlatformExecutiveSignalsDto> GetExecutiveSignals([FromQuery] DateTimeOffset? dateFrom, [FromQuery] DateTimeOffset? dateTo, [FromQuery] bool previousPeriodCompare = true, CancellationToken ct = default) =>
+        _service.GetExecutiveSignalsAsync(dateFrom, dateTo, previousPeriodCompare, ct);
 }

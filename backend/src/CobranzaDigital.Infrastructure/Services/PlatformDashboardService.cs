@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using CobranzaDigital.Application.Contracts.Platform;
 using CobranzaDigital.Application.Interfaces.Platform;
 using CobranzaDigital.Domain.Entities;
@@ -290,11 +292,7 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
     public async Task<PlatformOutOfStockResponseDto> GetOutOfStockAsync(Guid? tenantId, Guid? storeId, string? itemType, string? search, bool onlyTracked, int top, CancellationToken ct)
     {
         var normalizedTop = Math.Clamp(top <= 0 ? 50 : top, 1, 200);
-        CatalogItemType? parsedItemType = null;
-        if (!string.IsNullOrWhiteSpace(itemType) && Enum.TryParse<CatalogItemType>(itemType, true, out var parsed))
-        {
-            parsedItemType = parsed;
-        }
+        CatalogItemType? parsedItemType = ParseItemType(itemType);
 
         var query = _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.OnHandQty <= 0m);
         if (tenantId.HasValue)
@@ -361,6 +359,308 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
         return new PlatformOutOfStockResponseDto(materialized);
     }
 
+    public async Task<PlatformSalesTrendResponseDto> GetSalesTrendAsync(DateTimeOffset? dateFrom, DateTimeOffset? dateTo, string? granularity, CancellationToken ct)
+    {
+        var normalizedGranularity = NormalizeGranularity(granularity);
+        var (effectiveFrom, effectiveTo) = ResolveRange(dateFrom, dateTo, 14);
+        var sales = await _db.Sales.AsNoTracking()
+            .Where(x => x.OccurredAtUtc >= effectiveFrom && x.OccurredAtUtc <= effectiveTo)
+            .Select(x => new { x.OccurredAtUtc, x.Total, x.Status })
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        var grouped = sales.GroupBy(x => BucketStart(x.OccurredAtUtc, normalizedGranularity))
+            .ToDictionary(
+                g => g.Key,
+                g => new PlatformSalesTrendPointDto(
+                    g.Key,
+                    BuildBucketLabel(g.Key, normalizedGranularity),
+                    g.Count(x => x.Status == SaleStatus.Completed),
+                    g.Where(x => x.Status == SaleStatus.Completed).Sum(x => x.Total),
+                    g.Count(x => x.Status == SaleStatus.Void),
+                    0m));
+
+        var cursor = BucketStart(effectiveFrom, normalizedGranularity);
+        var end = BucketStart(effectiveTo, normalizedGranularity);
+        var points = new List<PlatformSalesTrendPointDto>();
+        while (cursor <= end)
+        {
+            if (grouped.TryGetValue(cursor, out var existing))
+            {
+                var avg = existing.SalesCount > 0 ? decimal.Round(existing.SalesAmount / existing.SalesCount, 2) : 0m;
+                points.Add(existing with { AverageTicket = avg });
+            }
+            else
+            {
+                points.Add(new PlatformSalesTrendPointDto(cursor, BuildBucketLabel(cursor, normalizedGranularity), 0, 0m, 0, 0m));
+            }
+
+            cursor = normalizedGranularity == "week" ? cursor.AddDays(7) : cursor.AddDays(1);
+        }
+
+        return new PlatformSalesTrendResponseDto(points, effectiveFrom, effectiveTo, normalizedGranularity);
+    }
+
+    public async Task<PlatformTopVoidTenantsResponseDto> GetTopVoidTenantsAsync(DateTimeOffset? dateFrom, DateTimeOffset? dateTo, int top, CancellationToken ct)
+    {
+        var normalizedTop = Math.Clamp(top <= 0 ? 10 : top, 1, 50);
+        var (effectiveFrom, effectiveTo) = ResolveRange(dateFrom, dateTo, 14);
+
+        var tenantRows = await (
+            from tenant in _db.Tenants.AsNoTracking()
+            join vertical in _db.Verticals.AsNoTracking() on tenant.VerticalId equals vertical.Id into verticalJoin
+            from vertical in verticalJoin.DefaultIfEmpty()
+            join store in _db.Stores.AsNoTracking() on tenant.Id equals store.TenantId into storeJoin
+            select new { tenant.Id, tenant.Name, tenant.VerticalId, VerticalName = vertical != null ? vertical.Name : null, StoreCount = storeJoin.Count() })
+            .ToDictionaryAsync(x => x.Id, ct).ConfigureAwait(false);
+
+        var sales = await _db.Sales.AsNoTracking()
+            .Where(x => x.OccurredAtUtc >= effectiveFrom && x.OccurredAtUtc <= effectiveTo)
+            .GroupBy(x => x.TenantId)
+            .Select(g => new
+            {
+                TenantId = g.Key,
+                VoidedSalesCount = g.Count(x => x.Status == SaleStatus.Void),
+                VoidedSalesAmount = g.Where(x => x.Status == SaleStatus.Void).Sum(x => (decimal?)x.Total) ?? 0m,
+                TotalSalesCount = g.Count()
+            })
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        var rows = sales.Select(x =>
+        {
+            var tenant = tenantRows.GetValueOrDefault(x.TenantId);
+            var voidRate = x.TotalSalesCount > 0 ? decimal.Round((decimal)x.VoidedSalesCount / x.TotalSalesCount, 4) : 0m;
+            return new PlatformTopVoidTenantRowDto(x.TenantId, tenant?.Name ?? "Unknown", tenant?.VerticalId ?? Guid.Empty, tenant?.VerticalName, x.VoidedSalesCount, x.VoidedSalesAmount, x.TotalSalesCount, voidRate, tenant?.StoreCount ?? 0);
+        })
+        .OrderByDescending(x => x.VoidedSalesCount)
+        .ThenByDescending(x => x.VoidedSalesAmount)
+        .ThenBy(x => x.TenantName)
+        .Take(normalizedTop)
+        .ToList();
+
+        return new PlatformTopVoidTenantsResponseDto(rows, effectiveFrom, effectiveTo, normalizedTop);
+    }
+
+    public async Task<PlatformStockoutHotspotsResponseDto> GetStockoutHotspotsAsync(decimal threshold, int top, string? itemType, CancellationToken ct)
+    {
+        var normalizedTop = Math.Clamp(top <= 0 ? 10 : top, 1, 100);
+        var normalizedThreshold = threshold > 0m ? threshold : DefaultLowStockThreshold;
+        var parsedItemType = ParseItemType(itemType);
+
+        var query = _db.CatalogInventoryBalances.AsNoTracking().AsQueryable();
+        if (parsedItemType.HasValue)
+        {
+            query = query.Where(x => x.ItemType == parsedItemType.Value);
+        }
+
+        var balances = await query
+            .Where(x => x.OnHandQty <= normalizedThreshold)
+            .Select(x => new { x.TenantId, x.StoreId, x.ItemType, x.ItemId, x.OnHandQty })
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        var trackedProductIds = await _db.Products.AsNoTracking().Where(x => x.IsInventoryTracked).Select(x => x.Id).ToListAsync(ct).ConfigureAwait(false);
+        var trackedExtraIds = await _db.Extras.AsNoTracking().Where(x => x.IsInventoryTracked).Select(x => x.Id).ToListAsync(ct).ConfigureAwait(false);
+        var trackedProducts = trackedProductIds.ToHashSet();
+        var trackedExtras = trackedExtraIds.ToHashSet();
+
+        var byStore = balances.GroupBy(x => new { x.TenantId, x.StoreId })
+            .Select(g => new
+            {
+                g.Key.TenantId,
+                g.Key.StoreId,
+                OutOfStockItemsCount = g.Count(x => x.OnHandQty <= 0m),
+                LowStockItemsCount = g.Count(x => x.OnHandQty > 0m && x.OnHandQty <= normalizedThreshold),
+                TrackedItemsCount = g.Count(x => (x.ItemType == CatalogItemType.Product && trackedProducts.Contains(x.ItemId)) || (x.ItemType == CatalogItemType.Extra && trackedExtras.Contains(x.ItemId)))
+            })
+            .Where(x => x.OutOfStockItemsCount > 0 || x.LowStockItemsCount > 0)
+            .ToList();
+
+        var lastMovements = await _db.CatalogInventoryAdjustments.AsNoTracking()
+            .GroupBy(x => new { x.TenantId, x.StoreId })
+            .Select(x => new { x.Key.TenantId, x.Key.StoreId, LastInventoryMovementAtUtc = x.Max(y => y.CreatedAtUtc) })
+            .ToDictionaryAsync(x => (x.TenantId, x.StoreId), x => (DateTimeOffset?)x.LastInventoryMovementAtUtc, ct).ConfigureAwait(false);
+
+        var tenantMap = await _db.Tenants.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
+        var storeMap = await _db.Stores.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
+
+        var rows = byStore
+            .Select(x => new PlatformStockoutHotspotRowDto(
+                x.TenantId,
+                tenantMap.GetValueOrDefault(x.TenantId, "Unknown"),
+                x.StoreId,
+                storeMap.GetValueOrDefault(x.StoreId, "Unknown"),
+                x.OutOfStockItemsCount,
+                x.LowStockItemsCount,
+                lastMovements.GetValueOrDefault((x.TenantId, x.StoreId)),
+                x.TrackedItemsCount))
+            .OrderByDescending(x => x.OutOfStockItemsCount)
+            .ThenByDescending(x => x.LowStockItemsCount)
+            .ThenBy(x => x.TenantName)
+            .Take(normalizedTop)
+            .ToList();
+
+        return new PlatformStockoutHotspotsResponseDto(rows, normalizedThreshold, normalizedTop, parsedItemType?.ToString());
+    }
+
+    public async Task<PlatformActivityFeedResponseDto> GetActivityFeedAsync(int take, string? eventType, CancellationToken ct)
+    {
+        var normalizedTake = Math.Clamp(take <= 0 ? 20 : take, 1, 100);
+        var normalizedType = string.IsNullOrWhiteSpace(eventType) ? null : eventType.Trim();
+
+        var tenantMap = await _db.Tenants.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
+        var storeMap = await _db.Stores.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
+
+        var items = new List<PlatformActivityFeedItemDto>();
+        if (normalizedType is null or "SaleCreated")
+        {
+            var sales = await _db.Sales.AsNoTracking()
+                .Where(x => x.Status == SaleStatus.Completed)
+                .OrderByDescending(x => x.OccurredAtUtc)
+                .Take(normalizedTake)
+                .Select(x => new { x.Id, x.OccurredAtUtc, x.TenantId, x.StoreId, x.Total, x.CreatedByUserId })
+                .ToListAsync(ct).ConfigureAwait(false);
+            items.AddRange(sales.Select(x => new PlatformActivityFeedItemDto("SaleCreated", x.OccurredAtUtc, x.TenantId, tenantMap.GetValueOrDefault(x.TenantId, "Unknown"), x.StoreId, storeMap.GetValueOrDefault(x.StoreId, "Unknown"), "Sale created", $"Sale total {x.Total.ToString("0.00", CultureInfo.InvariantCulture)}", x.Id, "info", x.CreatedByUserId)));
+        }
+
+        if (normalizedType is null or "SaleVoided")
+        {
+            var sales = await _db.Sales.AsNoTracking()
+                .Where(x => x.Status == SaleStatus.Void)
+                .OrderByDescending(x => x.VoidedAtUtc ?? x.OccurredAtUtc)
+                .Take(normalizedTake)
+                .Select(x => new { x.Id, OccurredAt = x.VoidedAtUtc ?? x.OccurredAtUtc, x.TenantId, x.StoreId, x.Total, x.VoidedByUserId })
+                .ToListAsync(ct).ConfigureAwait(false);
+            items.AddRange(sales.Select(x => new PlatformActivityFeedItemDto("SaleVoided", x.OccurredAt, x.TenantId, tenantMap.GetValueOrDefault(x.TenantId, "Unknown"), x.StoreId, storeMap.GetValueOrDefault(x.StoreId, "Unknown"), "Sale voided", $"Voided total {x.Total.ToString("0.00", CultureInfo.InvariantCulture)}", x.Id, "warning", x.VoidedByUserId)));
+        }
+
+        if (normalizedType is null or "InventoryAdjusted")
+        {
+            var adjustments = await _db.CatalogInventoryAdjustments.AsNoTracking()
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .Take(normalizedTake)
+                .Select(x => new { x.Id, x.CreatedAtUtc, x.TenantId, x.StoreId, x.DeltaQty, x.Reason, x.CreatedByUserId })
+                .ToListAsync(ct).ConfigureAwait(false);
+            items.AddRange(adjustments.Select(x => new PlatformActivityFeedItemDto("InventoryAdjusted", x.CreatedAtUtc, x.TenantId, tenantMap.GetValueOrDefault(x.TenantId, "Unknown"), x.StoreId, storeMap.GetValueOrDefault(x.StoreId, "Unknown"), "Inventory adjusted", $"Reason {x.Reason}, delta {x.DeltaQty.ToString("0.##", CultureInfo.InvariantCulture)}", x.Id, "info", x.CreatedByUserId)));
+        }
+
+        return new PlatformActivityFeedResponseDto(items.OrderByDescending(x => x.OccurredAtUtc).Take(normalizedTake).ToList(), normalizedTake, normalizedType);
+    }
+
+    public async Task<PlatformExecutiveSignalsDto> GetExecutiveSignalsAsync(DateTimeOffset? dateFrom, DateTimeOffset? dateTo, bool previousPeriodCompare, CancellationToken ct)
+    {
+        var (effectiveFrom, effectiveTo) = ResolveRange(dateFrom, dateTo, 7);
+        var periodDays = Math.Max(1, (int)Math.Ceiling((effectiveTo - effectiveFrom).TotalDays));
+        var prevFrom = effectiveFrom.AddDays(-periodDays);
+        var prevTo = effectiveFrom;
+
+        var currentCompletedRaw = await _db.Sales.AsNoTracking()
+            .Where(x => x.Status == SaleStatus.Completed && x.OccurredAtUtc >= effectiveFrom && x.OccurredAtUtc <= effectiveTo)
+            .Select(x => new { x.TenantId, x.Total })
+            .ToListAsync(ct).ConfigureAwait(false);
+        var currentCompleted = currentCompletedRaw.Select(x => (x.TenantId, x.Total)).ToList();
+
+        var currentVoids = await _db.Sales.AsNoTracking()
+            .CountAsync(x => x.Status == SaleStatus.Void && x.OccurredAtUtc >= effectiveFrom && x.OccurredAtUtc <= effectiveTo, ct).ConfigureAwait(false);
+        var currentTotalSales = await _db.Sales.AsNoTracking()
+            .CountAsync(x => x.OccurredAtUtc >= effectiveFrom && x.OccurredAtUtc <= effectiveTo, ct).ConfigureAwait(false);
+
+        var previousCompleted = new List<(Guid TenantId, decimal Total)>();
+        if (previousPeriodCompare)
+        {
+            var previousCompletedRaw = await _db.Sales.AsNoTracking()
+                .Where(x => x.Status == SaleStatus.Completed && x.OccurredAtUtc >= prevFrom && x.OccurredAtUtc < prevTo)
+                .Select(x => new { x.TenantId, x.Total })
+                .ToListAsync(ct).ConfigureAwait(false);
+            previousCompleted = previousCompletedRaw.Select(x => (x.TenantId, x.Total)).ToList();
+        }
+
+        var currentAmount = currentCompleted.Sum(x => x.Total);
+        var previousAmount = previousCompleted.Sum(x => x.Total);
+        decimal? growth = null;
+        if (previousPeriodCompare)
+        {
+            growth = previousAmount <= 0m ? (currentAmount > 0m ? 100m : 0m) : decimal.Round(((currentAmount - previousAmount) / previousAmount) * 100m, 2);
+        }
+
+        var tenantSalesIds = currentCompleted.Select(x => x.TenantId).Distinct().ToHashSet();
+        var tenantsWithNoSalesInRangeCount = await _db.Tenants.AsNoTracking().CountAsync(x => !tenantSalesIds.Contains(x.Id), ct).ConfigureAwait(false);
+
+        var storesWithNoAdminStoreCount = await _db.Stores.AsNoTracking()
+            .GroupJoin(_db.Users.AsNoTracking(), s => s.Id, u => u.StoreId, (store, users) => new { store.Id, Users = users })
+            .CountAsync(x => !x.Users.Any(), ct).ConfigureAwait(false);
+
+        var tenantsWithNoCatalogTemplateCount = await _db.Tenants.AsNoTracking()
+            .GroupJoin(_db.TenantCatalogTemplates.AsNoTracking(), t => t.Id, tt => tt.TenantId, (tenant, mappings) => new { tenant.Id, mappings })
+            .CountAsync(x => !x.mappings.Any(y => y.CatalogTemplateId.HasValue), ct).ConfigureAwait(false);
+
+        var storesWithOutOfStockCount = await _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.OnHandQty <= 0m).Select(x => x.StoreId).Distinct().CountAsync(ct).ConfigureAwait(false);
+
+        var inventoryAdjustmentCountInRange = await _db.CatalogInventoryAdjustments.AsNoTracking()
+            .CountAsync(x => x.CreatedAtUtc >= effectiveFrom && x.CreatedAtUtc <= effectiveTo, ct).ConfigureAwait(false);
+
+        var tenantMap = await _db.Tenants.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
+        var currentByTenant = currentCompleted.GroupBy(x => x.TenantId).ToDictionary(x => x.Key, x => x.Sum(y => y.Total));
+        var prevByTenant = previousCompleted.GroupBy(x => x.TenantId).ToDictionary(x => x.Key, x => x.Sum(y => y.Total));
+
+        Guid? fastestId = null;
+        string? fastestName = null;
+        decimal bestGrowth = decimal.MinValue;
+        if (previousPeriodCompare)
+        {
+            foreach (var row in currentByTenant)
+            {
+                var prev = prevByTenant.GetValueOrDefault(row.Key);
+                var tenantGrowth = prev <= 0m ? (row.Value > 0m ? 100m : 0m) : ((row.Value - prev) / prev) * 100m;
+                if (tenantGrowth > bestGrowth)
+                {
+                    bestGrowth = tenantGrowth;
+                    fastestId = row.Key;
+                    fastestName = tenantMap.GetValueOrDefault(row.Key, "Unknown");
+                }
+            }
+        }
+
+        var voidsByTenant = await _db.Sales.AsNoTracking()
+            .Where(x => x.Status == SaleStatus.Void && x.OccurredAtUtc >= effectiveFrom && x.OccurredAtUtc <= effectiveTo)
+            .GroupBy(x => x.TenantId)
+            .Select(x => new { TenantId = x.Key, Count = x.Count() })
+            .ToDictionaryAsync(x => x.TenantId, x => x.Count, ct).ConfigureAwait(false);
+        var outByTenant = await _db.CatalogInventoryBalances.AsNoTracking()
+            .Where(x => x.OnHandQty <= 0m)
+            .GroupBy(x => x.TenantId)
+            .Select(x => new { TenantId = x.Key, Count = x.Count() })
+            .ToDictionaryAsync(x => x.TenantId, x => x.Count, ct).ConfigureAwait(false);
+
+        var risk = tenantMap.Keys.Select(id => new { TenantId = id, Score = (voidsByTenant.GetValueOrDefault(id) * 2) + outByTenant.GetValueOrDefault(id) })
+            .OrderByDescending(x => x.Score)
+            .FirstOrDefault();
+
+        return new PlatformExecutiveSignalsDto(
+            fastestId,
+            fastestName,
+            growth,
+            currentTotalSales > 0 ? decimal.Round((decimal)currentVoids / currentTotalSales * 100m, 2) : 0m,
+            tenantsWithNoSalesInRangeCount,
+            storesWithNoAdminStoreCount,
+            tenantsWithNoCatalogTemplateCount,
+            storesWithOutOfStockCount,
+            inventoryAdjustmentCountInRange,
+            risk?.Score > 0 ? risk.TenantId : null,
+            risk?.Score > 0 ? tenantMap.GetValueOrDefault(risk.TenantId) : null,
+            effectiveFrom,
+            effectiveTo,
+            previousPeriodCompare);
+    }
+
+    private static CatalogItemType? ParseItemType(string? itemType)
+    {
+        if (!string.IsNullOrWhiteSpace(itemType) && Enum.TryParse<CatalogItemType>(itemType, true, out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
     private static (DateTimeOffset from, DateTimeOffset to) ResolveRange(DateTimeOffset? dateFrom, DateTimeOffset? dateTo, int defaultDays)
     {
         if (dateFrom.HasValue && dateTo.HasValue)
@@ -370,5 +670,30 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
 
         var now = DateTimeOffset.UtcNow;
         return (now.AddDays(-(defaultDays - 1)).Date, now);
+    }
+
+    private static string NormalizeGranularity(string? granularity) => string.Equals(granularity, "week", StringComparison.OrdinalIgnoreCase) ? "week" : "day";
+
+    private static DateTimeOffset BucketStart(DateTimeOffset date, string granularity)
+    {
+        var utcDate = date.UtcDateTime.Date;
+        if (granularity == "week")
+        {
+            var shift = ((int)utcDate.DayOfWeek + 6) % 7;
+            utcDate = utcDate.AddDays(-shift);
+        }
+
+        return new DateTimeOffset(utcDate, TimeSpan.Zero);
+    }
+
+    private static string BuildBucketLabel(DateTimeOffset bucketStartUtc, string granularity)
+    {
+        if (granularity == "week")
+        {
+            var week = ISOWeek.GetWeekOfYear(bucketStartUtc.UtcDateTime);
+            return $"{bucketStartUtc:yyyy}-W{week:00}";
+        }
+
+        return bucketStartUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 }
