@@ -2,6 +2,7 @@ using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Interfaces.PosCatalog;
 using CobranzaDigital.Application.Interfaces.PosSales;
+using CobranzaDigital.Application.Interfaces.Platform;
 using CobranzaDigital.Infrastructure.Auditing;
 using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Options;
@@ -94,6 +95,7 @@ public static class DependencyInjection
         services.AddScoped<InventoryConsumptionService>();
         services.AddScoped<IPosSalesService, PosSalesService>();
         services.AddScoped<IPosShiftService, PosShiftService>();
+        services.AddScoped<IPlatformDashboardService, PlatformDashboardService>();
 
         return services;
     }
