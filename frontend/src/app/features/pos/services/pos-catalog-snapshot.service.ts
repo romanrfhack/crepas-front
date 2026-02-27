@@ -47,9 +47,13 @@ export class PosCatalogSnapshotService {
 
   getSnapshot(request: SnapshotRequest = {}): Observable<CatalogSnapshotDto> {
     const storeId = this.resolveStoreId(request.storeId);
+    return this.fetchSnapshot(storeId, request.forceRefresh === true);
+  }
+
+  private fetchSnapshot(storeId: string | null, forceRefresh: boolean): Observable<CatalogSnapshotDto> {
     const scopedCacheKey = this.getScopedCacheKey(storeId);
     const cached = this.readCache(scopedCacheKey);
-    const headers = this.buildHeaders(cached?.etag, request.forceRefresh === true);
+    const headers = this.buildHeaders(cached?.etag, forceRefresh);
     const url = this.buildUrl(storeId);
 
     return this.http.get<CatalogSnapshotDto>(url, { observe: 'response', headers }).pipe(
@@ -58,6 +62,11 @@ export class PosCatalogSnapshotService {
         if (this.isNotModifiedError(error) && cached) {
           this.setSnapshotSignal(cached.snapshot);
           return of(cached.snapshot);
+        }
+
+        if (storeId && this.isMultiStoreDisabledError(error)) {
+          this.storeContext.setActiveStoreId(null);
+          return this.fetchSnapshot(null, forceRefresh);
         }
 
         throw error;
@@ -157,5 +166,22 @@ export class PosCatalogSnapshotService {
 
   private isNotModifiedError(error: unknown): boolean {
     return error instanceof HttpErrorResponse && error.status === 304;
+  }
+
+  private isMultiStoreDisabledError(error: unknown): boolean {
+    if (!(error instanceof HttpErrorResponse) || error.status !== 400) {
+      return false;
+    }
+
+    const responseBody = error.error;
+    const storeIdErrors = responseBody?.errors?.storeId;
+
+    if (!Array.isArray(storeIdErrors)) {
+      return false;
+    }
+
+    return storeIdErrors.some(
+      (message) => typeof message === 'string' && message.toLowerCase().includes('multi-store is disabled'),
+    );
   }
 }
