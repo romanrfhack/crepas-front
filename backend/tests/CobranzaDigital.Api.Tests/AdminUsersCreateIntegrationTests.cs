@@ -344,9 +344,11 @@ public sealed class AdminUsersCreateIntegrationTests : IClassFixture<CobranzaDig
             UpdatedAtUtc = now
         };
 
-        tenant.DefaultStoreId = store.Id;
         db.Tenants.Add(tenant);
         db.Stores.Add(store);
+        await db.SaveChangesAsync();
+
+        tenant.DefaultStoreId = store.Id;
         await db.SaveChangesAsync();
     }
 
