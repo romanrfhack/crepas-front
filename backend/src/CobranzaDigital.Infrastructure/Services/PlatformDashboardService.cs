@@ -20,16 +20,16 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
         var (todayFrom, todayTo) = ResolveRange(dateFrom, dateTo, 1);
         var last7From = todayTo.AddDays(-6);
 
-        var activeTenants = await _db.Tenants.AsNoTracking().CountAsync(x => x.IsActive, ct);
-        var inactiveTenants = await _db.Tenants.AsNoTracking().CountAsync(x => !x.IsActive, ct);
-        var activeStores = await _db.Stores.AsNoTracking().CountAsync(x => x.IsActive, ct);
-        var inactiveStores = await _db.Stores.AsNoTracking().CountAsync(x => !x.IsActive, ct);
-        var totalUsers = await _db.Users.AsNoTracking().CountAsync(ct);
+        var activeTenants = await _db.Tenants.AsNoTracking().CountAsync(x => x.IsActive, ct).ConfigureAwait(false);
+        var inactiveTenants = await _db.Tenants.AsNoTracking().CountAsync(x => !x.IsActive, ct).ConfigureAwait(false);
+        var activeStores = await _db.Stores.AsNoTracking().CountAsync(x => x.IsActive, ct).ConfigureAwait(false);
+        var inactiveStores = await _db.Stores.AsNoTracking().CountAsync(x => !x.IsActive, ct).ConfigureAwait(false);
+        var totalUsers = await _db.Users.AsNoTracking().CountAsync(ct).ConfigureAwait(false);
 
         var storeScopedRoleIds = await _db.Roles.AsNoTracking()
             .Where(x => x.Name == "AdminStore" || x.Name == "Admin" || x.Name == "Manager" || x.Name == "Cashier")
             .Select(x => x.Id)
-            .ToListAsync(ct);
+            .ToListAsync(ct).ConfigureAwait(false);
 
         var usersWithoutStoreAssignment = await _db.UserRoles.AsNoTracking()
             .Where(x => storeScopedRoleIds.Contains(x.RoleId))
@@ -37,35 +37,35 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
             .Where(x => x.StoreId == null)
             .Select(x => x.Id)
             .Distinct()
-            .CountAsync(ct);
+            .CountAsync(ct).ConfigureAwait(false);
 
         var tenantsWithoutCatalogTemplate = await _db.Tenants.AsNoTracking()
             .GroupJoin(_db.TenantCatalogTemplates.AsNoTracking(), t => t.Id, tt => tt.TenantId, (tenant, mappings) => new { tenant.Id, mappings })
-            .CountAsync(x => !x.mappings.Any(y => y.CatalogTemplateId.HasValue), ct);
+            .CountAsync(x => !x.mappings.Any(y => y.CatalogTemplateId.HasValue), ct).ConfigureAwait(false);
 
         var storesWithoutAdminStore = await _db.Stores.AsNoTracking()
             .GroupJoin(_db.Users.AsNoTracking(), s => s.Id, u => u.StoreId, (store, users) => new { store.Id, Users = users })
-            .CountAsync(x => !x.Users.Any(), ct);
+            .CountAsync(x => !x.Users.Any(), ct).ConfigureAwait(false);
 
         var salesToday = await _db.Sales.AsNoTracking()
             .Where(x => x.Status == SaleStatus.Completed && x.OccurredAtUtc >= todayFrom && x.OccurredAtUtc <= todayTo)
             .GroupBy(_ => 1)
             .Select(x => new { Count = x.Count(), Amount = x.Sum(y => y.Total) })
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
 
         var salesLast7 = await _db.Sales.AsNoTracking()
             .Where(x => x.Status == SaleStatus.Completed && x.OccurredAtUtc >= last7From && x.OccurredAtUtc <= todayTo)
             .GroupBy(_ => 1)
             .Select(x => new { Count = x.Count(), Amount = x.Sum(y => y.Total) })
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
 
-        var openShiftsCount = await _db.PosShifts.AsNoTracking().CountAsync(x => x.ClosedAtUtc == null, ct);
+        var openShiftsCount = await _db.PosShifts.AsNoTracking().CountAsync(x => x.ClosedAtUtc == null, ct).ConfigureAwait(false);
 
         var outOfStockItemsCount = await _db.CatalogInventoryBalances.AsNoTracking()
-            .CountAsync(x => x.OnHandQty <= 0m, ct);
+            .CountAsync(x => x.OnHandQty <= 0m, ct).ConfigureAwait(false);
 
         var lowStockItemsCount = await _db.CatalogInventoryBalances.AsNoTracking()
-            .CountAsync(x => x.OnHandQty > 0m && x.OnHandQty <= normalizedThreshold, ct);
+            .CountAsync(x => x.OnHandQty > 0m && x.OnHandQty <= normalizedThreshold, ct).ConfigureAwait(false);
 
         return new PlatformDashboardSummaryDto(
             activeTenants,
@@ -111,7 +111,7 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
                     sales.Where(s => s.Status == SaleStatus.Completed).Sum(s => (decimal?)s.Total) ?? 0m,
                     0m,
                     sales.Count(s => s.Status == SaleStatus.Void)))
-            .ToListAsync(ct);
+            .ToListAsync(ct).ConfigureAwait(false);
 
         var sorted = rows
             .Select(x => x with { AverageTicket = x.SalesCount > 0 ? decimal.Round(x.SalesAmount / x.SalesCount, 2) : 0m })
@@ -133,10 +133,10 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
             .OrderBy(x => x.Name)
             .Select(x => x.Name)
             .Take(3)
-            .ToListAsync(ct);
+            .ToListAsync(ct).ConfigureAwait(false);
         if (tenantWithoutTemplateExamples.Count > 0)
         {
-            var total = await tenantWithoutTemplateQuery.CountAsync(ct);
+            var total = await tenantWithoutTemplateQuery.CountAsync(ct).ConfigureAwait(false);
             alerts.Add(new PlatformDashboardAlertDto("TENANT_WITHOUT_TEMPLATE", "high", total, "Tenants without catalog template assignment.", tenantWithoutTemplateExamples));
         }
 
@@ -145,17 +145,17 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
             .OrderBy(x => x.Name)
             .Select(x => x.Name)
             .Take(3)
-            .ToListAsync(ct);
+            .ToListAsync(ct).ConfigureAwait(false);
         if (storesWithoutAdminExamples.Count > 0)
         {
-            var total = await _db.Stores.AsNoTracking().CountAsync(s => !_db.Users.Any(u => u.StoreId == s.Id), ct);
+            var total = await _db.Stores.AsNoTracking().CountAsync(s => !_db.Users.Any(u => u.StoreId == s.Id), ct).ConfigureAwait(false);
             alerts.Add(new PlatformDashboardAlertDto("STORE_WITHOUT_ADMINSTORE", "high", total, "Stores without assigned users.", storesWithoutAdminExamples));
         }
 
         var storeScopedRoleIds = await _db.Roles.AsNoTracking()
             .Where(x => x.Name == "AdminStore" || x.Name == "Admin" || x.Name == "Manager" || x.Name == "Cashier")
             .Select(x => x.Id)
-            .ToListAsync(ct);
+            .ToListAsync(ct).ConfigureAwait(false);
 
         var usersMissingStore = await _db.UserRoles.AsNoTracking()
             .Where(x => storeScopedRoleIds.Contains(x.RoleId))
@@ -164,7 +164,7 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
             .Select(x => x.Email ?? string.Empty)
             .Distinct()
             .Take(3)
-            .ToListAsync(ct);
+            .ToListAsync(ct).ConfigureAwait(false);
         if (usersMissingStore.Count > 0)
         {
             var total = await _db.UserRoles.AsNoTracking()
@@ -173,7 +173,7 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
                 .Where(x => x.StoreId == null)
                 .Select(x => x.Id)
                 .Distinct()
-                .CountAsync(ct);
+                .CountAsync(ct).ConfigureAwait(false);
             alerts.Add(new PlatformDashboardAlertDto("STORE_SCOPED_USER_WITHOUT_STORE", "high", total, "Store scoped users without StoreId.", usersMissingStore));
         }
 
@@ -219,16 +219,16 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
                 x.CreatedAtUtc,
                 PerformedByUserId = x.CreatedByUserId
             })
-            .ToListAsync(ct);
+            .ToListAsync(ct).ConfigureAwait(false);
 
-        var tenantMap = await _db.Tenants.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct);
-        var storeMap = await _db.Stores.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct);
+        var tenantMap = await _db.Tenants.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
+        var storeMap = await _db.Stores.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
 
         var productIds = adjustments.Where(x => x.ItemType == nameof(CatalogItemType.Product)).Select(x => x.ItemId).Distinct().ToList();
         var extraIds = adjustments.Where(x => x.ItemType == nameof(CatalogItemType.Extra)).Select(x => x.ItemId).Distinct().ToList();
 
-        var products = await _db.Products.AsNoTracking().Where(x => productIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new { x.Name, x.ExternalCode }, ct);
-        var extras = await _db.Extras.AsNoTracking().Where(x => extraIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.Name, ct);
+        var products = await _db.Products.AsNoTracking().Where(x => productIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new { x.Name, x.ExternalCode }, ct).ConfigureAwait(false);
+        var extras = await _db.Extras.AsNoTracking().Where(x => extraIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
 
         var rows = adjustments.Select(x =>
         {
@@ -289,19 +289,19 @@ public sealed class PlatformDashboardService : IPlatformDashboardService
             query = query.Where(x => x.ItemType == parsedItemType.Value);
         }
 
-        var balances = await query.OrderBy(x => x.UpdatedAtUtc).Take(normalizedTop).ToListAsync(ct);
+        var balances = await query.OrderBy(x => x.UpdatedAtUtc).Take(normalizedTop).ToListAsync(ct).ConfigureAwait(false);
         var productIds = balances.Where(x => x.ItemType == CatalogItemType.Product).Select(x => x.ItemId).Distinct().ToList();
         var extraIds = balances.Where(x => x.ItemType == CatalogItemType.Extra).Select(x => x.ItemId).Distinct().ToList();
 
-        var products = await _db.Products.AsNoTracking().Where(x => productIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new { x.Name, x.ExternalCode, x.IsInventoryTracked }, ct);
-        var extras = await _db.Extras.AsNoTracking().Where(x => extraIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new { x.Name, x.IsInventoryTracked }, ct);
+        var products = await _db.Products.AsNoTracking().Where(x => productIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new { x.Name, x.ExternalCode, x.IsInventoryTracked }, ct).ConfigureAwait(false);
+        var extras = await _db.Extras.AsNoTracking().Where(x => extraIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => new { x.Name, x.IsInventoryTracked }, ct).ConfigureAwait(false);
 
-        var tenantMap = await _db.Tenants.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct);
-        var storeMap = await _db.Stores.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct);
+        var tenantMap = await _db.Tenants.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
+        var storeMap = await _db.Stores.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct).ConfigureAwait(false);
         var lastAdjustments = await _db.CatalogInventoryAdjustments.AsNoTracking()
             .GroupBy(x => new { x.TenantId, x.StoreId, x.ItemType, x.ItemId })
             .Select(x => new { x.Key.TenantId, x.Key.StoreId, x.Key.ItemType, x.Key.ItemId, LastAdjustmentAtUtc = x.Max(y => y.CreatedAtUtc) })
-            .ToDictionaryAsync(x => (x.TenantId, x.StoreId, x.ItemType, x.ItemId), x => (DateTimeOffset?)x.LastAdjustmentAtUtc, ct);
+            .ToDictionaryAsync(x => (x.TenantId, x.StoreId, x.ItemType, x.ItemId), x => (DateTimeOffset?)x.LastAdjustmentAtUtc, ct).ConfigureAwait(false);
 
         var rows = balances.Select(x =>
         {
