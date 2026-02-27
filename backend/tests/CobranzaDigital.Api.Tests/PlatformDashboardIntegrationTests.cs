@@ -170,8 +170,9 @@ public sealed class PlatformDashboardIntegrationTests : IClassFixture<CobranzaDi
         db.TenantCatalogTemplates.Add(new TenantCatalogTemplate { TenantId = tenant1.Id, CatalogTemplateId = template.Id, UpdatedAtUtc = now });
 
         var category = new Category { Id = Guid.NewGuid(), CatalogTemplateId = template.Id, Name = "Bebidas", SortOrder = 1, IsActive = true, UpdatedAtUtc = now };
-        var productOut = new Product { Id = Guid.NewGuid(), CatalogTemplateId = template.Id, CategoryId = category.Id, Name = "P1", ExternalCode = "P1", BasePrice = 10m, IsActive = true, IsAvailable = true, IsInventoryTracked = true };
-        var productLow = new Product { Id = Guid.NewGuid(), CatalogTemplateId = template.Id, CategoryId = category.Id, Name = "P2", ExternalCode = "P2", BasePrice = 10m, IsActive = true, IsAvailable = true, IsInventoryTracked = true };
+        var externalCodeSuffix = Guid.NewGuid().ToString("N");
+        var productOut = new Product { Id = Guid.NewGuid(), CatalogTemplateId = template.Id, CategoryId = category.Id, Name = "P1", ExternalCode = $"P1-{externalCodeSuffix}", BasePrice = 10m, IsActive = true, IsAvailable = true, IsInventoryTracked = true };
+        var productLow = new Product { Id = Guid.NewGuid(), CatalogTemplateId = template.Id, CategoryId = category.Id, Name = "P2", ExternalCode = $"P2-{externalCodeSuffix}", BasePrice = 10m, IsActive = true, IsAvailable = true, IsInventoryTracked = true };
         db.Categories.Add(category);
         db.Products.AddRange(productOut, productLow);
 
