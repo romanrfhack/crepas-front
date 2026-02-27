@@ -78,12 +78,16 @@ test('SuperAdmin sees tenant/store filters and store requirement for AdminStore/
   await expect(page.getByTestId('admin-users-filter-tenant')).toBeVisible();
   await expect(page.getByTestId('admin-users-filter-store')).toBeVisible();
 
-  await page.getByTestId('admin-user-form-role').selectOption('AdminStore');
-  await expect(page.getByTestId('admin-user-form-store-required')).toBeVisible();
-  await page.getByTestId('admin-user-form-role').selectOption('Cashier');
-  await expect(page.getByTestId('admin-user-form-store-required')).toBeVisible();
-  await page.getByTestId('admin-user-form-role').selectOption('TenantAdmin');
-  await expect(page.getByTestId('admin-user-form-store-required')).toBeHidden();
+  const firstUserRow = page.getByTestId('admin-users-row-user-1');
+  const firstUserRoleSelect = firstUserRow.getByTestId('admin-user-form-role');
+  const firstUserStoreRequiredHint = firstUserRow.getByTestId('admin-user-form-store-required');
+
+  await firstUserRoleSelect.selectOption('AdminStore');
+  await expect(firstUserStoreRequiredHint).toBeVisible();
+  await firstUserRoleSelect.selectOption('Cashier');
+  await expect(firstUserStoreRequiredHint).toBeVisible();
+  await firstUserRoleSelect.selectOption('TenantAdmin');
+  await expect(firstUserStoreRequiredHint).toBeHidden();
 });
 
 test('TenantAdmin and AdminStore stay scoped by tenant/store filters', async ({ page }) => {
@@ -107,13 +111,11 @@ test('TenantAdmin and AdminStore stay scoped by tenant/store filters', async ({ 
     }),
   );
 
-  await page.addInitScript(
-    (token: string) => {
-      localStorage.setItem('access_token', token);
-      localStorage.setItem('refresh_token', 'refresh-e2e');
-    },
-    buildJwt(['TenantAdmin'], 'tenant-1'),
-  );
+  await page.goto('/');
+  await page.evaluate((token: string) => {
+    localStorage.setItem('access_token', token);
+    localStorage.setItem('refresh_token', 'refresh-e2e');
+  }, buildJwt(['TenantAdmin'], 'tenant-1'));
   await page.goto('/app/admin/users');
   await expect(page.getByTestId('admin-users-filter-tenant')).toBeDisabled();
   await expect(page.getByTestId('admin-users-filter-store')).not.toBeDisabled();
