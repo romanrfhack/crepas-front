@@ -1,11 +1,13 @@
 # Multi-tenant Release A (backend)
 
 ## Definiciones
+
 - **Vertical**: industria/giro (restaurant, farmacia, etc.).
 - **Tenant**: organización cliente dentro de la plataforma.
 - **Store**: sucursal operativa de un tenant.
 
 ## Resolución de tenant
+
 - El backend usa claim JWT `tenantId` para usuarios tenant.
 - Si el claim no viene, `TenantContextService` intenta resolverlo desde `AspNetUsers.TenantId`.
 - `ITenantContext` expone:
@@ -15,30 +17,33 @@
 - Usuarios `SuperAdmin` pueden operar en modo plataforma global (`EffectiveTenantId = null`) o modo tenant explícito enviando `X-Tenant-Id: <guid>`.
 
 ## Reglas de scoping
+
 - Endpoints POS requieren tenant (`TenantScoped`) y validan que `storeId` pertenezca al tenant actual.
 - Si se envía un `storeId` de otro tenant, el backend responde `404`.
 - `Sale`, `PosShift` y `Store` persisten `TenantId` para aislamiento.
 
 ## Reglas de plataforma y override
 
-| Endpoint / grupo | SuperAdmin sin `X-Tenant-Id` | SuperAdmin con `X-Tenant-Id` |
-|---|---|---|
-| Reportes agregados (`kpis/summary`, `sales/daily`, `payments/methods`, `control/cash-differences`) | ✅ permitido (cross-tenant) | ✅ tenant específico |
-| Operativos (`/pos/sales`, `/pos/shifts`, `/pos/admin/*`) | ❌ `400 tenantId required for this endpoint in platform mode` | ✅ permitido |
-| `GET /pos/catalog/snapshot` sin `storeId` | ❌ `400 tenantId required for this endpoint in platform mode` | ✅ permitido |
-| `GET /pos/catalog/snapshot` con `storeId` | ✅ permitido (resuelve por store) | ✅ permitido |
+| Endpoint / grupo                                                                                   | SuperAdmin sin `X-Tenant-Id`                                  | SuperAdmin con `X-Tenant-Id` |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------- |
+| Reportes agregados (`kpis/summary`, `sales/daily`, `payments/methods`, `control/cash-differences`) | ✅ permitido (cross-tenant)                                   | ✅ tenant específico         |
+| Operativos (`/pos/sales`, `/pos/shifts`, `/pos/admin/*`)                                           | ❌ `400 tenantId required for this endpoint in platform mode` | ✅ permitido                 |
+| `GET /pos/catalog/snapshot` sin `storeId`                                                          | ❌ `400 tenantId required for this endpoint in platform mode` | ✅ permitido                 |
+| `GET /pos/catalog/snapshot` con `storeId`                                                          | ✅ permitido (resuelve por store)                             | ✅ permitido                 |
 
 Notas:
+
 - Usuarios tenant normales no pueden usar override a otro tenant; si envían `X-Tenant-Id` distinto reciben `403`.
 - Los endpoints `/api/v1/platform/*` se mantienen con policy `PlatformOnly`.
 
 ## Roles
+
 - **SuperAdmin**: acceso a `/api/v1/platform/*` (`PlatformOnly`).
 - **TenantAdmin / Manager / AdminStore**: operación y reportes POS dentro de su tenant.
 - **Cashier**: operación POS, sin acceso a plataforma.
 
-
 ## Plataforma UI (SuperAdmin)
+
 - La sección `/app/platform` permite CRUD de verticals y tenants usando `/api/v1/platform/verticals` y `/api/v1/platform/tenants`.
 - Desde la tabla de tenants se puede activar "Usar este tenant" para setear `platform_selected_tenant_id` (tenant-context usado por endpoints POS operativos).
 - Si se elimina el tenant activo desde Plataforma, el frontend limpia tenant-context para evitar headers `X-Tenant-Id` inválidos.
@@ -70,6 +75,7 @@ Se agregan endpoints globales para Dashboard de Plataforma en `GET /api/v1/platf
 - Agregados de tiempo (`summary`, `top-tenants`) usan UTC (`DateTimeOffset` en rango).
 
 Endpoints v1:
+
 - `GET /api/v1/platform/dashboard/summary`
 - `GET /api/v1/platform/dashboard/top-tenants`
 - `GET /api/v1/platform/dashboard/alerts`
@@ -104,7 +110,6 @@ Contrato detallado en `docs/platform-dashboard-contract-sheet.md`.
   - `AdminStore`: store fijo (deshabilitado), sin cambio de tenant.
 - Formulario inline de rol usa `admin-user-form-*` testids y muestra `admin-user-form-store-required` cuando el rol destino requiere `StoreId` (`AdminStore`, `Manager`, `Cashier`).
 
-
 ## Platform Dashboard v2 (SuperAdmin)
 
 Se agregan endpoints ejecutivos cross-tenant sobre `/api/v1/platform/dashboard/*`:
@@ -116,15 +121,16 @@ Se agregan endpoints ejecutivos cross-tenant sobre `/api/v1/platform/dashboard/*
 - `GET /api/v1/platform/dashboard/executive-signals`
 
 Reglas v2:
+
 - policy `PlatformOnly` (acceso exclusivo `SuperAdmin`).
 - no requiere header `X-Tenant-Id`.
 - agregados/rangos calculados en UTC para consistencia global.
 - v1 (`summary`, `top-tenants`, `alerts`, `recent-inventory-adjustments`, `out-of-stock`) se mantiene intacto.
 
-
 ### Frontend Dashboard v2 (SuperAdmin)
 
 La UI de `/app/platform/dashboard` extiende v1 sin romper bloques existentes y agrega secciones v2:
+
 - `platform-executive-signals` con tarjetas `platform-executive-signal-*` y error `platform-executive-signals-error`.
 - `platform-sales-trend` con filtros `platform-sales-trend-filter-date-from|date-to|granularity`, filas `platform-sales-trend-row-{index}` y error `platform-sales-trend-error`.
 - `platform-top-void-tenants` con filtros `platform-top-void-tenants-filter-date-from|date-to|top`, filas `platform-top-void-tenant-row-{tenantId}` y error `platform-top-void-tenants-error`.
@@ -132,7 +138,6 @@ La UI de `/app/platform/dashboard` extiende v1 sin romper bloques existentes y a
 - `platform-activity-feed` con filtros `platform-activity-feed-filter-take|event-type`, filas `platform-activity-feed-row-{index}` y error `platform-activity-feed-error`.
 
 El botón global `platform-dashboard-refresh` vuelve a consultar bloques v1 + v2 de manera independiente (fallas aisladas por bloque).
-
 
 ## Platform Dashboard v3 (drill-down accionable)
 
@@ -143,6 +148,7 @@ Se agregan endpoints de detalle en `GET /api/v1/platform/dashboard/*`:
 - `GET /api/v1/platform/dashboard/stores/{storeId}/stockout-details`
 
 Reglas:
+
 - Mantienen `PlatformOnly` (`SuperAdmin`) y respuesta `403` para cualquier otro rol.
 - No requieren `X-Tenant-Id` y operan cross-tenant.
 - Son aditivos (no rompen contratos v1/v2).
@@ -155,4 +161,14 @@ Referencia de contrato: `docs/platform-dashboard-contract-sheet.md` (sección v3
   - Alertas: abre panel con `GET /api/v1/platform/dashboard/alerts/drilldown?code=...`.
   - Top tenants: abre overview con `GET /api/v1/platform/dashboard/tenants/{tenantId}/overview`.
   - Stockout hotspots: abre detalle de tienda con `GET /api/v1/platform/dashboard/stores/{storeId}/stockout-details` y filtros (`itemType`, `search`, `threshold`, `mode`, `take`).
-- Se establecen `data-testid` contractuales para consumo E2E estable (drilldown open/close, title, rows, empty/error y filtros).
+- Acciones rápidas v3.1:
+  - `STORE_WITHOUT_ADMINSTORE` → `/app/admin/users?tenantId={tenantId}&storeId={storeId}`.
+  - `STORE_SCOPED_USER_WITHOUT_STORE` → `/app/admin/users?tenantId={tenantId}`.
+  - `TENANT_WITHOUT_TEMPLATE` → `/app/platform/tenants` (sin prefill por query param en tenants v1 actual).
+  - Tenant overview → botón `Ver usuarios del tenant` hacia `/app/admin/users?tenantId={tenantId}`.
+  - Store stockout details → botón `Ver usuarios de la sucursal` hacia `/app/admin/users?tenantId={tenantId}&storeId={storeId}`.
+- Test IDs estables añadidos para E2E:
+  - Alert action: `platform-alert-drilldown-action-{code}-{index}`.
+  - Alert action disabled: `platform-alert-drilldown-action-disabled-{code}-{index}`.
+  - Tenant overview action: `platform-tenant-overview-action-users`.
+  - Store stockout action: `platform-store-stockout-action-users`.

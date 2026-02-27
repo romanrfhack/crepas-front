@@ -1,7 +1,9 @@
 <div class="platform-dashboard" data-testid="platform-dashboard-page">
   <header class="toolbar">
     <h2>Dashboard de Plataforma</h2>
-    <button type="button" data-testid="platform-dashboard-refresh" (click)="refreshAll()">Recargar</button>
+    <button type="button" data-testid="platform-dashboard-refresh" (click)="refreshAll()">
+      Recargar
+    </button>
   </header>
 
   <section class="card" data-testid="platform-executive-signals">
@@ -12,14 +14,30 @@
       <p data-testid="platform-executive-signals-error">{{ executiveSignalsError() }}</p>
     } @else {
       <div class="kpi-grid">
-        <article data-testid="platform-executive-signal-growth">Growth {{ executiveSignals().salesGrowthRatePercent }}%</article>
-        <article data-testid="platform-executive-signal-void-rate">Void {{ executiveSignals().voidRatePercent }}%</article>
-        <article data-testid="platform-executive-signal-tenants-without-sales">{{ executiveSignals().tenantsWithNoSalesInRangeCount }}</article>
-        <article data-testid="platform-executive-signal-stores-no-admin-store">{{ executiveSignals().storesWithNoAdminStoreCount }}</article>
-        <article data-testid="platform-executive-signal-tenants-no-template">{{ executiveSignals().tenantsWithNoCatalogTemplateCount }}</article>
-        <article data-testid="platform-executive-signal-stores-out-of-stock">{{ executiveSignals().storesWithOutOfStockCount }}</article>
-        <article data-testid="platform-executive-signal-inventory-adjustments">{{ executiveSignals().inventoryAdjustmentCountInRange }}</article>
-        <article data-testid="platform-executive-signal-top-risk-tenant">{{ executiveSignals().topRiskTenantName ?? 'N/A' }}</article>
+        <article data-testid="platform-executive-signal-growth">
+          Growth {{ executiveSignals().salesGrowthRatePercent }}%
+        </article>
+        <article data-testid="platform-executive-signal-void-rate">
+          Void {{ executiveSignals().voidRatePercent }}%
+        </article>
+        <article data-testid="platform-executive-signal-tenants-without-sales">
+          {{ executiveSignals().tenantsWithNoSalesInRangeCount }}
+        </article>
+        <article data-testid="platform-executive-signal-stores-no-admin-store">
+          {{ executiveSignals().storesWithNoAdminStoreCount }}
+        </article>
+        <article data-testid="platform-executive-signal-tenants-no-template">
+          {{ executiveSignals().tenantsWithNoCatalogTemplateCount }}
+        </article>
+        <article data-testid="platform-executive-signal-stores-out-of-stock">
+          {{ executiveSignals().storesWithOutOfStockCount }}
+        </article>
+        <article data-testid="platform-executive-signal-inventory-adjustments">
+          {{ executiveSignals().inventoryAdjustmentCountInRange }}
+        </article>
+        <article data-testid="platform-executive-signal-top-risk-tenant">
+          {{ executiveSignals().topRiskTenantName ?? 'N/A' }}
+        </article>
       </div>
     }
   </section>
@@ -35,10 +53,16 @@
         <article data-testid="platform-kpi-active-tenants">{{ summary().activeTenants }}</article>
         <article data-testid="platform-kpi-active-stores">{{ summary().activeStores }}</article>
         <article data-testid="platform-kpi-total-users">{{ summary().totalUsers }}</article>
-        <article data-testid="platform-kpi-sales-today">{{ money(summary().salesTodayAmount) }}</article>
-        <article data-testid="platform-kpi-sales-last7days">{{ money(summary().salesLast7DaysAmount) }}</article>
+        <article data-testid="platform-kpi-sales-today">
+          {{ money(summary().salesTodayAmount) }}
+        </article>
+        <article data-testid="platform-kpi-sales-last7days">
+          {{ money(summary().salesLast7DaysAmount) }}
+        </article>
         <article data-testid="platform-kpi-open-shifts">{{ summary().openShiftsCount }}</article>
-        <article data-testid="platform-kpi-out-of-stock">{{ summary().outOfStockItemsCount }}</article>
+        <article data-testid="platform-kpi-out-of-stock">
+          {{ summary().outOfStockItemsCount }}
+        </article>
         <article data-testid="platform-kpi-low-stock">{{ summary().lowStockItemsCount }}</article>
       </div>
     }
@@ -47,9 +71,23 @@
   <section class="card" data-testid="platform-sales-trend">
     <h3>Sales trend</h3>
     <div class="filters">
-      <input type="date" data-testid="platform-sales-trend-filter-date-from" [ngModel]="salesTrendDateFrom()" (ngModelChange)="salesTrendDateFrom.set($event)" />
-      <input type="date" data-testid="platform-sales-trend-filter-date-to" [ngModel]="salesTrendDateTo()" (ngModelChange)="salesTrendDateTo.set($event)" />
-      <select data-testid="platform-sales-trend-filter-granularity" [ngModel]="salesTrendGranularity()" (ngModelChange)="salesTrendGranularity.set($event)">
+      <input
+        type="date"
+        data-testid="platform-sales-trend-filter-date-from"
+        [ngModel]="salesTrendDateFrom()"
+        (ngModelChange)="salesTrendDateFrom.set($event)"
+      />
+      <input
+        type="date"
+        data-testid="platform-sales-trend-filter-date-to"
+        [ngModel]="salesTrendDateTo()"
+        (ngModelChange)="salesTrendDateTo.set($event)"
+      />
+      <select
+        data-testid="platform-sales-trend-filter-granularity"
+        [ngModel]="salesTrendGranularity()"
+        (ngModelChange)="salesTrendGranularity.set($event)"
+      >
         <option value="day">Day</option>
         <option value="week">Week</option>
       </select>
@@ -63,7 +101,9 @@
       <p>Sin resultados.</p>
     } @else {
       @for (row of salesTrend(); track row.bucketStartUtc; let idx = $index) {
-        <div [attr.data-testid]="'platform-sales-trend-row-' + idx">{{ row.bucketLabel }} · {{ row.salesCount }} · {{ money(row.salesAmount) }}</div>
+        <div [attr.data-testid]="'platform-sales-trend-row-' + idx">
+          {{ row.bucketLabel }} · {{ row.salesCount }} · {{ money(row.salesAmount) }}
+        </div>
       }
     }
   </section>
@@ -71,9 +111,26 @@
   <section class="card" data-testid="platform-top-void-tenants">
     <h3>Top void tenants</h3>
     <div class="filters">
-      <input type="date" data-testid="platform-top-void-tenants-filter-date-from" [ngModel]="topVoidDateFrom()" (ngModelChange)="topVoidDateFrom.set($event)" />
-      <input type="date" data-testid="platform-top-void-tenants-filter-date-to" [ngModel]="topVoidDateTo()" (ngModelChange)="topVoidDateTo.set($event)" />
-      <input type="number" min="1" max="50" data-testid="platform-top-void-tenants-filter-top" [ngModel]="topVoidTop()" (ngModelChange)="topVoidTop.set(+$event || 10)" />
+      <input
+        type="date"
+        data-testid="platform-top-void-tenants-filter-date-from"
+        [ngModel]="topVoidDateFrom()"
+        (ngModelChange)="topVoidDateFrom.set($event)"
+      />
+      <input
+        type="date"
+        data-testid="platform-top-void-tenants-filter-date-to"
+        [ngModel]="topVoidDateTo()"
+        (ngModelChange)="topVoidDateTo.set($event)"
+      />
+      <input
+        type="number"
+        min="1"
+        max="50"
+        data-testid="platform-top-void-tenants-filter-top"
+        [ngModel]="topVoidTop()"
+        (ngModelChange)="topVoidTop.set(+$event || 10)"
+      />
       <button type="button" (click)="loadTopVoidTenants()">Aplicar</button>
     </div>
     @if (topVoidTenantsLoading()) {
@@ -102,9 +159,23 @@
   <section class="card" data-testid="platform-stockout-hotspots">
     <h3>Stockout hotspots</h3>
     <div class="filters">
-      <input type="number" data-testid="platform-stockout-hotspots-filter-threshold" [ngModel]="stockoutThreshold()" (ngModelChange)="stockoutThreshold.set(+$event || 5)" />
-      <input type="number" data-testid="platform-stockout-hotspots-filter-top" [ngModel]="stockoutTop()" (ngModelChange)="stockoutTop.set(+$event || 10)" />
-      <select data-testid="platform-stockout-hotspots-filter-item-type" [ngModel]="stockoutItemType()" (ngModelChange)="stockoutItemType.set($event)">
+      <input
+        type="number"
+        data-testid="platform-stockout-hotspots-filter-threshold"
+        [ngModel]="stockoutThreshold()"
+        (ngModelChange)="stockoutThreshold.set(+$event || 5)"
+      />
+      <input
+        type="number"
+        data-testid="platform-stockout-hotspots-filter-top"
+        [ngModel]="stockoutTop()"
+        (ngModelChange)="stockoutTop.set(+$event || 10)"
+      />
+      <select
+        data-testid="platform-stockout-hotspots-filter-item-type"
+        [ngModel]="stockoutItemType()"
+        (ngModelChange)="stockoutItemType.set($event)"
+      >
         <option value="">Todos</option>
         <option value="Product">Product</option>
         <option value="Extra">Extra</option>
@@ -121,8 +192,16 @@
     } @else {
       @for (row of stockoutHotspots(); track row.storeId) {
         <div class="drilldown-row">
-          <div [attr.data-testid]="'platform-stockout-hotspot-row-' + row.storeId">{{ row.tenantName }} / {{ row.storeName }} · {{ row.outOfStockItemsCount }}</div>
-          <button type="button" [attr.data-testid]="'platform-store-stockout-open-' + row.storeId" (click)="openStoreStockoutDetails(row.storeId)">Ver detalle</button>
+          <div [attr.data-testid]="'platform-stockout-hotspot-row-' + row.storeId">
+            {{ row.tenantName }} / {{ row.storeName }} · {{ row.outOfStockItemsCount }}
+          </div>
+          <button
+            type="button"
+            [attr.data-testid]="'platform-store-stockout-open-' + row.storeId"
+            (click)="openStoreStockoutDetails(row.storeId)"
+          >
+            Ver detalle
+          </button>
         </div>
       }
     }
@@ -131,8 +210,17 @@
   <section class="card" data-testid="platform-activity-feed">
     <h3>Activity feed</h3>
     <div class="filters">
-      <input type="number" data-testid="platform-activity-feed-filter-take" [ngModel]="activityFeedTake()" (ngModelChange)="activityFeedTake.set(+$event || 20)" />
-      <select data-testid="platform-activity-feed-filter-event-type" [ngModel]="activityFeedEventType()" (ngModelChange)="activityFeedEventType.set($event)">
+      <input
+        type="number"
+        data-testid="platform-activity-feed-filter-take"
+        [ngModel]="activityFeedTake()"
+        (ngModelChange)="activityFeedTake.set(+$event || 20)"
+      />
+      <select
+        data-testid="platform-activity-feed-filter-event-type"
+        [ngModel]="activityFeedEventType()"
+        (ngModelChange)="activityFeedEventType.set($event)"
+      >
         <option value="">Todos</option>
         <option value="SaleCreated">SaleCreated</option>
         <option value="SaleVoided">SaleVoided</option>
@@ -147,9 +235,14 @@
     } @else if (!activityFeed().length) {
       <p>Sin actividad.</p>
     } @else {
-      @for (row of activityFeed(); track row.occurredAtUtc + '-' + row.referenceId; let idx = $index) {
+      @for (
+        row of activityFeed();
+        track row.occurredAtUtc + '-' + row.referenceId;
+        let idx = $index
+      ) {
         <article [attr.data-testid]="'platform-activity-feed-row-' + idx">
-          <strong>{{ row.eventType }}</strong> · {{ row.tenantName }}/{{ row.storeName }} · {{ row.occurredAtUtc }}
+          <strong>{{ row.eventType }}</strong> · {{ row.tenantName }}/{{ row.storeName }} ·
+          {{ row.occurredAtUtc }}
         </article>
       }
     }
@@ -158,9 +251,26 @@
   <section class="card" data-testid="platform-top-tenants">
     <h3>Top tenants por ventas</h3>
     <div class="filters">
-      <input type="date" data-testid="platform-top-tenants-filter-date-from" [ngModel]="topTenantsDateFrom()" (ngModelChange)="topTenantsDateFrom.set($event)" />
-      <input type="date" data-testid="platform-top-tenants-filter-date-to" [ngModel]="topTenantsDateTo()" (ngModelChange)="topTenantsDateTo.set($event)" />
-      <input type="number" min="1" max="50" data-testid="platform-top-tenants-filter-top" [ngModel]="topTenantsTop()" (ngModelChange)="topTenantsTop.set(+$event || 10)" />
+      <input
+        type="date"
+        data-testid="platform-top-tenants-filter-date-from"
+        [ngModel]="topTenantsDateFrom()"
+        (ngModelChange)="topTenantsDateFrom.set($event)"
+      />
+      <input
+        type="date"
+        data-testid="platform-top-tenants-filter-date-to"
+        [ngModel]="topTenantsDateTo()"
+        (ngModelChange)="topTenantsDateTo.set($event)"
+      />
+      <input
+        type="number"
+        min="1"
+        max="50"
+        data-testid="platform-top-tenants-filter-top"
+        [ngModel]="topTenantsTop()"
+        (ngModelChange)="topTenantsTop.set(+$event || 10)"
+      />
       <button type="button" (click)="loadTopTenants()">Aplicar</button>
     </div>
     @if (topTenantsLoading()) {
@@ -177,7 +287,13 @@
               <td>{{ row.tenantName }}</td>
               <td>{{ money(row.salesAmount) }}</td>
               <td>
-                <button type="button" [attr.data-testid]="'platform-tenant-overview-open-' + row.tenantId" (click)="openTenantOverview(row.tenantId)">Ver detalle</button>
+                <button
+                  type="button"
+                  [attr.data-testid]="'platform-tenant-overview-open-' + row.tenantId"
+                  (click)="openTenantOverview(row.tenantId)"
+                >
+                  Ver detalle
+                </button>
               </td>
             </tr>
           }
@@ -197,8 +313,16 @@
     } @else {
       @for (alert of alerts(); track alert.code) {
         <div [class]="'drilldown-row ' + severityClass(alert.severity)">
-          <div [attr.data-testid]="'platform-alert-row-' + alert.code"><strong>{{ alert.code }}</strong> · {{ alert.count }}</div>
-          <button type="button" [attr.data-testid]="'platform-alert-drilldown-open-' + alert.code" (click)="openAlertDrilldown(alert.code)">Ver afectados</button>
+          <div [attr.data-testid]="'platform-alert-row-' + alert.code">
+            <strong>{{ alert.code }}</strong> · {{ alert.count }}
+          </div>
+          <button
+            type="button"
+            [attr.data-testid]="'platform-alert-drilldown-open-' + alert.code"
+            (click)="openAlertDrilldown(alert.code)"
+          >
+            Ver afectados
+          </button>
         </div>
       }
     }
@@ -207,10 +331,29 @@
   <section class="card" data-testid="platform-recent-adjustments">
     <h3>Recent inventory adjustments</h3>
     <div class="filters">
-      <input type="number" [ngModel]="recentTake()" (ngModelChange)="recentTake.set(+$event || 20)" />
-      <input type="text" placeholder="reason" [ngModel]="recentReason()" (ngModelChange)="recentReason.set($event)" />
-      <input type="text" placeholder="tenantId" [ngModel]="recentTenantId()" (ngModelChange)="recentTenantId.set($event)" />
-      <input type="text" placeholder="storeId" [ngModel]="recentStoreId()" (ngModelChange)="recentStoreId.set($event)" />
+      <input
+        type="number"
+        [ngModel]="recentTake()"
+        (ngModelChange)="recentTake.set(+$event || 20)"
+      />
+      <input
+        type="text"
+        placeholder="reason"
+        [ngModel]="recentReason()"
+        (ngModelChange)="recentReason.set($event)"
+      />
+      <input
+        type="text"
+        placeholder="tenantId"
+        [ngModel]="recentTenantId()"
+        (ngModelChange)="recentTenantId.set($event)"
+      />
+      <input
+        type="text"
+        placeholder="storeId"
+        [ngModel]="recentStoreId()"
+        (ngModelChange)="recentStoreId.set($event)"
+      />
       <button type="button" (click)="loadRecentAdjustments()">Aplicar</button>
     </div>
     @if (recentAdjustmentsLoading()) {
@@ -221,7 +364,9 @@
       <p>Sin ajustes recientes.</p>
     } @else {
       @for (row of recentAdjustments(); track row.adjustmentId) {
-        <div [attr.data-testid]="'platform-recent-adjustment-row-' + row.adjustmentId">{{ row.itemName }} ({{ row.qtyDelta }})</div>
+        <div [attr.data-testid]="'platform-recent-adjustment-row-' + row.adjustmentId">
+          {{ row.itemName }} ({{ row.qtyDelta }})
+        </div>
       }
     }
   </section>
@@ -229,15 +374,30 @@
   <section class="card" data-testid="platform-out-of-stock">
     <h3>Out of stock</h3>
     <div class="filters">
-      <input type="text" placeholder="tenantId" [ngModel]="outTenantId()" (ngModelChange)="outTenantId.set($event)" />
-      <input type="text" placeholder="storeId" [ngModel]="outStoreId()" (ngModelChange)="outStoreId.set($event)" />
+      <input
+        type="text"
+        placeholder="tenantId"
+        [ngModel]="outTenantId()"
+        (ngModelChange)="outTenantId.set($event)"
+      />
+      <input
+        type="text"
+        placeholder="storeId"
+        [ngModel]="outStoreId()"
+        (ngModelChange)="outStoreId.set($event)"
+      />
       <select [ngModel]="outItemType()" (ngModelChange)="outItemType.set($event)">
         <option value="">Todos</option>
         <option value="Product">Product</option>
         <option value="Extra">Extra</option>
         <option value="OptionItem">OptionItem</option>
       </select>
-      <input type="text" placeholder="search" [ngModel]="outSearch()" (ngModelChange)="outSearch.set($event)" />
+      <input
+        type="text"
+        placeholder="search"
+        [ngModel]="outSearch()"
+        (ngModelChange)="outSearch.set($event)"
+      />
       <input type="number" [ngModel]="outTop()" (ngModelChange)="outTop.set(+$event || 50)" />
       <button type="button" (click)="loadOutOfStock()">Aplicar</button>
     </div>
@@ -249,7 +409,13 @@
       <p>Sin elementos agotados.</p>
     } @else {
       @for (row of outOfStock(); track row.itemId + '-' + row.storeId) {
-        <div [attr.data-testid]="'platform-out-of-stock-row-' + row.itemType + '-' + row.itemId + '-' + row.storeId">{{ row.itemName }}</div>
+        <div
+          [attr.data-testid]="
+            'platform-out-of-stock-row-' + row.itemType + '-' + row.itemId + '-' + row.storeId
+          "
+        >
+          {{ row.itemName }}
+        </div>
       }
     }
   </section>
@@ -262,7 +428,13 @@
         <div data-testid="platform-alert-drilldown">
           <header class="drilldown-header">
             <h3 data-testid="platform-alert-drilldown-title">Alerta {{ alertDrilldownCode() }}</h3>
-            <button type="button" data-testid="platform-alert-drilldown-close" (click)="closeDrilldown()">Cerrar</button>
+            <button
+              type="button"
+              data-testid="platform-alert-drilldown-close"
+              (click)="closeDrilldown()"
+            >
+              Cerrar
+            </button>
           </header>
           @if (alertDrilldownLoading()) {
             <p>Cargando drill-down...</p>
@@ -271,13 +443,50 @@
           } @else if (!alertDrilldownItems().length) {
             <p data-testid="platform-alert-drilldown-empty">Sin registros para esta alerta.</p>
           } @else {
-            @for (item of alertDrilldownItems(); track item.description + '-' + item.userId; let idx = $index) {
-              <article [attr.data-testid]="'platform-alert-drilldown-row-' + idx" class="drilldown-item">
+            @for (
+              item of alertDrilldownItems();
+              track item.description + '-' + item.userId;
+              let idx = $index
+            ) {
+              <article
+                [attr.data-testid]="'platform-alert-drilldown-row-' + idx"
+                class="drilldown-item"
+              >
                 <p><strong>Tenant:</strong> {{ item.tenantName ?? 'N/A' }}</p>
                 <p><strong>Store:</strong> {{ item.storeName ?? 'N/A' }}</p>
-                <p><strong>User:</strong> {{ item.userName ?? item.email ?? 'N/A' }} ({{ item.role ?? 'N/A' }})</p>
+                <p>
+                  <strong>User:</strong> {{ item.userName ?? item.email ?? 'N/A' }} ({{
+                    item.role ?? 'N/A'
+                  }})
+                </p>
                 <p><strong>Descripción:</strong> {{ item.description }}</p>
                 <p><strong>Reason:</strong> {{ item.reason ?? 'N/A' }}</p>
+                @if (hasAlertAction(alertDrilldownCode())) {
+                  @if (alertActionDisabled(alertDrilldownCode(), item)) {
+                    <button
+                      type="button"
+                      disabled
+                      [attr.data-testid]="
+                        'platform-alert-drilldown-action-disabled-' +
+                        alertDrilldownCode() +
+                        '-' +
+                        idx
+                      "
+                    >
+                      {{ alertActionLabel(alertDrilldownCode()) }}
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      [attr.data-testid]="
+                        'platform-alert-drilldown-action-' + alertDrilldownCode() + '-' + idx
+                      "
+                      (click)="navigateFromAlert(alertDrilldownCode(), item)"
+                    >
+                      {{ alertActionLabel(alertDrilldownCode()) }}
+                    </button>
+                  }
+                }
               </article>
             }
           }
@@ -288,7 +497,13 @@
         <div data-testid="platform-tenant-overview">
           <header class="drilldown-header">
             <h3 data-testid="platform-tenant-overview-title">Tenant overview</h3>
-            <button type="button" data-testid="platform-tenant-overview-close" (click)="closeDrilldown()">Cerrar</button>
+            <button
+              type="button"
+              data-testid="platform-tenant-overview-close"
+              (click)="closeDrilldown()"
+            >
+              Cerrar
+            </button>
           </header>
           @if (tenantOverviewLoading()) {
             <p>Cargando tenant overview...</p>
@@ -296,17 +511,53 @@
             <p data-testid="platform-tenant-overview-error">{{ tenantOverviewError() }}</p>
           } @else if (tenantOverview()) {
             <div class="overview-grid">
-              <article data-testid="platform-tenant-overview-metric-tenantName">{{ tenantOverview()?.tenantName }}</article>
-              <article data-testid="platform-tenant-overview-metric-vertical">{{ tenantOverview()?.verticalName ?? 'N/A' }}</article>
-              <article data-testid="platform-tenant-overview-metric-storeCount">Stores: {{ tenantOverview()?.storeCount }} / Activas: {{ tenantOverview()?.activeStoreCount }}</article>
-              <article data-testid="platform-tenant-overview-metric-totalUsers">Usuarios: {{ tenantOverview()?.totalUsers }}</article>
-              <article data-testid="platform-tenant-overview-metric-usersWithoutStoreAssignmentCount">Sin asignación: {{ tenantOverview()?.usersWithoutStoreAssignmentCount }}</article>
-              <article data-testid="platform-tenant-overview-metric-salesInRange">Ventas: {{ tenantOverview()?.salesInRangeCount }} · {{ money(tenantOverview()?.salesInRangeAmount ?? 0) }}</article>
-              <article data-testid="platform-tenant-overview-metric-voidedSalesCount">Ventas void: {{ tenantOverview()?.voidedSalesCount }}</article>
-              <article data-testid="platform-tenant-overview-metric-stockCounts">OOS: {{ tenantOverview()?.outOfStockItemsCount }} · Low: {{ tenantOverview()?.lowStockItemsCount }}</article>
-              <article data-testid="platform-tenant-overview-metric-lastInventoryAdjustmentAtUtc">Último ajuste: {{ tenantOverview()?.lastInventoryAdjustmentAtUtc ?? 'N/A' }}</article>
-              <article data-testid="platform-tenant-overview-metric-hasCatalogTemplate">Template: {{ tenantOverview()?.hasCatalogTemplate ? 'Sí' : 'No' }}</article>
-              <article data-testid="platform-tenant-overview-metric-storesWithoutAdminStoreCount">Sin AdminStore: {{ tenantOverview()?.storesWithoutAdminStoreCount }}</article>
+              <article data-testid="platform-tenant-overview-metric-tenantName">
+                {{ tenantOverview()?.tenantName }}
+              </article>
+              <article data-testid="platform-tenant-overview-metric-vertical">
+                {{ tenantOverview()?.verticalName ?? 'N/A' }}
+              </article>
+              <article data-testid="platform-tenant-overview-metric-storeCount">
+                Stores: {{ tenantOverview()?.storeCount }} / Activas:
+                {{ tenantOverview()?.activeStoreCount }}
+              </article>
+              <article data-testid="platform-tenant-overview-metric-totalUsers">
+                Usuarios: {{ tenantOverview()?.totalUsers }}
+              </article>
+              <article
+                data-testid="platform-tenant-overview-metric-usersWithoutStoreAssignmentCount"
+              >
+                Sin asignación: {{ tenantOverview()?.usersWithoutStoreAssignmentCount }}
+              </article>
+              <article data-testid="platform-tenant-overview-metric-salesInRange">
+                Ventas: {{ tenantOverview()?.salesInRangeCount }} ·
+                {{ money(tenantOverview()?.salesInRangeAmount ?? 0) }}
+              </article>
+              <article data-testid="platform-tenant-overview-metric-voidedSalesCount">
+                Ventas void: {{ tenantOverview()?.voidedSalesCount }}
+              </article>
+              <article data-testid="platform-tenant-overview-metric-stockCounts">
+                OOS: {{ tenantOverview()?.outOfStockItemsCount }} · Low:
+                {{ tenantOverview()?.lowStockItemsCount }}
+              </article>
+              <article data-testid="platform-tenant-overview-metric-lastInventoryAdjustmentAtUtc">
+                Último ajuste: {{ tenantOverview()?.lastInventoryAdjustmentAtUtc ?? 'N/A' }}
+              </article>
+              <article data-testid="platform-tenant-overview-metric-hasCatalogTemplate">
+                Template: {{ tenantOverview()?.hasCatalogTemplate ? 'Sí' : 'No' }}
+              </article>
+              <article data-testid="platform-tenant-overview-metric-storesWithoutAdminStoreCount">
+                Sin AdminStore: {{ tenantOverview()?.storesWithoutAdminStoreCount }}
+              </article>
+            </div>
+            <div class="drilldown-actions">
+              <button
+                type="button"
+                data-testid="platform-tenant-overview-action-users"
+                (click)="navigateToTenantUsers()"
+              >
+                Ver usuarios del tenant
+              </button>
             </div>
           }
         </div>
@@ -316,19 +567,43 @@
         <div data-testid="platform-store-stockout-details">
           <header class="drilldown-header">
             <h3 data-testid="platform-store-stockout-title">Stockout details</h3>
-            <button type="button" data-testid="platform-store-stockout-close" (click)="closeDrilldown()">Cerrar</button>
+            <button
+              type="button"
+              data-testid="platform-store-stockout-close"
+              (click)="closeDrilldown()"
+            >
+              Cerrar
+            </button>
           </header>
 
           <div class="filters">
-            <select data-testid="platform-store-stockout-filter-item-type" [ngModel]="stockoutDetailsItemType()" (ngModelChange)="stockoutDetailsItemType.set($event)">
+            <select
+              data-testid="platform-store-stockout-filter-item-type"
+              [ngModel]="stockoutDetailsItemType()"
+              (ngModelChange)="stockoutDetailsItemType.set($event)"
+            >
               <option value="">Todos</option>
               <option value="Product">Product</option>
               <option value="Extra">Extra</option>
               <option value="OptionItem">OptionItem</option>
             </select>
-            <input type="text" data-testid="platform-store-stockout-filter-search" [ngModel]="stockoutDetailsSearch()" (ngModelChange)="stockoutDetailsSearch.set($event)" />
-            <input type="number" data-testid="platform-store-stockout-filter-threshold" [ngModel]="stockoutDetailsThreshold()" (ngModelChange)="stockoutDetailsThreshold.set(+$event || 5)" />
-            <select data-testid="platform-store-stockout-filter-mode" [ngModel]="stockoutDetailsMode()" (ngModelChange)="stockoutDetailsMode.set($event)">
+            <input
+              type="text"
+              data-testid="platform-store-stockout-filter-search"
+              [ngModel]="stockoutDetailsSearch()"
+              (ngModelChange)="stockoutDetailsSearch.set($event)"
+            />
+            <input
+              type="number"
+              data-testid="platform-store-stockout-filter-threshold"
+              [ngModel]="stockoutDetailsThreshold()"
+              (ngModelChange)="stockoutDetailsThreshold.set(+$event || 5)"
+            />
+            <select
+              data-testid="platform-store-stockout-filter-mode"
+              [ngModel]="stockoutDetailsMode()"
+              (ngModelChange)="stockoutDetailsMode.set($event)"
+            >
               <option value="out-of-stock">out-of-stock</option>
               <option value="low-stock">low-stock</option>
               <option value="all">all</option>
@@ -341,12 +616,33 @@
           } @else if (stockoutDetailsError()) {
             <p data-testid="platform-store-stockout-error">{{ stockoutDetailsError() }}</p>
           } @else if (!stockoutDetails()?.items?.length) {
-            <p data-testid="platform-store-stockout-empty">Sin ítems para los filtros seleccionados.</p>
+            <p data-testid="platform-store-stockout-empty">
+              Sin ítems para los filtros seleccionados.
+            </p>
           } @else {
+            <div class="drilldown-actions">
+              <button
+                type="button"
+                data-testid="platform-store-stockout-action-users"
+                (click)="navigateToStoreUsers()"
+              >
+                Ver usuarios de la sucursal
+              </button>
+            </div>
             @for (item of stockoutDetails()?.items; track item.itemId; let idx = $index) {
-              <article [attr.data-testid]="'platform-store-stockout-row-' + idx" class="drilldown-item">
-                <p><strong>{{ item.itemType }}</strong> · {{ item.itemName }} ({{ item.itemSku ?? 'N/A' }})</p>
-                <p>Stock: {{ item.stockOnHandQty }} · Tracked: {{ item.isInventoryTracked ? 'Sí' : 'No' }}</p>
+              <article
+                [attr.data-testid]="'platform-store-stockout-row-' + idx"
+                class="drilldown-item"
+              >
+                <p>
+                  <strong>{{ item.itemType }}</strong> · {{ item.itemName }} ({{
+                    item.itemSku ?? 'N/A'
+                  }})
+                </p>
+                <p>
+                  Stock: {{ item.stockOnHandQty }} · Tracked:
+                  {{ item.isInventoryTracked ? 'Sí' : 'No' }}
+                </p>
                 <p>Reason: {{ item.availabilityReason }}</p>
                 <p>Último ajuste: {{ item.lastAdjustmentAtUtc ?? 'N/A' }}</p>
               </article>

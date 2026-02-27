@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import {
   PlatformActivityFeedEventType,
   PlatformActivityFeedItemDto,
@@ -71,6 +72,7 @@ type DashboardDrilldownPanel = 'none' | 'alert' | 'tenant' | 'stockout';
 })
 export class PlatformDashboardPage {
   private readonly api = inject(PlatformDashboardApiService);
+  private readonly router = inject(Router);
 
   readonly summary = signal<PlatformDashboardSummaryDto>(DEFAULT_SUMMARY);
   readonly summaryLoading = signal(false);
@@ -408,6 +410,65 @@ export class PlatformDashboardPage {
     await this.loadStoreStockoutDetails();
   }
 
+  alertActionDisabled(code: string, item: PlatformDashboardAlertDrilldownItemDto) {
+    if (code === 'STORE_WITHOUT_ADMINSTORE') {
+      return !item.tenantId || !item.storeId;
+    }
+
+    if (code === 'STORE_SCOPED_USER_WITHOUT_STORE') {
+      return !item.tenantId;
+    }
+
+    return false;
+  }
+
+  alertActionLabel(code: string) {
+    if (code === 'TENANT_WITHOUT_TEMPLATE') {
+      return 'Ir a tenants';
+    }
+
+    return 'Ver usuarios de la sucursal';
+  }
+
+  hasAlertAction(code: string) {
+    return [
+      'STORE_WITHOUT_ADMINSTORE',
+      'STORE_SCOPED_USER_WITHOUT_STORE',
+      'TENANT_WITHOUT_TEMPLATE',
+    ].includes(code);
+  }
+
+  async navigateFromAlert(code: string, item: PlatformDashboardAlertDrilldownItemDto) {
+    if (this.alertActionDisabled(code, item)) {
+      return;
+    }
+
+    if (code === 'STORE_WITHOUT_ADMINSTORE') {
+      await this.navigateToUsers(item.tenantId, item.storeId);
+      return;
+    }
+
+    if (code === 'STORE_SCOPED_USER_WITHOUT_STORE') {
+      await this.navigateToUsers(item.tenantId, null);
+      return;
+    }
+
+    if (code === 'TENANT_WITHOUT_TEMPLATE') {
+      await this.router.navigate(['/app/platform/tenants']);
+      this.closeDrilldown();
+    }
+  }
+
+  async navigateToTenantUsers() {
+    const tenantId = this.tenantOverview()?.tenantId;
+    await this.navigateToUsers(tenantId ?? null, null);
+  }
+
+  async navigateToStoreUsers() {
+    const details = this.stockoutDetails();
+    await this.navigateToUsers(details?.tenantId ?? null, details?.storeId ?? null);
+  }
+
   closeDrilldown() {
     this.activeDrilldownPanel.set('none');
     this.alertDrilldownCode.set('');
@@ -444,5 +505,20 @@ export class PlatformDashboardPage {
 
     const status = error.status;
     return typeof status === 'number' ? status : undefined;
+  }
+
+  private async navigateToUsers(tenantId: string | null, storeId: string | null) {
+    const queryParams: { tenantId?: string; storeId?: string } = {};
+    if (tenantId) {
+      queryParams.tenantId = tenantId;
+    }
+    if (storeId) {
+      queryParams.storeId = storeId;
+    }
+
+    await this.router.navigate(['/app/admin/users'], {
+      queryParams,
+    });
+    this.closeDrilldown();
   }
 }

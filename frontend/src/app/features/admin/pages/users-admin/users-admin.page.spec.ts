@@ -3,9 +3,15 @@ import { UsersAdminPage } from './users-admin.page';
 import { AdminUsersService } from '../../services/admin-users.service';
 import { AdminRolesService } from '../../services/admin-roles.service';
 import { AuthService } from '../../../auth/services/auth.service';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
 
 describe('UsersAdminPage', () => {
+  beforeEach(() => {
+    queryParams = {};
+  });
   let fixture: ComponentFixture<UsersAdminPage>;
+  let getUsersMock: ReturnType<typeof vi.fn>;
+  let queryParams: Record<string, string> = {};
   let authMock: {
     hasRole: (role: string) => boolean;
     getTenantId: () => string | null;
@@ -13,28 +19,29 @@ describe('UsersAdminPage', () => {
   };
 
   const createComponent = async () => {
+    getUsersMock = vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: 'user-1',
+          email: 'user@example.com',
+          userName: 'User One',
+          isLockedOut: false,
+          roles: ['TenantAdmin'],
+          tenantId: 'tenant-1',
+          storeId: null,
+        },
+      ],
+      totalCount: 1,
+      pageNumber: 1,
+      pageSize: 20,
+    });
     await TestBed.configureTestingModule({
       imports: [UsersAdminPage],
       providers: [
         {
           provide: AdminUsersService,
           useValue: {
-            getUsers: async () => ({
-              items: [
-                {
-                  id: 'user-1',
-                  email: 'user@example.com',
-                  userName: 'User One',
-                  isLockedOut: false,
-                  roles: ['TenantAdmin'],
-                  tenantId: 'tenant-1',
-                  storeId: null,
-                },
-              ],
-              totalCount: 1,
-              pageNumber: 1,
-              pageSize: 20,
-            }),
+            getUsers: getUsersMock,
             updateUserRoles: async () => ({
               id: 'user-1',
               email: 'user@example.com',
@@ -66,6 +73,14 @@ describe('UsersAdminPage', () => {
           },
         },
         { provide: AuthService, useValue: authMock },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: convertToParamMap(queryParams),
+            },
+          },
+        },
       ],
     }).compileComponents();
 
@@ -151,6 +166,50 @@ describe('UsersAdminPage', () => {
         '[data-testid="admin-user-form-store-required"]',
       ),
     ).toBeFalsy();
+  });
+
+  it('initializes SuperAdmin filters from query params on first load', async () => {
+    queryParams = {
+      tenantId: 'tenant-q',
+      storeId: 'store-q',
+      search: 'john',
+    };
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    expect(getUsersMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: 'john',
+        tenantId: 'tenant-q',
+        storeId: 'store-q',
+      }),
+    );
+  });
+
+  it('keeps TenantAdmin scope while applying store query param', async () => {
+    queryParams = {
+      tenantId: 'tenant-overridden',
+      storeId: 'store-2',
+    };
+    authMock = {
+      hasRole: (role: string) => role === 'TenantAdmin',
+      getTenantId: () => 'tenant-1',
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    expect(getUsersMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        storeId: 'store-2',
+      }),
+    );
   });
 
   it('should render success and validation errors with stable testids', async () => {
