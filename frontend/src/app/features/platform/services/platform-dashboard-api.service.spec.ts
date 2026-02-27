@@ -1,0 +1,43 @@
+import { TestBed } from '@angular/core/testing';
+import { of } from 'rxjs';
+import { ApiClient } from '../../../core/services/api-client';
+import { PlatformDashboardApiService } from './platform-dashboard-api.service';
+
+describe('PlatformDashboardApiService', () => {
+  it('builds dashboard query params', async () => {
+    const getSpy = vi.fn().mockReturnValue(of({ items: [], alerts: [] }));
+
+    TestBed.configureTestingModule({
+      providers: [
+        PlatformDashboardApiService,
+        { provide: ApiClient, useValue: { get: getSpy } },
+      ],
+    });
+
+    const service = TestBed.inject(PlatformDashboardApiService);
+
+    await service.getSummary({ dateFrom: '2026-01-01T00:00:00Z', dateTo: '2026-01-02T00:00:00Z', threshold: 5 });
+    await service.getTopTenants({ dateFrom: '2026-01-01', dateTo: '2026-01-31', top: 5, includeInactive: true });
+    await service.getRecentInventoryAdjustments({ take: 10, reason: 'Manual', tenantId: 'tenant-1', storeId: 'store-1' });
+    await service.getOutOfStock({ tenantId: 'tenant-1', storeId: 'store-1', itemType: 'Product', search: 'cafe', onlyTracked: true, top: 20 });
+    await service.getAlerts();
+
+    expect(getSpy).toHaveBeenNthCalledWith(
+      1,
+      '/v1/platform/dashboard/summary?dateFrom=2026-01-01T00%3A00%3A00Z&dateTo=2026-01-02T00%3A00%3A00Z&threshold=5',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      2,
+      '/v1/platform/dashboard/top-tenants?dateFrom=2026-01-01&dateTo=2026-01-31&top=5&includeInactive=true',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      3,
+      '/v1/platform/dashboard/recent-inventory-adjustments?take=10&reason=Manual&tenantId=tenant-1&storeId=store-1',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(
+      4,
+      '/v1/platform/dashboard/out-of-stock?tenantId=tenant-1&storeId=store-1&itemType=Product&search=cafe&onlyTracked=true&top=20',
+    );
+    expect(getSpy).toHaveBeenNthCalledWith(5, '/v1/platform/dashboard/alerts');
+  });
+});

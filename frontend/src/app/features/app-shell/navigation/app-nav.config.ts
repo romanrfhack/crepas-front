@@ -80,6 +80,7 @@ export const APP_NAV_CONFIG: NavSection[] = [
     roles: ['SuperAdmin'],
     defaultExpanded: true,
     children: [
+      { label: 'Dashboard', path: '/app/platform/dashboard', roles: ['SuperAdmin'] },
       { label: 'Catalog Templates', path: '/app/platform/catalog-templates', roles: ['SuperAdmin'] },
       { label: 'Verticals', path: '/app/platform/verticals', roles: ['SuperAdmin'] },
       { label: 'Tenants', path: '/app/platform/tenants', roles: ['SuperAdmin'] },
