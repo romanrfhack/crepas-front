@@ -225,12 +225,13 @@ public sealed class PlatformStoresAdminIntegrationTests : IClassFixture<Cobranza
         var store2 = new Store { Id = Guid.NewGuid(), TenantId = tenant1.Id, Name = "Store A2", IsActive = true, TimeZoneId = "UTC", CreatedAtUtc = now, UpdatedAtUtc = now };
         var tenant2Store = new Store { Id = Guid.NewGuid(), TenantId = tenant2.Id, Name = "Store B1", IsActive = true, TimeZoneId = "UTC", CreatedAtUtc = now, UpdatedAtUtc = now };
 
-        tenant1.DefaultStoreId = store1.Id;
-        tenant2.DefaultStoreId = tenant2Store.Id;
-
         db.Verticals.Add(vertical);
         db.Tenants.AddRange(tenant1, tenant2);
         db.Stores.AddRange(store1, store2, tenant2Store);
+        await db.SaveChangesAsync();
+
+        tenant1.DefaultStoreId = store1.Id;
+        tenant2.DefaultStoreId = tenant2Store.Id;
         await db.SaveChangesAsync();
 
         var superAdminEmail = "admin@test.local";
