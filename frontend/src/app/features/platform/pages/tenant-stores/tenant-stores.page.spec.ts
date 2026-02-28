@@ -70,10 +70,19 @@ describe('TenantStoresPage', () => {
     fixture.detectChanges();
   });
 
-  it('renders derived columns and quick create adminstore action', () => {
-    const stores = fixture.componentInstance.stores();
-    expect(stores[0]?.isDefaultStore).toBe(true);
-    expect(stores[1]?.hasAdminStore).toBe(false);
+  it('renders default/admin badges and quick actions per row', () => {
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('[data-testid="platform-tenant-stores-default-store-1"]')?.textContent).toContain(
+      'Principal',
+    );
+    expect(host.querySelector('[data-testid="platform-tenant-stores-has-admin-store-2"]')?.textContent).toContain(
+      'Sin AdminStore',
+    );
+    expect(
+      host.querySelector('[data-testid="platform-tenant-stores-create-adminstore-store-2"]'),
+    ).not.toBeNull();
+    expect(host.querySelector('[data-testid="platform-tenant-stores-view-details-store-2"]')).not.toBeNull();
   });
 
   it('calls set default endpoint and reloads list', async () => {
@@ -83,7 +92,7 @@ describe('TenantStoresPage', () => {
     expect(getTenantStores).toHaveBeenCalledTimes(2);
   });
 
-  it('navigates to contextual user creation when store has no AdminStore', async () => {
+  it('navigates to contextual user creation when store has no AdminStore', () => {
     fixture.componentInstance.createAdminStore(fixture.componentInstance.stores()[1]!);
 
     expect(navigate).toHaveBeenCalledWith(['/app/admin/users'], {
@@ -94,6 +103,12 @@ describe('TenantStoresPage', () => {
         suggestedRole: 'AdminStore',
       },
     });
+  });
+
+  it('navigates to details from quick action', () => {
+    fixture.componentInstance.openDetails('store-2');
+
+    expect(navigate).toHaveBeenCalledWith(['/app/platform/stores', 'store-2']);
   });
 
   it('maps backend problem details errors consistently', async () => {

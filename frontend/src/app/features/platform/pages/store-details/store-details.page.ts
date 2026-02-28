@@ -10,7 +10,7 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
   imports: [ReactiveFormsModule],
   template: `
     <section data-testid="platform-store-details-page">
-      <h2>Detalle de store</h2>
+      <h2>Panel operativo de sucursal</h2>
 
       @if (error()) {
         <p data-testid="platform-store-edit-error">{{ error() }}</p>
@@ -22,13 +22,40 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
       @if (loading()) {
         <p>Cargando...</p>
       } @else if (details()) {
-        <div>
-          <p data-testid="platform-store-details-name">{{ details()!.name }}</p>
-          <p data-testid="platform-store-details-timezone">{{ details()!.timeZoneId }}</p>
-          <p data-testid="platform-store-details-default">{{ details()!.isDefaultStore ? 'Default' : 'No default' }}</p>
-          <p data-testid="platform-store-details-has-admin">{{ details()!.hasAdminStore ? 'Con AdminStore' : 'Sin AdminStore' }}</p>
+        <div class="store-summary">
+          <p data-testid="platform-store-details-name"><strong>{{ details()!.name }}</strong></p>
+          <p>Tenant: {{ details()!.tenantName }}</p>
+          <p class="secondary-info">Store ID: {{ details()!.id }}</p>
+          <p class="secondary-info">TimeZone: {{ details()!.timeZoneId }}</p>
+          <p
+            data-testid="platform-store-details-default"
+            class="chip"
+            [class.chip-strong]="details()!.isDefaultStore"
+          >
+            {{ details()!.isDefaultStore ? 'Sucursal principal' : 'Sucursal regular' }}
+          </p>
+        </div>
 
-          <div>
+        <div class="store-kpis">
+          <p data-testid="platform-store-details-has-admin" class="chip" [class.chip-warning]="!details()!.hasAdminStore">
+            {{ details()!.hasAdminStore ? 'Con AdminStore' : 'Sin AdminStore asignado' }}
+          </p>
+          <p data-testid="platform-store-details-admin-count">AdminsStore: {{ details()!.adminStoreUserCount }}</p>
+          <p data-testid="platform-store-details-users-count">Usuarios en sucursal: {{ details()!.totalUsersInStore }}</p>
+        </div>
+
+        <div data-testid="platform-store-details-primary-action" class="primary-action">
+          <button
+            type="button"
+            [attr.data-testid]="primaryActionTestId()"
+            (click)="runPrimaryAction()"
+          >
+            {{ primaryActionLabel() }}
+          </button>
+        </div>
+
+        <div class="quick-actions">
+          @if (!details()!.hasAdminStore) {
             <button
               type="button"
               data-testid="platform-store-details-action-users"
@@ -36,51 +63,35 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
             >
               Ver usuarios de la sucursal
             </button>
-            @if (!details()!.hasAdminStore) {
-              <button
-                type="button"
-                data-testid="platform-store-details-action-create-adminstore"
-                (click)="goToCreateAdminStore()"
-              >
-                Crear AdminStore
-              </button>
-            }
-            <button
-              type="button"
-              data-testid="platform-store-details-action-create-user"
-              (click)="goToCreateUser()"
-            >
-              Crear usuario en sucursal
-            </button>
-            <button
-              type="button"
-              data-testid="platform-store-details-action-dashboard"
-              (click)="goToDashboard()"
-            >
-              Ir al dashboard
-            </button>
-            <button
-              type="button"
-              data-testid="platform-store-details-action-reports"
-              (click)="goToReports()"
-            >
-              Ver reportes de la sucursal
-            </button>
-            <button
-              type="button"
-              data-testid="platform-store-details-action-inventory"
-              (click)="goToInventory()"
-            >
-              Ver inventario de la sucursal
-            </button>
-          </div>
-
-          @if (!details()!.isDefaultStore) {
-            <button type="button" [disabled]="settingDefault()" (click)="setAsDefault()">Set default store</button>
           }
-
-          <button type="button" data-testid="platform-store-edit-open" (click)="openEdit()">Editar store</button>
+          <button
+            type="button"
+            data-testid="platform-store-details-action-create-user"
+            (click)="goToCreateUser()"
+          >
+            Crear usuario en sucursal
+          </button>
+          <button
+            type="button"
+            data-testid="platform-store-details-action-inventory"
+            (click)="goToInventory()"
+          >
+            Ver inventario de la sucursal
+          </button>
+          <button
+            type="button"
+            data-testid="platform-store-details-action-dashboard"
+            (click)="goToDashboard()"
+          >
+            Ir al dashboard
+          </button>
         </div>
+
+        @if (!details()!.isDefaultStore) {
+          <button type="button" class="default-action" [disabled]="settingDefault()" (click)="setAsDefault()">Hacer sucursal principal</button>
+        }
+
+        <button type="button" data-testid="platform-store-edit-open" (click)="openEdit()">Editar store</button>
 
         @if (editOpen()) {
           <form data-testid="platform-store-edit-form" (submit)="submit($event)">
@@ -119,6 +130,55 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
       }
     </section>
   `,
+  styles: `
+    .store-summary,
+    .store-kpis {
+      display: grid;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .secondary-info {
+      opacity: 0.85;
+    }
+
+    .chip {
+      display: inline-block;
+      width: fit-content;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      background: #eef2ff;
+    }
+
+    .chip-strong {
+      font-weight: 700;
+      background: #dbeafe;
+    }
+
+    .chip-warning {
+      font-weight: 700;
+      background: #fee2e2;
+    }
+
+    .primary-action {
+      margin-bottom: 0.75rem;
+    }
+
+    .primary-action button {
+      font-weight: 700;
+    }
+
+    .quick-actions {
+      display: grid;
+      gap: 0.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-bottom: 1rem;
+    }
+
+    .default-action {
+      margin-bottom: 0.75rem;
+    }
+  `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class StoreDetailsPage {
@@ -143,6 +203,14 @@ export class StoreDetailsPage {
 
   readonly saveDisabled = computed(() =>
     this.saving() || this.nameControl.invalid || this.timeZoneControl.invalid,
+  );
+  readonly primaryActionLabel = computed(() =>
+    this.details()?.hasAdminStore ? 'Ver usuarios de la sucursal' : 'Crear AdminStore',
+  );
+  readonly primaryActionTestId = computed(() =>
+    this.details()?.hasAdminStore
+      ? 'platform-store-details-action-users'
+      : 'platform-store-details-action-create-adminstore',
   );
 
   async ngOnInit(): Promise<void> {
@@ -238,6 +306,15 @@ export class StoreDetailsPage {
     }
   }
 
+  runPrimaryAction(): void {
+    if (this.details()?.hasAdminStore) {
+      this.goToUsers();
+      return;
+    }
+
+    this.goToCreateAdminStore();
+  }
+
   goToUsers(): void {
     const current = this.details();
     if (!current) {
@@ -291,10 +368,6 @@ export class StoreDetailsPage {
         storeId: current?.id,
       },
     });
-  }
-
-  goToReports(): void {
-    this.goToDashboard();
   }
 
   goToInventory(): void {

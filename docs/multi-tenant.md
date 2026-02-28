@@ -480,3 +480,15 @@ Notas de compatibilidad:
 
 - No se agregan endpoints backend nuevos.
 - El contexto se pasa por query params donde la UI ya soporta consumo o donde el ajuste fue puramente frontend.
+
+## 2026-02-28 — Frontend Stores Admin v1.1 UX operativo
+
+- Store Detail (`/app/platform/stores/:storeId`) prioriza operación por estado real:
+  - Si `hasAdminStore = false`, la acción primaria dirige a alta contextual de AdminStore (`/app/admin/users?tenantId=...&storeId=...&intent=create-user&suggestedRole=AdminStore`).
+  - Si `hasAdminStore = true`, la acción primaria dirige a `Ver usuarios de la sucursal`.
+- Store Detail refuerza lectura de contexto multi-tenant mostrando primero nombre amigable de sucursal y tenant, y dejando `storeId` como dato secundario.
+- Stores list (`/app/platform/tenants/:tenantId/stores`) resalta visualmente:
+  - sucursal principal (`isDefaultStore`),
+  - sucursales sin AdminStore (`hasAdminStore = false`),
+  - quick actions por fila para resolver el problema detectado (`Crear AdminStore`) y para entrar al detalle (`Ver detalle`).
+- No se agregaron endpoints nuevos; se reutilizan contratos actuales de Platform Stores y navegación contextual existente de Admin Users.
