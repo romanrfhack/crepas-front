@@ -74,7 +74,7 @@ test('platform stores admin v1.1 ui-contract', async ({ page }) => {
     },
   };
 
-  await page.route('**/api/v1/platform/tenants/tenant-1/stores', async (route) => {
+  await page.route('**/api/v1/platform/tenants/tenant-1/stores**', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(stores) });
   });
 
@@ -103,6 +103,34 @@ test('platform stores admin v1.1 ui-contract', async ({ page }) => {
     }
 
     await route.fulfill({ status: 500, body: '{}' });
+  });
+
+  await page.route('**/api/v1/platform/dashboard/summary**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        activeTenants: 1,
+        activeStores: stores.length,
+        activeUsers: stores.reduce((sum, item) => sum + item.totalUsersInStore, 0),
+        salesTodayTotal: 0,
+      }),
+    });
+  });
+
+  await page.route('**/api/v1/platform/dashboard/top-tenants**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        {
+          tenantId: 'tenant-1',
+          tenantName: 'Tenant Uno',
+          salesTotal: 0,
+          storesCount: stores.length,
+        },
+      ]),
+    });
   });
 
   await page.route('**/api/v1/admin/**', async (route) => {
