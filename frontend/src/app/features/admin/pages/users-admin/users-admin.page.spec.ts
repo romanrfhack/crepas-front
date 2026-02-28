@@ -122,6 +122,58 @@ describe('UsersAdminPage', () => {
     queryParams = {};
   });
 
+
+  it('auto-opens create form when intent=create-user and applies suggestedRole from query', async () => {
+    queryParams = {
+      tenantId: 'tenant-q',
+      storeId: 'store-q',
+      intent: 'create-user',
+      suggestedRole: 'AdminStore',
+    };
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    expect(component.createFormVisible()).toBe(true);
+    expect(component.createIntentActive()).toBe(true);
+    expect(component.createTenantControl.value).toBe('tenant-q');
+    expect(component.createStoreControl.value).toBe('store-q');
+    expect(component.createRoleControl.value).toBe('AdminStore');
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="admin-users-create-intent-active"]')).not.toBeNull();
+  });
+
+  it('close create form clears intent state and keeps tenant/store filters', async () => {
+    queryParams = {
+      tenantId: 'tenant-q',
+      storeId: 'store-q',
+      intent: 'create-user',
+      suggestedRole: 'AdminStore',
+    };
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.closeCreateForm();
+    fixture.detectChanges();
+
+    expect(component.createFormVisible()).toBe(false);
+    expect(component.createIntentActive()).toBe(false);
+    expect(component.tenantFilterControl.value).toBe('tenant-q');
+    expect(component.storeFilterControl.value).toBe('store-q');
+  });
+
   it('keeps query prefill and role suggestion for tenant + store context', async () => {
     queryParams = { tenantId: 'tenant-q', storeId: 'store-q' };
     authMock = {

@@ -61,6 +61,9 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
 
       @if (createFormVisible()) {
         <section class="create-panel" data-testid="admin-users-create-context-badge">
+          @if (createIntentActive()) {
+            <p data-testid="admin-users-create-intent-active">Alta contextual automática activa.</p>
+          }
           <p>{{ createContextMessage() }}</p>
           <p data-testid="admin-users-create-context-tenant">
             Tenant: {{ createTenantControl.value || 'N/A' }}
@@ -138,13 +141,23 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
               />
             </label>
 
-            <button
-              type="submit"
-              data-testid="admin-user-form-submit"
-              [disabled]="createSubmitting()"
-            >
-              {{ createSubmitting() ? 'Creando...' : 'Crear usuario' }}
-            </button>
+            <div class="actions-row">
+              <button
+                type="submit"
+                data-testid="admin-user-form-submit"
+                [disabled]="createSubmitting()"
+              >
+                {{ createSubmitting() ? 'Creando...' : 'Crear usuario' }}
+              </button>
+              <button
+                type="button"
+                data-testid="admin-users-create-close"
+                [disabled]="createSubmitting()"
+                (click)="closeCreateForm()"
+              >
+                Cerrar
+              </button>
+            </div>
           </form>
         </section>
       }
@@ -488,6 +501,7 @@ export class UsersAdminPage {
   readonly createContextMessage = signal('');
   readonly createSuggestedRole = signal('');
   readonly createSubmitting = signal(false);
+  readonly createIntentActive = signal(false);
   readonly resetPasswordModalOpen = signal(false);
   readonly resetTargetUser = signal<UserSummary | null>(null);
   readonly resetPasswordSubmitting = signal(false);
@@ -505,6 +519,9 @@ export class UsersAdminPage {
   private readonly roleDrafts = signal<Record<string, FormControl<string>>>({});
   private readonly initialTenantQuery = this.route.snapshot.queryParamMap.get('tenantId')?.trim() ?? '';
   private readonly initialStoreQuery = this.route.snapshot.queryParamMap.get('storeId')?.trim() ?? '';
+  private readonly initialIntentQuery = this.route.snapshot.queryParamMap.get('intent')?.trim() ?? '';
+  private readonly initialSuggestedRoleQuery =
+    this.route.snapshot.queryParamMap.get('suggestedRole')?.trim() ?? '';
 
   readonly scope = computed<AdminScope>(() => {
     if (this.authService.hasRole('SuperAdmin')) return 'global';
@@ -549,6 +566,13 @@ export class UsersAdminPage {
 
     void this.loadRoles();
     void this.loadUsers();
+
+    if (this.initialIntentQuery === 'create-user') {
+      this.openCreateFormFromContext({
+        suggestedRole: this.initialSuggestedRoleQuery || undefined,
+        source: 'intent',
+      });
+    }
   }
 
   scopeBadgeLabel() {
@@ -845,12 +869,12 @@ export class UsersAdminPage {
     void this.loadUsers();
   }
 
-  openCreateFormFromContext() {
+  openCreateFormFromContext(options: { suggestedRole?: string; source?: 'manual' | 'intent' } = {}) {
     const context = this.resolveContextFromFilters();
     this.createTenantControl.setValue(context.tenantId);
     this.createStoreControl.setValue(context.storeId);
 
-    const suggestedRole = this.suggestRoleForContext(context.tenantId, context.storeId);
+    const suggestedRole = this.resolveSuggestedRole(options.suggestedRole, context.tenantId, context.storeId);
     this.createSuggestedRole.set(suggestedRole);
     this.createRoleControl.setValue(suggestedRole);
 
@@ -862,7 +886,13 @@ export class UsersAdminPage {
       this.createContextMessage.set('Formulario iniciado con valores neutros según tu alcance actual.');
     }
 
+    this.createIntentActive.set(options.source === 'intent');
     this.createFormVisible.set(true);
+  }
+
+  closeCreateForm() {
+    this.createFormVisible.set(false);
+    this.createIntentActive.set(false);
   }
 
   private async loadRoles() {
@@ -1018,6 +1048,16 @@ export class UsersAdminPage {
       tenantId: tenantId || '',
       storeId: storeId || '',
     };
+  }
+
+  private resolveSuggestedRole(explicitSuggestedRole: string | undefined, tenantId: string, storeId: string) {
+    const candidate = explicitSuggestedRole?.trim() ?? '';
+    if (candidate && this.assignableRoles().includes(candidate)) {
+      return candidate;
+    }
+
+    const contextSuggestion = this.suggestRoleForContext(tenantId, storeId);
+    return this.assignableRoles().includes(contextSuggestion) ? contextSuggestion : '';
   }
 
   private suggestRoleForContext(tenantId: string, storeId: string) {

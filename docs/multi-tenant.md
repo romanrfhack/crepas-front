@@ -342,3 +342,27 @@ Decisión v6 sobre email:
   - `admin-user-edit-cancel`
   - `admin-user-edit-error`
   - `admin-user-edit-success`
+
+
+## Platform Dashboard v3.2 quick actions (contextual user creation intent)
+
+Extensión sobre v3.1 sin nuevos endpoints backend:
+
+- Dashboard usa navegación a `/app/admin/users` con query params de contexto existentes (`tenantId`, `storeId`) y agrega intent de UI:
+  - `intent=create-user`
+  - `suggestedRole=<RoleName>`
+- Casos mínimos:
+  - `STORE_WITHOUT_ADMINSTORE` → `tenantId + storeId + intent=create-user + suggestedRole=AdminStore`.
+  - Tenant overview → `tenantId + intent=create-user + suggestedRole=TenantAdmin`.
+  - Store stockout details → `tenantId + storeId + intent=create-user` (MVP con sugerencia `Cashier` opcional).
+- En `/app/admin/users`:
+  - Si llega `intent=create-user`, abre automáticamente el formulario de alta contextual.
+  - Aplica prefill de `tenantId/storeId` y sugerencia de rol (`suggestedRole`) cuando el rol sea asignable en el scope actual.
+  - Al cerrar el formulario se limpia solo el estado de intent UI y se conservan filtros tenant/store.
+- Limitación explícita de v3.2:
+  - No se agrega CTA global de reset password desde dashboard sin `userId` real en payload del drill-down.
+
+Test IDs contractuales nuevos/actualizados:
+
+- Dashboard: `platform-alert-drilldown-action-create-adminstore-{index}`, `platform-tenant-overview-action-create-tenantadmin`, `platform-store-stockout-action-create-user`.
+- Admin users: `admin-users-create-intent-active` y contexto/formulario existente (`admin-users-create-context-*`, `admin-user-form-*`).

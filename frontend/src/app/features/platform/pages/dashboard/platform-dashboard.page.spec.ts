@@ -377,12 +377,17 @@ describe('PlatformDashboardPage', () => {
     await fixture.componentInstance.openAlertDrilldown('STORE_WITHOUT_ADMINSTORE');
     fixture.detectChanges();
     host
-      .querySelector('[data-testid="platform-alert-drilldown-action-STORE_WITHOUT_ADMINSTORE-0"]')
+      .querySelector('[data-testid="platform-alert-drilldown-action-create-adminstore-0"]')
       ?.dispatchEvent(new Event('click'));
     await fixture.whenStable();
 
     expect(navigate).toHaveBeenLastCalledWith(['/app/admin/users'], {
-      queryParams: { tenantId: 'tenant-1', storeId: 'store-7' },
+      queryParams: {
+      tenantId: 'tenant-1',
+      storeId: 'store-7',
+      intent: 'create-user',
+      suggestedRole: 'AdminStore',
+    },
     });
     expect(fixture.componentInstance.activeDrilldownPanel()).toBe('none');
 
@@ -454,24 +459,29 @@ describe('PlatformDashboardPage', () => {
     fixture.detectChanges();
 
     host
-      .querySelector('[data-testid="platform-tenant-overview-action-users"]')
+      .querySelector('[data-testid="platform-tenant-overview-action-create-tenantadmin"]')
       ?.dispatchEvent(new Event('click'));
     await fixture.whenStable();
 
     expect(navigate).toHaveBeenLastCalledWith(['/app/admin/users'], {
-      queryParams: { tenantId: 'tenant-1' },
+      queryParams: { tenantId: 'tenant-1', intent: 'create-user', suggestedRole: 'TenantAdmin' },
     });
 
     await fixture.componentInstance.openStoreStockoutDetails('store-2');
     fixture.detectChanges();
 
     host
-      .querySelector('[data-testid="platform-store-stockout-action-users"]')
+      .querySelector('[data-testid="platform-store-stockout-action-create-user"]')
       ?.dispatchEvent(new Event('click'));
     await fixture.whenStable();
 
     expect(navigate).toHaveBeenLastCalledWith(['/app/admin/users'], {
-      queryParams: { tenantId: 'tenant-1', storeId: 'store-2' },
+      queryParams: {
+      tenantId: 'tenant-1',
+      storeId: 'store-2',
+      intent: 'create-user',
+      suggestedRole: 'Cashier',
+    },
     });
   });
 

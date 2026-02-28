@@ -423,6 +423,10 @@ export class PlatformDashboardPage {
   }
 
   alertActionLabel(code: string) {
+    if (code === 'STORE_WITHOUT_ADMINSTORE') {
+      return 'Crear AdminStore';
+    }
+
     if (code === 'TENANT_WITHOUT_TEMPLATE') {
       return 'Ir a tenants';
     }
@@ -444,7 +448,10 @@ export class PlatformDashboardPage {
     }
 
     if (code === 'STORE_WITHOUT_ADMINSTORE') {
-      await this.navigateToUsers(item.tenantId, item.storeId);
+      await this.navigateToUsers(item.tenantId, item.storeId, {
+        openCreate: true,
+        suggestedRole: 'AdminStore',
+      });
       return;
     }
 
@@ -461,12 +468,18 @@ export class PlatformDashboardPage {
 
   async navigateToTenantUsers() {
     const tenantId = this.tenantOverview()?.tenantId;
-    await this.navigateToUsers(tenantId ?? null, null);
+    await this.navigateToUsers(tenantId ?? null, null, {
+      openCreate: true,
+      suggestedRole: 'TenantAdmin',
+    });
   }
 
   async navigateToStoreUsers() {
     const details = this.stockoutDetails();
-    await this.navigateToUsers(details?.tenantId ?? null, details?.storeId ?? null);
+    await this.navigateToUsers(details?.tenantId ?? null, details?.storeId ?? null, {
+      openCreate: true,
+      suggestedRole: 'Cashier',
+    });
   }
 
   closeDrilldown() {
@@ -507,13 +520,28 @@ export class PlatformDashboardPage {
     return typeof status === 'number' ? status : undefined;
   }
 
-  private async navigateToUsers(tenantId: string | null, storeId: string | null) {
-    const queryParams: { tenantId?: string; storeId?: string } = {};
+  private async navigateToUsers(
+    tenantId: string | null,
+    storeId: string | null,
+    options: { openCreate?: boolean; suggestedRole?: string } = {},
+  ) {
+    const queryParams: {
+      tenantId?: string;
+      storeId?: string;
+      intent?: string;
+      suggestedRole?: string;
+    } = {};
     if (tenantId) {
       queryParams.tenantId = tenantId;
     }
     if (storeId) {
       queryParams.storeId = storeId;
+    }
+    if (options.openCreate) {
+      queryParams.intent = 'create-user';
+    }
+    if (options.suggestedRole) {
+      queryParams.suggestedRole = options.suggestedRole;
     }
 
     await this.router.navigate(['/app/admin/users'], {
