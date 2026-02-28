@@ -1,5 +1,9 @@
 using Asp.Versioning;
 
+using CobranzaDigital.Api.Observability;
+using CobranzaDigital.Application.Auditing;
+using CobranzaDigital.Application.Contracts.Platform;
+using CobranzaDigital.Application.Interfaces.Platform;
 using CobranzaDigital.Application.Contracts.PosCatalog;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Persistence;
@@ -64,8 +68,21 @@ public sealed class PlatformVerticalsController : ControllerBase
 public sealed class PlatformTenantsController : ControllerBase
 {
     private readonly CobranzaDigitalDbContext _db;
+    private readonly IPlatformTenantService _platformTenantService;
+    private readonly IAuditLogger _auditLogger;
+    private readonly IAuditRequestContextAccessor _auditRequestContextAccessor;
 
-    public PlatformTenantsController(CobranzaDigitalDbContext db) => _db = db;
+    public PlatformTenantsController(
+        CobranzaDigitalDbContext db,
+        IPlatformTenantService platformTenantService,
+        IAuditLogger auditLogger,
+        IAuditRequestContextAccessor auditRequestContextAccessor)
+    {
+        _db = db;
+        _platformTenantService = platformTenantService;
+        _auditLogger = auditLogger;
+        _auditRequestContextAccessor = auditRequestContextAccessor;
+    }
 
     [HttpGet]
     public async Task<IReadOnlyList<Tenant>> List(CancellationToken ct) => await _db.Tenants.AsNoTracking().OrderBy(x => x.Name).ToListAsync(ct);
@@ -126,17 +143,46 @@ public sealed class PlatformTenantsController : ControllerBase
         return tenant;
     }
 
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(PlatformTenantDetailsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public Task<PlatformTenantDetailsDto> GetById(Guid id, CancellationToken ct) =>
+        _platformTenantService.GetTenantDetailsAsync(id, ct);
+
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<Tenant>> Update(Guid id, [FromBody] UpdateTenantRequest request, CancellationToken ct)
+    [ProducesResponseType(typeof(PlatformTenantDetailsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PlatformTenantDetailsDto>> Update(Guid id, [FromBody] UpdatePlatformTenantRequestDto request, CancellationToken ct)
     {
-        var item = await _db.Tenants.FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (item is null) return NotFound();
-        item.Name = request.Name;
-        item.Slug = request.Slug;
-        item.VerticalId = request.VerticalId;
-        item.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(ct);
-        return item;
+        var before = await _platformTenantService.GetTenantDetailsAsync(id, ct).ConfigureAwait(false);
+        var updated = await _platformTenantService.UpdateTenantAsync(id, request, ct).ConfigureAwait(false);
+
+        await _auditLogger.LogAsync(new AuditEntry(
+                AuditActions.UpdateTenant,
+                _auditRequestContextAccessor.GetUserId(),
+                _auditRequestContextAccessor.GetCorrelationId(),
+                EntityType: "Tenant",
+                EntityId: id.ToString(),
+                Before: new
+                {
+                    before.Name,
+                    before.Slug,
+                    before.VerticalId,
+                    before.IsActive
+                },
+                After: new
+                {
+                    updated.Name,
+                    updated.Slug,
+                    updated.VerticalId,
+                    updated.IsActive
+                },
+                Source: "Api",
+                Notes: null),
+            ct).ConfigureAwait(false);
+
+        return updated;
     }
 
     [HttpDelete("{id:guid}")]
@@ -153,7 +199,6 @@ public sealed class PlatformTenantsController : ControllerBase
 
 public sealed record UpsertVerticalRequest(string Name, string? Description);
 public sealed record CreateTenantRequest(Guid VerticalId, string Name, string Slug, string TimeZoneId = "America/Mexico_City");
-public sealed record UpdateTenantRequest(Guid VerticalId, string Name, string Slug);
 
 [ApiController]
 [ApiVersion("1.0")]

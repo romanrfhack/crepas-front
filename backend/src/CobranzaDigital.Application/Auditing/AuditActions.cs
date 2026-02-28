@@ -15,4 +15,5 @@ public static class AuditActions
     public const string ReverseInventoryForVoid = "ReverseInventoryForVoid";
     public const string UpdateStore = "UpdateStore";
     public const string UpdateTenantDefaultStore = "UpdateTenantDefaultStore";
+    public const string UpdateTenant = "UpdateTenant";
 }
