@@ -64,11 +64,11 @@ test('platform dashboard v1 ui-contract', async ({ page }) => {
   await expect.poll(() => capturedTopTenantQueries[capturedTopTenantQueries.length - 1]).toContain('top=7');
 
   const outSection = page.getByTestId('platform-out-of-stock');
-  await outSection.getByPlaceholder('tenantId').fill('tenant-1');
-  await outSection.getByPlaceholder('storeId').fill('store-1');
+  await outSection.getByLabel('Tenant ID').fill('tenant-1');
+  await outSection.getByLabel('Store ID').fill('store-1');
   await outSection.getByRole('combobox').selectOption('Product');
-  await outSection.getByPlaceholder('search').fill('latte');
-  await outSection.getByRole('spinbutton').fill('25');
+  await outSection.getByPlaceholder('nombre').fill('latte');
+  await outSection.getByLabel('Top').fill('25');
   await outSection.getByRole('button', { name: 'Aplicar' }).click();
   await expect.poll(() => capturedOutOfStockQueries[capturedOutOfStockQueries.length - 1]).toContain('search=latte');
 });
