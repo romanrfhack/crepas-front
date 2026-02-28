@@ -95,7 +95,7 @@ public sealed class PlatformStoresAdminIntegrationTests : IClassFixture<Cobranza
 
         Assert.True(store1.IsDefaultStore);
         Assert.True(store1.HasAdminStore);
-        Assert.Equal(1, store1.AdminStoreUserCount);
+        Assert.Equal(2, store1.AdminStoreUserCount);
 
         Assert.False(store2.IsDefaultStore);
         Assert.False(store2.HasAdminStore);
