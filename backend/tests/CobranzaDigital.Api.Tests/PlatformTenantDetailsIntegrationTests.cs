@@ -315,9 +315,9 @@ public sealed class PlatformTenantDetailsIntegrationTests : IClassFixture<Cobran
 
     private async Task<string> LoginAsync(string email, string password)
     {
-        using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest(email, password));
+        using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest { Email = email, Password = password });
         response.EnsureSuccessStatusCode();
-        var payload = await response.Content.ReadFromJsonAsync<TokenResponse>();
+        var payload = await response.Content.ReadFromJsonAsync<AuthResponse>();
         Assert.NotNull(payload);
         return payload!.AccessToken;
     }
