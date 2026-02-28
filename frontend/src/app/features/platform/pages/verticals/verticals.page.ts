@@ -13,7 +13,7 @@ interface ProblemLike {
   selector: 'app-platform-verticals-page',
   imports: [ReactiveFormsModule, DatePipe],
   template: `
-    <div class="verticals-page">
+    <div class="verticals-page" data-testid="platform-verticals-page">
       <!-- HEADER con barra decorativa -->
       <header class="page-header">
         <h2>📌 Verticales</h2>
@@ -43,7 +43,7 @@ interface ProblemLike {
             <h3>{{ editingId() === 'new' ? 'Crear vertical' : 'Editar vertical' }}</h3>
           </div>
 
-          <form (submit)="save($event)" class="vertical-form">
+          <form (submit)="save($event)" class="vertical-form" data-testid="vertical-form">
             <div class="form-grid">
               <!-- Nombre -->
               <div class="form-field">
