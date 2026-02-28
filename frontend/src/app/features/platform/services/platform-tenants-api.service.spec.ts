@@ -4,7 +4,7 @@ import { ApiClient } from '../../../core/services/api-client';
 import { PlatformTenantsApiService } from './platform-tenants-api.service';
 
 describe('PlatformTenantsApiService', () => {
-  it('builds URLs and payloads for tenants crud', async () => {
+  it('builds URLs and payloads for tenants endpoints including details GET/PUT', async () => {
     const calls: Array<{ method: string; path: string; body?: unknown }> = [];
     TestBed.configureTestingModule({
       providers: [
@@ -34,16 +34,61 @@ describe('PlatformTenantsApiService', () => {
     });
 
     const service = TestBed.inject(PlatformTenantsApiService);
-    const createPayload = { verticalId: 'v1', name: 'Tenant 1', slug: 'tenant-1', timeZoneId: 'America/Mexico_City' };
+    const createPayload = {
+      verticalId: 'v1',
+      name: 'Tenant 1',
+      slug: 'tenant-1',
+      timeZoneId: 'America/Mexico_City',
+    };
     const updatePayload = { verticalId: 'v2', name: 'Tenant 2', slug: 'tenant-2' };
+    const updateDetailsPayload = {
+      name: 'Tenant 2',
+      slug: 'tenant-2',
+      verticalId: 'v2',
+      isActive: false,
+    };
+
     await service.listTenants();
+    await service.getTenantDetails('tenant-1');
     await service.createTenant(createPayload);
     await service.updateTenant('tenant-1', updatePayload);
+    await service.updateTenantDetails('tenant-1', updateDetailsPayload);
     await service.deleteTenant('tenant-1');
 
-    expect(calls.some((call) => call.method === 'get' && call.path === '/v1/platform/tenants')).toBe(true);
-    expect(calls.some((call) => call.method === 'post' && call.path === '/v1/platform/tenants' && call.body === createPayload)).toBe(true);
-    expect(calls.some((call) => call.method === 'put' && call.path === '/v1/platform/tenants/tenant-1' && call.body === updatePayload)).toBe(true);
-    expect(calls.some((call) => call.method === 'delete' && call.path === '/v1/platform/tenants/tenant-1')).toBe(true);
+    expect(
+      calls.some((call) => call.method === 'get' && call.path === '/v1/platform/tenants'),
+    ).toBe(true);
+    expect(
+      calls.some((call) => call.method === 'get' && call.path === '/v1/platform/tenants/tenant-1'),
+    ).toBe(true);
+    expect(
+      calls.some(
+        (call) =>
+          call.method === 'post' &&
+          call.path === '/v1/platform/tenants' &&
+          call.body === createPayload,
+      ),
+    ).toBe(true);
+    expect(
+      calls.some(
+        (call) =>
+          call.method === 'put' &&
+          call.path === '/v1/platform/tenants/tenant-1' &&
+          call.body === updatePayload,
+      ),
+    ).toBe(true);
+    expect(
+      calls.some(
+        (call) =>
+          call.method === 'put' &&
+          call.path === '/v1/platform/tenants/tenant-1' &&
+          call.body === updateDetailsPayload,
+      ),
+    ).toBe(true);
+    expect(
+      calls.some(
+        (call) => call.method === 'delete' && call.path === '/v1/platform/tenants/tenant-1',
+      ),
+    ).toBe(true);
   });
 });

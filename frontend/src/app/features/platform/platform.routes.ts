@@ -16,7 +16,9 @@ export const platformRoutes: Routes = [
     canActivate: [roleGuard(['SuperAdmin'])],
     data: { roles: ['SuperAdmin'] },
     loadComponent: () =>
-      import('./pages/catalog-templates/catalog-templates.page').then((m) => m.CatalogTemplatesPage),
+      import('./pages/catalog-templates/catalog-templates.page').then(
+        (m) => m.CatalogTemplatesPage,
+      ),
   },
   {
     path: 'tenant-template-assignment',
@@ -42,6 +44,15 @@ export const platformRoutes: Routes = [
     data: { roles: ['SuperAdmin'] },
     loadComponent: () => import('./pages/tenants/tenants.page').then((m) => m.TenantsPage),
   },
+  {
+    path: 'tenants/:tenantId',
+    canMatch: [roleGuard(['SuperAdmin'])],
+    canActivate: [roleGuard(['SuperAdmin'])],
+    data: { roles: ['SuperAdmin'] },
+    loadComponent: () =>
+      import('./pages/tenant-details/tenant-details.page').then((m) => m.TenantDetailsPage),
+  },
+
   {
     path: 'tenants/:tenantId/stores',
     canMatch: [roleGuard(['SuperAdmin'])],
