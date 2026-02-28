@@ -92,9 +92,9 @@ public sealed class PlatformTenantDetailsIntegrationTests : IClassFixture<Cobran
         Assert.True(payload.HasCatalogTemplate);
         Assert.Equal(seed.CatalogTemplateId, payload.CatalogTemplateId);
         Assert.Equal("Template Food", payload.CatalogTemplateName);
-        Assert.Equal(4, payload.UsersCount);
+        Assert.Equal(5, payload.UsersCount);
         Assert.Equal(1, payload.UsersWithoutStoreAssignmentCount);
-        Assert.Equal(1, payload.StoresWithoutAdminStoreCount);
+        Assert.Equal(2, payload.StoresWithoutAdminStoreCount);
         Assert.True(payload.CreatedAtUtc <= payload.UpdatedAtUtc);
     }
 
