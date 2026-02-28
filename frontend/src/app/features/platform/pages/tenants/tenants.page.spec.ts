@@ -22,7 +22,16 @@ describe('TenantsPage', () => {
           provide: PlatformTenantsApiService,
           useValue: {
             listTenants: async () => [
-              { id: 't1', verticalId: 'v1', name: 'Tenant One', slug: 'tenant-one', isActive: true, defaultStoreId: 's1', createdAtUtc: '2026-01-01', updatedAtUtc: '2026-01-01' },
+              {
+                id: 't1',
+                verticalId: 'v1',
+                name: 'Tenant One',
+                slug: 'tenant-one',
+                isActive: true,
+                defaultStoreId: 's1',
+                createdAtUtc: '2026-01-01',
+                updatedAtUtc: '2026-01-01',
+              },
             ],
             createTenant,
             updateTenant,
@@ -33,7 +42,14 @@ describe('TenantsPage', () => {
           provide: PlatformVerticalsApiService,
           useValue: {
             listVerticals: async () => [
-              { id: 'v1', name: 'Retail', description: null, isActive: true, createdAtUtc: '2026-01-01', updatedAtUtc: '2026-01-01' },
+              {
+                id: 'v1',
+                name: 'Retail',
+                description: null,
+                isActive: true,
+                createdAtUtc: '2026-01-01',
+                updatedAtUtc: '2026-01-01',
+              },
             ],
           },
         },
@@ -69,9 +85,11 @@ describe('TenantsPage', () => {
 
     host.querySelector('[data-testid="tenant-create-open"]')?.dispatchEvent(new Event('click'));
     fixture.detectChanges();
-    (host.querySelector('[data-testid="tenant-form-name"]') as HTMLInputElement).value = 'Tenant Two';
+    (host.querySelector('[data-testid="tenant-form-name"]') as HTMLInputElement).value =
+      'Tenant Two';
     host.querySelector('[data-testid="tenant-form-name"]')?.dispatchEvent(new Event('input'));
-    (host.querySelector('[data-testid="tenant-form-slug"]') as HTMLInputElement).value = 'tenant-two';
+    (host.querySelector('[data-testid="tenant-form-slug"]') as HTMLInputElement).value =
+      'tenant-two';
     host.querySelector('[data-testid="tenant-form-slug"]')?.dispatchEvent(new Event('input'));
     (host.querySelector('[data-testid="tenant-form-vertical"]') as HTMLSelectElement).value = 'v1';
     host.querySelector('[data-testid="tenant-form-vertical"]')?.dispatchEvent(new Event('change'));
@@ -86,7 +104,11 @@ describe('TenantsPage', () => {
     fixture.detectChanges();
     fixture.debugElement.query(By.css('form')).triggerEventHandler('submit', new Event('submit'));
     await fixture.whenStable();
-    expect(updateTenant).toHaveBeenCalledWith('t1', { verticalId: 'v1', name: 'Tenant One', slug: 'tenant-one' });
+    expect(updateTenant).toHaveBeenCalledWith('t1', {
+      verticalId: 'v1',
+      name: 'Tenant One',
+      slug: 'tenant-one',
+    });
 
     host.querySelector('[data-testid="tenant-set-context-t1"]')?.dispatchEvent(new Event('click'));
     expect(setSelectedTenantId).toHaveBeenCalledWith('t1');
@@ -94,6 +116,9 @@ describe('TenantsPage', () => {
     host.querySelector('[data-testid="tenant-delete-t1"]')?.dispatchEvent(new Event('click'));
     await fixture.whenStable();
     expect(deleteTenant).toHaveBeenCalledWith('t1');
+
+    host.querySelector('[data-testid="tenant-view-details-t1"]')?.dispatchEvent(new Event('click'));
+    expect(navigate).toHaveBeenCalledWith(['/app/platform/tenants', 't1']);
 
     host.querySelector('[data-testid="tenant-view-stores-t1"]')?.dispatchEvent(new Event('click'));
     expect(navigate).toHaveBeenCalledWith(['/app/platform/tenants', 't1', 'stores']);

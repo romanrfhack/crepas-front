@@ -173,7 +173,6 @@ Referencia de contrato: `docs/platform-dashboard-contract-sheet.md` (sección v3
   - Tenant overview action: `platform-tenant-overview-action-users`.
   - Store stockout action: `platform-store-stockout-action-users`.
 
-
 ## Frontend UX admin users v3: creación contextual (prefill)
 
 - En `/app/admin/users`, el botón `admin-users-create-open` abre formulario contextual usando filtros actuales y/o query params (`tenantId`, `storeId`).
@@ -182,7 +181,6 @@ Referencia de contrato: `docs/platform-dashboard-contract-sheet.md` (sección v3
   - solo `tenantId` → `TenantAdmin`.
 - Se mantienen testids contractuales para contexto y formulario (`admin-users-create-context-*`, `admin-user-form-*`).
 - El frontend ya conecta submit real contra `POST /api/v1/admin/users`: envía `email`, `userName`, `role`, `tenantId`, `storeId`, `temporaryPassword`, muestra success/error por `ProblemDetails`, y refresca el listado scoped después de crear.
-
 
 ## Backend Admin Users v4: alta real (`POST /api/v1/admin/users`)
 
@@ -343,7 +341,6 @@ Decisión v6 sobre email:
   - `admin-user-edit-error`
   - `admin-user-edit-success`
 
-
 ## Platform Dashboard v3.2 quick actions (contextual user creation intent)
 
 Extensión sobre v3.1 sin nuevos endpoints backend:
@@ -377,6 +374,7 @@ Se agregan endpoints de administración operativa de stores (solo plataforma):
 - `PUT /api/v1/platform/tenants/{tenantId}/default-store`
 
 Reglas:
+
 - Policy `PlatformOnly` (`SuperAdmin` only), cross-tenant, sin requerir `X-Tenant-Id`.
 - `hasAdminStore` se deriva estrictamente de usuarios con rol `AdminStore` en la store (no depende de rol legacy `Admin`).
 - `PUT /platform/stores/{storeId}` solo edita campos básicos seguros (`name`, `timeZoneId`, `isActive`).
@@ -407,14 +405,49 @@ Nuevos endpoints de plataforma para configuración de tenant en modo global:
 - `PUT /api/v1/platform/tenants/{tenantId}`
 
 Reglas:
+
 - `PlatformOnly` (`SuperAdmin` únicamente).
 - Cross-tenant, sin requerir `X-Tenant-Id`.
 - `403` para `TenantAdmin`, `AdminStore`, `Manager`, `Cashier`.
 
 Contrato útil para frontend:
+
 - Coexisten identificadores y campos amigables en details: `verticalId` + `verticalName`, `defaultStoreId` + `defaultStoreName`, `catalogTemplateId` + `catalogTemplateName`.
 - Se incluyen métricas operativas por tenant: `storeCount`, `activeStoreCount`, `usersCount`, `usersWithoutStoreAssignmentCount`, `storesWithoutAdminStoreCount`.
 - `PUT` permite editar: `name`, `slug`, `isActive`, `verticalId` (si válido); `defaultStoreId` permanece en endpoint dedicado (`PUT /platform/tenants/{tenantId}/default-store`).
 
 Auditoría:
+
 - `PUT` escribe acción `UpdateTenant` con before/after de campos editables.
+
+## 2026-02-28 — Frontend Tenant details/settings v1 (SuperAdmin)
+
+Se agrega pantalla de detalle/edición básica de tenant en:
+
+- `/app/platform/tenants/:tenantId`
+
+Capacidades principales:
+
+- Visualización friendly priorizando `name`, `slug`, `verticalName`, `defaultStoreName`, `catalogTemplateName`.
+- IDs (`id`, `verticalId`, `defaultStoreId`, `catalogTemplateId`) se muestran solo en bloque técnico secundario.
+- Quick actions:
+  - Stores: `/app/platform/tenants/:tenantId/stores`
+  - Users scoped: `/app/admin/users?tenantId={tenantId}`
+  - Dashboard: `/app/platform/dashboard`
+- Edición básica de tenant por `PUT /api/v1/platform/tenants/{tenantId}`:
+  - `name`
+  - `slug`
+  - `verticalId` (opcional)
+  - `isActive`
+
+Test IDs contractuales añadidos para UI-contract:
+
+- Página/identidad: `platform-tenant-details-*`
+- Métricas: `platform-tenant-details-metric-*`
+- Acciones: `platform-tenant-details-action-*`
+- Formulario: `platform-tenant-edit-*`
+
+Cobertura:
+
+- Vitest: servicio tenants details GET/PUT + página tenant details/settings.
+- Playwright: `e2e/platform.tenant-details.contract.spec.ts`.

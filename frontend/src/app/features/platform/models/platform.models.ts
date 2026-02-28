@@ -91,9 +91,38 @@ export interface CreatePlatformTenantRequest {
 }
 
 export interface UpdatePlatformTenantRequest {
-  verticalId: string;
+  verticalId?: string | null;
   name: string;
   slug: string;
+  isActive?: boolean;
+}
+
+export interface PlatformTenantDetailsDto {
+  id: string;
+  name: string;
+  slug: string;
+  verticalId: string;
+  verticalName: string | null;
+  isActive: boolean;
+  defaultStoreId: string | null;
+  defaultStoreName: string | null;
+  storeCount: number;
+  activeStoreCount: number;
+  hasCatalogTemplate: boolean;
+  catalogTemplateId: string | null;
+  catalogTemplateName: string | null;
+  usersCount: number;
+  usersWithoutStoreAssignmentCount: number;
+  storesWithoutAdminStoreCount: number;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+export interface UpdatePlatformTenantRequestDto {
+  name: string;
+  slug: string;
+  verticalId?: string | null;
+  isActive?: boolean;
 }
 
 export interface PlatformSummaryQuery {
