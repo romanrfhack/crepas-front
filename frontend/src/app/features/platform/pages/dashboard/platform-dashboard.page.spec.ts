@@ -7,6 +7,9 @@ describe('PlatformDashboardPage', () => {
   let fixture: ComponentFixture<PlatformDashboardPage>;
   const navigate = vi.fn().mockResolvedValue(true);
 
+  const getByTestId = (testId: string): HTMLElement | null =>
+    (fixture.nativeElement as HTMLElement).querySelector(`[data-testid="${testId}"]`);
+
   const service = {
     getSummary: vi.fn(),
     getTopTenants: vi.fn(),
@@ -280,58 +283,54 @@ describe('PlatformDashboardPage', () => {
   });
 
   it('renders v1 and v2 sections', () => {
-    const host = fixture.nativeElement as HTMLElement;
-    expect(
-      host.querySelector('[data-testid="platform-kpi-active-tenants"]')?.textContent,
-    ).toContain('2');
-    expect(
-      host.querySelector('[data-testid="platform-executive-signal-growth"]')?.textContent,
-    ).toContain('11');
-    expect(host.querySelector('[data-testid="platform-sales-trend-row-0"]')).toBeTruthy();
-    expect(
-      host.querySelector('[data-testid="platform-top-void-tenant-row-tenant-v"]'),
-    ).toBeTruthy();
-    expect(
-      host.querySelector('[data-testid="platform-stockout-hotspot-row-store-2"]'),
-    ).toBeTruthy();
-    expect(host.querySelector('[data-testid="platform-activity-feed-row-0"]')).toBeTruthy();
+    expect(getByTestId('platform-dashboard-page')).toBeTruthy();
+    expect(getByTestId('platform-dashboard-refresh')).toBeTruthy();
+    expect(getByTestId('platform-executive-signals')).toBeTruthy();
+    expect(getByTestId('platform-kpi-active-tenants')?.textContent).toContain('2');
+    expect(getByTestId('platform-kpi-active-stores')?.textContent).toContain('3');
+    expect(getByTestId('platform-executive-signal-growth')?.textContent).toContain('11');
+    expect(getByTestId('platform-executive-signal-void-rate')?.textContent).toContain('2');
+    expect(getByTestId('platform-sales-trend-row-0')).toBeTruthy();
+    expect(getByTestId('platform-top-void-tenant-row-tenant-v')).toBeTruthy();
+    expect(getByTestId('platform-stockout-hotspot-row-store-2')).toBeTruthy();
+    expect(getByTestId('platform-store-stockout-open-store-2')).toBeTruthy();
+    expect(getByTestId('platform-activity-feed-row-0')).toBeTruthy();
+    expect(getByTestId('platform-top-tenants-row-tenant-1')).toBeTruthy();
+    expect(getByTestId('platform-alert-row-TENANT_WITHOUT_TEMPLATE')).toBeTruthy();
+    expect(getByTestId('platform-recent-adjustment-row-adj-1')).toBeTruthy();
+    expect(getByTestId('platform-out-of-stock-row-Product-item-1-store-1')).toBeTruthy();
   });
 
   it('clicking alert opens drilldown and renders items', async () => {
-    const host = fixture.nativeElement as HTMLElement;
-    host
-      .querySelector('[data-testid="platform-alert-drilldown-open-TENANT_WITHOUT_TEMPLATE"]')
-      ?.dispatchEvent(new Event('click'));
+    getByTestId('platform-alert-drilldown-open-TENANT_WITHOUT_TEMPLATE')?.dispatchEvent(
+      new Event('click'),
+    );
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(service.getAlertDrilldown).toHaveBeenLastCalledWith({ code: 'TENANT_WITHOUT_TEMPLATE' });
-    expect(host.querySelector('[data-testid="platform-alert-drilldown"]')).toBeTruthy();
-    expect(
-      host.querySelector('[data-testid="platform-alert-drilldown-row-0"]')?.textContent,
-    ).toContain('Tenant sin template');
+    expect(getByTestId('platform-alert-drilldown')).toBeTruthy();
+    expect(getByTestId('platform-alert-drilldown-title')?.textContent).toContain(
+      'Alerta TENANT_WITHOUT_TEMPLATE',
+    );
+    expect(getByTestId('platform-alert-drilldown-row-0')?.textContent).toContain('Tenant sin template');
   });
 
   it('clicking tenant opens tenant overview', async () => {
-    const host = fixture.nativeElement as HTMLElement;
-    host
-      .querySelector('[data-testid="platform-tenant-overview-open-tenant-1"]')
-      ?.dispatchEvent(new Event('click'));
+    getByTestId('platform-tenant-overview-open-tenant-1')?.dispatchEvent(new Event('click'));
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(service.getTenantOverview).toHaveBeenLastCalledWith('tenant-1');
-    expect(host.querySelector('[data-testid="platform-tenant-overview"]')).toBeTruthy();
+    expect(getByTestId('platform-tenant-overview')).toBeTruthy();
+    expect(getByTestId('platform-tenant-overview-title')).toBeTruthy();
     expect(
-      host.querySelector('[data-testid="platform-tenant-overview-metric-tenantName"]')?.textContent,
+      getByTestId('platform-tenant-overview-metric-tenantName')?.textContent,
     ).toContain('Tenant 1');
   });
 
   it('clicking stockout hotspot opens stockout details and filter apply sends request', async () => {
-    const host = fixture.nativeElement as HTMLElement;
-    host
-      .querySelector('[data-testid="platform-store-stockout-open-store-2"]')
-      ?.dispatchEvent(new Event('click'));
+    getByTestId('platform-store-stockout-open-store-2')?.dispatchEvent(new Event('click'));
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -339,7 +338,8 @@ describe('PlatformDashboardPage', () => {
       'store-2',
       expect.objectContaining({ mode: 'out-of-stock' }),
     );
-    expect(host.querySelector('[data-testid="platform-store-stockout-details"]')).toBeTruthy();
+    expect(getByTestId('platform-store-stockout-details')).toBeTruthy();
+    expect(getByTestId('platform-store-stockout-title')).toBeTruthy();
 
     fixture.componentInstance.stockoutDetailsItemType.set('Product');
     fixture.componentInstance.stockoutDetailsSearch.set('SKU');
@@ -357,8 +357,6 @@ describe('PlatformDashboardPage', () => {
   });
 
   it('navigates from alert quick actions with expected query params', async () => {
-    const host = fixture.nativeElement as HTMLElement;
-
     service.getAlertDrilldown.mockResolvedValueOnce({
       code: 'STORE_WITHOUT_ADMINSTORE',
       items: [
@@ -380,9 +378,9 @@ describe('PlatformDashboardPage', () => {
 
     await fixture.componentInstance.openAlertDrilldown('STORE_WITHOUT_ADMINSTORE');
     fixture.detectChanges();
-    host
-      .querySelector('[data-testid="platform-alert-drilldown-action-create-adminstore-0"]')
-      ?.dispatchEvent(new Event('click'));
+    getByTestId('platform-alert-drilldown-action-create-adminstore-0')?.dispatchEvent(
+      new Event('click'),
+    );
     await fixture.whenStable();
 
     expect(navigate).toHaveBeenLastCalledWith(['/app/admin/users'], {
@@ -416,11 +414,9 @@ describe('PlatformDashboardPage', () => {
 
     await fixture.componentInstance.openAlertDrilldown('STORE_SCOPED_USER_WITHOUT_STORE');
     fixture.detectChanges();
-    host
-      .querySelector(
-        '[data-testid="platform-alert-drilldown-action-STORE_SCOPED_USER_WITHOUT_STORE-0"]',
-      )
-      ?.dispatchEvent(new Event('click'));
+    getByTestId('platform-alert-drilldown-action-STORE_SCOPED_USER_WITHOUT_STORE-0')?.dispatchEvent(
+      new Event('click'),
+    );
     await fixture.whenStable();
 
     expect(navigate).toHaveBeenLastCalledWith(['/app/admin/users'], {
@@ -448,23 +444,21 @@ describe('PlatformDashboardPage', () => {
 
     await fixture.componentInstance.openAlertDrilldown('TENANT_WITHOUT_TEMPLATE');
     fixture.detectChanges();
-    host
-      .querySelector('[data-testid="platform-alert-drilldown-action-TENANT_WITHOUT_TEMPLATE-0"]')
-      ?.dispatchEvent(new Event('click'));
+    getByTestId('platform-alert-drilldown-action-TENANT_WITHOUT_TEMPLATE-0')?.dispatchEvent(
+      new Event('click'),
+    );
     await fixture.whenStable();
 
     expect(navigate).toHaveBeenLastCalledWith(['/app/platform/tenants']);
   });
 
   it('navigates from tenant/store drilldowns to users with scoped query params', async () => {
-    const host = fixture.nativeElement as HTMLElement;
-
     await fixture.componentInstance.openTenantOverview('tenant-1');
     fixture.detectChanges();
 
-    host
-      .querySelector('[data-testid="platform-tenant-overview-action-create-tenantadmin"]')
-      ?.dispatchEvent(new Event('click'));
+    getByTestId('platform-tenant-overview-action-create-tenantadmin')?.dispatchEvent(
+      new Event('click'),
+    );
     await fixture.whenStable();
 
     expect(navigate).toHaveBeenLastCalledWith(['/app/admin/users'], {
@@ -474,9 +468,7 @@ describe('PlatformDashboardPage', () => {
     await fixture.componentInstance.openStoreStockoutDetails('store-2');
     fixture.detectChanges();
 
-    host
-      .querySelector('[data-testid="platform-store-stockout-action-create-user"]')
-      ?.dispatchEvent(new Event('click'));
+    getByTestId('platform-store-stockout-action-create-user')?.dispatchEvent(new Event('click'));
     await fixture.whenStable();
 
     expect(navigate).toHaveBeenLastCalledWith(['/app/admin/users'], {
@@ -512,9 +504,8 @@ describe('PlatformDashboardPage', () => {
     await fixture.componentInstance.openAlertDrilldown('STORE_WITHOUT_ADMINSTORE');
     fixture.detectChanges();
 
-    const host = fixture.nativeElement as HTMLElement;
-    const disabled = host.querySelector(
-      '[data-testid="platform-alert-drilldown-action-disabled-STORE_WITHOUT_ADMINSTORE-0"]',
+    const disabled = getByTestId(
+      'platform-alert-drilldown-action-disabled-STORE_WITHOUT_ADMINSTORE-0',
     ) as HTMLButtonElement;
 
     expect(disabled).toBeTruthy();
@@ -527,10 +518,9 @@ describe('PlatformDashboardPage', () => {
     await fixture.componentInstance.openAlertDrilldown('INVALID_CODE');
     fixture.detectChanges();
 
-    const host = fixture.nativeElement as HTMLElement;
-    expect(
-      host.querySelector('[data-testid="platform-alert-drilldown-error"]')?.textContent,
-    ).toContain('Código de alerta inválido o no soportado.');
+    expect(getByTestId('platform-alert-drilldown-error')?.textContent).toContain(
+      'Código de alerta inválido o no soportado.',
+    );
   });
 
   it('shows drilldown empty and error states', async () => {
@@ -544,16 +534,15 @@ describe('PlatformDashboardPage', () => {
     await fixture.componentInstance.openAlertDrilldown('STORE_WITHOUT_ADMINSTORE');
     fixture.detectChanges();
 
-    const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('[data-testid="platform-alert-drilldown-empty"]')).toBeTruthy();
+    expect(getByTestId('platform-alert-drilldown-empty')).toBeTruthy();
 
     await fixture.componentInstance.openTenantOverview('tenant-1');
     fixture.detectChanges();
-    expect(host.querySelector('[data-testid="platform-tenant-overview-error"]')).toBeTruthy();
+    expect(getByTestId('platform-tenant-overview-error')).toBeTruthy();
 
     await fixture.componentInstance.openStoreStockoutDetails('store-2');
     fixture.detectChanges();
-    expect(host.querySelector('[data-testid="platform-store-stockout-error"]')).toBeTruthy();
+    expect(getByTestId('platform-store-stockout-error')).toBeTruthy();
   });
 
   it('renders dashboard context badge when tenant/store context exists', () => {
@@ -561,8 +550,7 @@ describe('PlatformDashboardPage', () => {
     fixture.componentInstance.contextStoreId.set('store-ctx');
     fixture.detectChanges();
 
-    const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector('[data-testid="platform-dashboard-context-badge"]')?.textContent).toContain(
+    expect(getByTestId('platform-dashboard-context-badge')?.textContent).toContain(
       'Tenant: tenant-ctx · Store: store-ctx',
     );
   });
