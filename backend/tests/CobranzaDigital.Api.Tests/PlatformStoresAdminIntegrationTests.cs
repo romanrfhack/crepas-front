@@ -234,8 +234,10 @@ public sealed class PlatformStoresAdminIntegrationTests : IClassFixture<Cobranza
         tenant2.DefaultStoreId = tenant2Store.Id;
         await db.SaveChangesAsync();
 
-        var superAdminEmail = "admin@test.local";
         var password = "Admin1234!";
+        var superAdminEmail = $"superadmin+{Guid.NewGuid():N}@test.local";
+
+        var superAdmin = await EnsureUserAsync(userManager, superAdminEmail, password);
 
         var tenantAdminEmail = $"tenantadmin+{Guid.NewGuid():N}@test.local";
         var adminStoreEmail = $"adminstore+{Guid.NewGuid():N}@test.local";
@@ -270,6 +272,7 @@ public sealed class PlatformStoresAdminIntegrationTests : IClassFixture<Cobranza
         await db.SaveChangesAsync();
 
         await EnsureRoleAsync(userManager, tenantAdmin, "TenantAdmin");
+        await EnsureRoleAsync(userManager, superAdmin, "SuperAdmin");
         await EnsureRoleAsync(userManager, adminStore, "AdminStore");
         await EnsureRoleAsync(userManager, manager, "Manager");
         await EnsureRoleAsync(userManager, cashier, "Cashier");
