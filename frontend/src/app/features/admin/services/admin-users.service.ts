@@ -5,6 +5,8 @@ import {
   CreateAdminUserRequestDto,
   CreateAdminUserResponseDto,
   PagedResult,
+  SetTemporaryPasswordRequestDto,
+  SetTemporaryPasswordResponseDto,
   UpdateUserRolesRequest,
   UserSummary,
 } from '../models/admin.models';
@@ -60,6 +62,15 @@ export class AdminUsersService {
   async createUser(request: CreateAdminUserRequestDto) {
     return firstValueFrom(
       this.apiClient.post<CreateAdminUserResponseDto>('/v1/admin/users', request),
+    );
+  }
+
+  async setTemporaryPassword(userId: string, request: SetTemporaryPasswordRequestDto) {
+    return firstValueFrom(
+      this.apiClient.post<SetTemporaryPasswordResponseDto>(
+        `/v1/admin/users/${userId}/temporary-password`,
+        request,
+      ),
     );
   }
 }

@@ -180,3 +180,13 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
   - Manager/Cashier reciben `403` al invocar endpoint.
   - Validaciones: `temporaryPassword` faltante/invalid (`400`), usuario inexistente (`404`).
   - Auditoría `ResetUserPassword` persistida sin almacenar el valor de `temporaryPassword`.
+
+| Admin users temporary password UI v5.1 (`/app/admin/users` + `POST /api/v1/admin/users/{id}/temporary-password`) | Frontend Unit: `frontend/src/app/features/admin/services/admin-users.service.spec.ts`, `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts`; E2E UI-contract: `frontend/e2e/admin.users.scoped-ux.contract.spec.ts` | Validar payload exacto (`temporaryPassword`), apertura de modal desde fila, validaciones UI (required/min 8/confirm mismatch), submit anti doble click y mapeo estable de errores backend `400/403/404` sobre testids `admin-users-reset-password-*`. |
+
+## 2026-02-28 — Admin Users v5.1 frontend temporary password reset UI
+
+- Frontend Unit (Vitest):
+  - `frontend/src/app/features/admin/services/admin-users.service.spec.ts` valida request exacto a `/v1/admin/users/{id}/temporary-password`.
+  - `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts` valida apertura del modal desde fila, validación mínima de contraseña, confirm mismatch, submit exitoso y manejo de `400/403/404` por `ProblemDetails`.
+- E2E Playwright UI-contract:
+  - `frontend/e2e/admin.users.scoped-ux.contract.spec.ts` valida flujo determinista de reset temporal (success + errores `400/403`) usando `data-testid` estables `admin-users-reset-password-*`.

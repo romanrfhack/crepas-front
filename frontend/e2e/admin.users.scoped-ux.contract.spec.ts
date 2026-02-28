@@ -114,6 +114,89 @@ test('create user success from tenant+store context submits POST and refreshes l
   expect(getUsersCalls).toBeGreaterThanOrEqual(2);
 });
 
+test('reset temporary password success flow submits backend contract and shows success testid', async ({ page }) => {
+  await page.route('**/api/v1/admin/users**', (route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(usersResponse),
+      });
+    }
+
+    const resetBody = route.request().postDataJSON() as { temporaryPassword: string };
+    expect(route.request().url()).toContain('/api/v1/admin/users/user-1/temporary-password');
+    expect(resetBody).toEqual({ temporaryPassword: 'Temp1234!' });
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'user-1',
+        email: 'user1@test.local',
+        userName: 'User 1',
+        roles: ['TenantAdmin'],
+        tenantId: 'tenant-1',
+        storeId: null,
+        message: 'Temporary password set.',
+      }),
+    });
+  });
+
+  await page.goto('/app/admin/users');
+  await page.getByTestId('admin-users-reset-password-open-user-1').click();
+
+  await expect(page.getByTestId('admin-users-reset-password-modal')).toBeVisible();
+  await expect(page.getByTestId('admin-users-reset-password-user')).toBeVisible();
+
+  await page.getByTestId('admin-users-reset-password-password').fill('Temp1234!');
+  await page.getByTestId('admin-users-reset-password-confirm').fill('Temp1234!');
+  await page.getByTestId('admin-users-reset-password-submit').click();
+
+  await expect(page.getByTestId('admin-users-reset-password-success')).toBeVisible();
+  await expect(page.getByTestId('admin-users-reset-password-error')).toHaveCount(0);
+});
+
+test('reset temporary password shows stable error testid for backend 400 and 403', async ({ page }) => {
+  let currentStatus: 400 | 403 = 400;
+
+  await page.route('**/api/v1/admin/users**', (route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(usersResponse),
+      });
+    }
+
+    if (currentStatus === 400) {
+      return route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({ errors: { temporaryPassword: ['TemporaryPassword is required.'] } }),
+      });
+    }
+
+    return route.fulfill({
+      status: 403,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'Forbidden by scope.' }),
+    });
+  });
+
+  await page.goto('/app/admin/users');
+  await page.getByTestId('admin-users-reset-password-open-user-1').click();
+
+  await page.getByTestId('admin-users-reset-password-password').fill('Temp1234!');
+  await page.getByTestId('admin-users-reset-password-confirm').fill('Temp1234!');
+  await page.getByTestId('admin-users-reset-password-submit').click();
+  await expect(page.getByTestId('admin-users-reset-password-error')).toBeVisible();
+
+  currentStatus = 403;
+  await page.getByTestId('admin-users-reset-password-submit').click();
+  await expect(page.getByTestId('admin-users-reset-password-error')).toBeVisible();
+});
+
 test('create user error maps conflict and validation responses with stable error testid', async ({ page }) => {
   await page.route('**/api/v1/admin/users**', async (route) => {
     if (route.request().method() === 'GET') {

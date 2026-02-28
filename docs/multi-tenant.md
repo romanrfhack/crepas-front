@@ -255,3 +255,29 @@ Auditoría:
 - Se registra `AuditActions.ResetUserPassword` (`Action = "ResetUserPassword"`) con `EntityType = "User"`.
 - Metadata incluye actor, target (`id/email/userName`), roles y scope (`tenantId`, `storeId`) con descriptor `action = "temporary password reset"`.
 - Nunca se persiste el valor de `temporaryPassword` en auditoría/logs.
+
+## Frontend Admin Users v5.1: reset password temporal desde `/app/admin/users`
+
+- Se agrega acción por fila `Restablecer contraseña` con apertura de modal scoped (`admin-users-reset-password-open-{id}`).
+- Submit real conectado a `POST /api/v1/admin/users/{id}/temporary-password` con contrato backend vigente:
+  - Request: `{ temporaryPassword }`.
+  - Response: `{ id, email, userName, roles, tenantId, storeId, message }`.
+- Visibilidad/UI por scope:
+  - `SuperAdmin`: target roles `TenantAdmin|AdminStore|Manager|Cashier`.
+  - `TenantAdmin`: mismos roles pero dentro de tenant visible.
+  - `AdminStore`: solo `Manager|Cashier` en su store visible.
+- Validaciones frontend del modal:
+  - required (`temporaryPassword` + confirmación),
+  - mínimo 8,
+  - confirmación coincidente,
+  - anti doble click con estado loading.
+- Manejo estable de `ProblemDetails` (`detail` y `errors`) para `400/403/404`.
+- Test IDs contractuales agregados para UI-contract:
+  - `admin-users-reset-password-modal`
+  - `admin-users-reset-password-user`
+  - `admin-users-reset-password-password`
+  - `admin-users-reset-password-confirm`
+  - `admin-users-reset-password-submit`
+  - `admin-users-reset-password-cancel`
+  - `admin-users-reset-password-error`
+  - `admin-users-reset-password-success`
