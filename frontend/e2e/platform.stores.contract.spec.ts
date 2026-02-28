@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
   }, buildJwt(['SuperAdmin']));
 });
 
-test('platform stores admin v1 ui-contract', async ({ page }) => {
+test('platform stores admin v1.1 ui-contract', async ({ page }) => {
   let stores = [
     {
       id: 'store-1',
@@ -43,19 +43,35 @@ test('platform stores admin v1 ui-contract', async ({ page }) => {
     },
   ];
 
-  const updatedStore = {
-    id: 'store-2',
-    tenantId: 'tenant-1',
-    tenantName: 'Tenant Uno',
-    name: 'Norte Editada',
-    isActive: true,
-    isDefaultStore: false,
-    hasAdminStore: false,
-    adminStoreUserCount: 0,
-    totalUsersInStore: 2,
-    timeZoneId: 'UTC',
-    createdAtUtc: '2026-01-01',
-    updatedAtUtc: '2026-01-02',
+  const storeDetailsById: Record<string, Record<string, unknown>> = {
+    'store-1': {
+      id: 'store-1',
+      tenantId: 'tenant-1',
+      tenantName: 'Tenant Uno',
+      name: 'Centro',
+      isActive: true,
+      isDefaultStore: true,
+      hasAdminStore: true,
+      adminStoreUserCount: 1,
+      totalUsersInStore: 5,
+      timeZoneId: 'UTC',
+      createdAtUtc: '2026-01-01',
+      updatedAtUtc: '2026-01-01',
+    },
+    'store-2': {
+      id: 'store-2',
+      tenantId: 'tenant-1',
+      tenantName: 'Tenant Uno',
+      name: 'Norte',
+      isActive: true,
+      isDefaultStore: false,
+      hasAdminStore: false,
+      adminStoreUserCount: 0,
+      totalUsersInStore: 2,
+      timeZoneId: 'America/Mexico_City',
+      createdAtUtc: '2026-01-01',
+      updatedAtUtc: '2026-01-01',
+    },
   };
 
   await page.route('**/api/v1/platform/tenants/tenant-1/stores', async (route) => {
@@ -65,24 +81,27 @@ test('platform stores admin v1 ui-contract', async ({ page }) => {
   await page.route('**/api/v1/platform/tenants/tenant-1/default-store', async (route) => {
     if (route.request().method() === 'PUT') {
       stores = stores.map((item) => ({ ...item, isDefaultStore: item.id === 'store-2' }));
+      storeDetailsById['store-1'].isDefaultStore = false;
+      storeDetailsById['store-2'].isDefaultStore = true;
       await route.fulfill({ status: 204, body: '' });
       return;
     }
     await route.fulfill({ status: 500, body: '{}' });
   });
 
-  await page.route('**/api/v1/platform/stores/store-2', async (route) => {
+  await page.route('**/api/v1/platform/stores/*', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const storeId = path.split('/').at(-1) ?? '';
+
     if (route.request().method() === 'GET') {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(updatedStore) });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(storeDetailsById[storeId]),
+      });
       return;
     }
-    if (route.request().method() === 'PUT') {
-      const body = route.request().postDataJSON() as { name: string; timeZoneId: string; isActive: boolean };
-      updatedStore.name = body.name;
-      updatedStore.timeZoneId = body.timeZoneId;
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(updatedStore) });
-      return;
-    }
+
     await route.fulfill({ status: 500, body: '{}' });
   });
 
@@ -96,43 +115,39 @@ test('platform stores admin v1 ui-contract', async ({ page }) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
   });
 
-  await page.goto('/app/platform/tenants/tenant-1/stores');
-  await expect(page.getByTestId('platform-tenant-stores-page')).toBeVisible();
-  await expect(page.getByTestId('platform-tenant-stores-row-store-1')).toBeVisible();
-  await expect(page.getByTestId('platform-tenant-stores-default-1')).toContainText('Sí');
-  await expect(page.getByTestId('platform-tenant-stores-has-admin-2')).toContainText('No');
-
-  await page.getByTestId('platform-tenant-stores-set-default-2').click();
-  await expect(page.getByTestId('platform-tenant-stores-default-2')).toContainText('Sí');
-
-  await page.getByTestId('platform-tenant-stores-edit-2').click();
-  await expect(page.getByTestId('platform-store-details-page')).toBeVisible();
-  await page.getByTestId('platform-store-edit-open').click();
-  await page.getByTestId('platform-store-edit-name').fill('Norte Editada');
-  await page.getByTestId('platform-store-edit-timezone').fill('UTC');
-  await page.getByTestId('platform-store-edit-submit').click();
-  await expect(page.getByTestId('platform-store-edit-success')).toBeVisible();
-
-  await page.getByTestId('platform-store-details-action-users').click();
-  await expect(page).toHaveURL('/app/admin/users?tenantId=tenant-1&storeId=store-2');
-
   await page.goto('/app/platform/stores/store-2');
+  await expect(page.getByTestId('platform-store-details-page')).toBeVisible();
+  await expect(page.getByTestId('platform-store-details-primary-action')).toBeVisible();
+  await expect(page.getByTestId('platform-store-details-action-create-adminstore')).toBeVisible();
+  await expect(page.getByTestId('platform-store-details-default')).toContainText('Sucursal regular');
+  await expect(page.getByTestId('platform-store-details-has-admin')).toContainText('Sin AdminStore');
+  await expect(page.getByTestId('platform-store-details-admin-count')).toContainText('0');
+  await expect(page.getByTestId('platform-store-details-users-count')).toContainText('2');
   await page.getByTestId('platform-store-details-action-create-adminstore').click();
   await expect(page).toHaveURL('/app/admin/users?tenantId=tenant-1&storeId=store-2&intent=create-user&suggestedRole=AdminStore');
 
-  await page.goto('/app/platform/stores/store-2');
-  await page.getByTestId('platform-store-details-action-create-user').click();
-  await expect(page).toHaveURL('/app/admin/users?tenantId=tenant-1&storeId=store-2&intent=create-user');
-
-  await page.goto('/app/platform/stores/store-2');
-  await page.getByTestId('platform-store-details-action-inventory').click();
-  await expect(page).toHaveURL('/app/admin/pos/inventory?tenantId=tenant-1&storeId=store-2');
-
-  await page.goto('/app/platform/stores/store-2');
-  await page.getByTestId('platform-store-details-action-reports').click();
-  await expect(page).toHaveURL('/app/platform/dashboard?tenantId=tenant-1&storeId=store-2');
+  await page.goto('/app/platform/stores/store-1');
+  await expect(page.getByTestId('platform-store-details-action-create-adminstore')).toHaveCount(0);
+  await expect(page.getByTestId('platform-store-details-action-users')).toBeVisible();
+  await page.getByTestId('platform-store-details-action-users').click();
+  await expect(page).toHaveURL('/app/admin/users?tenantId=tenant-1&storeId=store-1');
 
   await page.goto('/app/platform/tenants/tenant-1/stores');
-  await page.getByTestId('platform-tenant-stores-create-adminstore-2').click();
+  await expect(page.getByTestId('platform-tenant-stores-page')).toBeVisible();
+  await expect(page.getByTestId('platform-tenant-stores-default-store-1')).toContainText('Principal');
+  await expect(page.getByTestId('platform-tenant-stores-has-admin-store-2')).toContainText('Sin AdminStore');
+  await expect(page.getByTestId('platform-tenant-stores-create-adminstore-store-2')).toBeVisible();
+  await page.getByTestId('platform-tenant-stores-create-adminstore-store-2').click();
   await expect(page).toHaveURL(/\/app\/admin\/users\?tenantId=tenant-1&storeId=store-2&intent=create-user&suggestedRole=AdminStore/);
+
+  await page.goto('/app/platform/tenants/tenant-1/stores');
+  await page.getByTestId('platform-tenant-stores-view-details-store-2').click();
+  await expect(page).toHaveURL('/app/platform/stores/store-2');
+
+  await page.goto('/app/platform/tenants/tenant-1/stores');
+  await page.getByTestId('platform-tenant-stores-set-default-store-2').click();
+  await expect(page.getByTestId('platform-tenant-stores-default-store-2')).toContainText('Principal');
+
+  await page.goto('/app/platform/stores/store-2');
+  await expect(page.getByTestId('platform-store-details-default')).toContainText('Sucursal principal');
 });

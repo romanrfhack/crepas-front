@@ -66,6 +66,21 @@ describe('StoreDetailsPage', () => {
     fixture = TestBed.createComponent(StoreDetailsPage);
     await fixture.componentInstance.ngOnInit();
     fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  });
+
+  it('renders operational signals from store contract fields', () => {
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('[data-testid="platform-store-details-default"]')?.textContent).toContain(
+      'Sucursal regular',
+    );
+    expect(host.querySelector('[data-testid="platform-store-details-has-admin"]')?.textContent).toContain(
+      'Sin AdminStore asignado',
+    );
+    expect(host.querySelector('[data-testid="platform-store-details-admin-count"]')?.textContent).toContain('0');
+    expect(host.querySelector('[data-testid="platform-store-details-users-count"]')?.textContent).toContain('2');
   });
 
   it('submits store edition to backend endpoint contract', async () => {
@@ -101,12 +116,58 @@ describe('StoreDetailsPage', () => {
     expect(fixture.componentInstance.error()).toContain('TimeZoneId is required.');
   });
 
+  it('uses create-adminstore as primary action when missing admin', () => {
+    fixture.componentInstance.runPrimaryAction();
+
+    expect(navigate).toHaveBeenCalledWith(['/app/admin/users'], {
+      queryParams: {
+        tenantId: 'tenant-1',
+        storeId: 'store-1',
+        intent: 'create-user',
+        suggestedRole: 'AdminStore',
+      },
+    });
+  });
+
+  it('uses users as primary action and hides create-adminstore when store already has admin', async () => {
+    getStoreDetails.mockResolvedValueOnce({
+      id: 'store-1',
+      tenantId: 'tenant-1',
+      tenantName: 'Tenant Uno',
+      name: 'Centro',
+      isActive: true,
+      isDefaultStore: true,
+      hasAdminStore: true,
+      adminStoreUserCount: 1,
+      totalUsersInStore: 3,
+      timeZoneId: 'UTC',
+      createdAtUtc: '2026-01-01',
+      updatedAtUtc: '2026-01-01',
+    });
+
+    await fixture.componentInstance.load();
+    fixture.detectChanges();
+
+    fixture.componentInstance.runPrimaryAction();
+
+    expect(navigate).toHaveBeenCalledWith(['/app/admin/users'], {
+      queryParams: { tenantId: 'tenant-1', storeId: 'store-1' },
+    });
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="platform-store-details-default"]')?.textContent).toContain(
+      'Sucursal principal',
+    );
+    expect(
+      host.querySelector('[data-testid="platform-store-details-action-create-adminstore"]'),
+    ).toBeNull();
+  });
+
   it('navigates with contextual quick actions', () => {
     fixture.componentInstance.goToUsers();
     fixture.componentInstance.goToCreateAdminStore();
     fixture.componentInstance.goToCreateUser();
     fixture.componentInstance.goToDashboard();
-    fixture.componentInstance.goToReports();
     fixture.componentInstance.goToInventory();
 
     expect(navigate).toHaveBeenCalledWith(['/app/admin/users'], {
@@ -129,30 +190,5 @@ describe('StoreDetailsPage', () => {
     expect(navigate).toHaveBeenCalledWith(['/app/admin/pos/inventory'], {
       queryParams: { tenantId: 'tenant-1', storeId: 'store-1' },
     });
-  });
-
-  it('hides create-adminstore action when store already has admin', async () => {
-    getStoreDetails.mockResolvedValueOnce({
-      id: 'store-1',
-      tenantId: 'tenant-1',
-      tenantName: 'Tenant Uno',
-      name: 'Centro',
-      isActive: true,
-      isDefaultStore: false,
-      hasAdminStore: true,
-      adminStoreUserCount: 1,
-      totalUsersInStore: 2,
-      timeZoneId: 'UTC',
-      createdAtUtc: '2026-01-01',
-      updatedAtUtc: '2026-01-01',
-    });
-
-    await fixture.componentInstance.load();
-    fixture.detectChanges();
-
-    const host = fixture.nativeElement as HTMLElement;
-    expect(
-      host.querySelector('[data-testid="platform-store-details-action-create-adminstore"]'),
-    ).toBeNull();
   });
 });

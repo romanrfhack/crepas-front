@@ -21,7 +21,7 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
         <p>Cargando...</p>
       } @else {
         @if (showWithoutAdminOnly()) {
-          <p data-testid="platform-tenant-stores-filter-without-admin-active">
+          <p data-testid="platform-tenant-stores-filter-without-admin-active" class="filter-chip">
             Mostrando solo stores sin AdminStore.
           </p>
         }
@@ -30,7 +30,7 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
             <tr>
               <th>Nombre</th>
               <th>TimeZone</th>
-              <th>Default</th>
+              <th>Estado</th>
               <th>AdminStore</th>
               <th>AdminStore users</th>
               <th>Total users</th>
@@ -39,30 +39,47 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
           </thead>
           <tbody>
             @for (store of visibleStores(); track store.id) {
-              <tr [attr.data-testid]="'platform-tenant-stores-row-' + store.id">
-                <td>{{ store.name }}</td>
-                <td>{{ store.timeZoneId }}</td>
-                <td [attr.data-testid]="'platform-tenant-stores-default-' + testIdSuffix(store.id)">
-                  {{ store.isDefaultStore ? 'Sí' : 'No' }}
+              <tr [attr.data-testid]="'platform-tenant-stores-row-' + store.id" [class.highlight-row]="store.isDefaultStore || !store.hasAdminStore">
+                <td>
+                  <strong>{{ store.name }}</strong>
+                  <div class="secondary-info">{{ store.id }}</div>
                 </td>
-                <td [attr.data-testid]="'platform-tenant-stores-has-admin-' + testIdSuffix(store.id)">
-                  {{ store.hasAdminStore ? 'Sí' : 'No' }}
+                <td>{{ store.timeZoneId }}</td>
+                <td [attr.data-testid]="'platform-tenant-stores-default-' + store.id">
+                  <span class="chip" [class.chip-default]="store.isDefaultStore">
+                    {{ store.isDefaultStore ? 'Principal' : 'Regular' }}
+                  </span>
+                </td>
+                <td [attr.data-testid]="'platform-tenant-stores-has-admin-' + store.id">
+                  <span class="chip" [class.chip-warning]="!store.hasAdminStore">
+                    {{ store.hasAdminStore ? 'Con AdminStore' : 'Sin AdminStore' }}
+                  </span>
                 </td>
                 <td>{{ store.adminStoreUserCount }}</td>
                 <td>{{ store.totalUsersInStore }}</td>
-                <td>
+                <td class="actions-cell">
+                  @if (!store.hasAdminStore) {
+                    <button
+                      type="button"
+                      [attr.data-testid]="'platform-tenant-stores-create-adminstore-' + store.id"
+                      (click)="createAdminStore(store)"
+                    >
+                      Crear AdminStore
+                    </button>
+                  }
+
                   <button
                     type="button"
-                    [attr.data-testid]="'platform-tenant-stores-edit-' + testIdSuffix(store.id)"
+                    [attr.data-testid]="'platform-tenant-stores-view-details-' + store.id"
                     (click)="openDetails(store.id)"
                   >
-                    Ver / Editar
+                    Ver detalle
                   </button>
 
                   @if (!store.isDefaultStore) {
                     <button
                       type="button"
-                      [attr.data-testid]="'platform-tenant-stores-set-default-' + testIdSuffix(store.id)"
+                      [attr.data-testid]="'platform-tenant-stores-set-default-' + store.id"
                       [disabled]="settingDefaultStoreId() === store.id"
                       (click)="setAsDefault(store.id)"
                     >
@@ -72,21 +89,11 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
 
                   <button
                     type="button"
-                    [attr.data-testid]="'platform-tenant-stores-users-' + testIdSuffix(store.id)"
+                    [attr.data-testid]="'platform-tenant-stores-users-' + store.id"
                     (click)="goToUsers(store)"
                   >
                     Ver usuarios
                   </button>
-
-                  @if (!store.hasAdminStore) {
-                    <button
-                      type="button"
-                      [attr.data-testid]="'platform-tenant-stores-create-adminstore-' + testIdSuffix(store.id)"
-                      (click)="createAdminStore(store)"
-                    >
-                      Crear AdminStore
-                    </button>
-                  }
                 </td>
               </tr>
             }
@@ -94,6 +101,48 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
         </table>
       }
     </section>
+  `,
+  styles: `
+    .filter-chip {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      background: #fef3c7;
+      margin-bottom: 0.7rem;
+      font-weight: 600;
+    }
+
+    .secondary-info {
+      opacity: 0.75;
+      font-size: 0.8rem;
+    }
+
+    .chip {
+      display: inline-block;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      background: #eef2ff;
+    }
+
+    .chip-default {
+      font-weight: 700;
+      background: #dbeafe;
+    }
+
+    .chip-warning {
+      font-weight: 700;
+      background: #fee2e2;
+    }
+
+    .highlight-row {
+      background: #fafafa;
+    }
+
+    .actions-cell {
+      display: grid;
+      gap: 0.35rem;
+      align-items: start;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -185,10 +234,6 @@ export class TenantStoresPage {
 
   private tenantId(): string | null {
     return this.route.snapshot.paramMap.get('tenantId');
-  }
-
-  testIdSuffix(storeId: string): string {
-    return storeId.startsWith('store-') ? storeId.slice('store-'.length) : storeId;
   }
 
   private mapProblemDetails(error: unknown): string {

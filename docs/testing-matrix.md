@@ -248,3 +248,15 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 | Frontend Platform Store Details (`/app/platform/stores/:storeId`) quick actions hub | `frontend/src/app/features/platform/pages/store-details/store-details.page.spec.ts`, `frontend/e2e/platform.stores.contract.spec.ts` | Mantener navegación contextual a users/create-user/create-adminstore/dashboard/reportes/inventario y comportamiento condicional de CTA `create-adminstore` cuando `hasAdminStore=true`. |
 | Frontend Inventory Admin (`/app/admin/pos/inventory`) contexto por query params | `frontend/src/app/features/admin/pos-catalog/pages/inventory/inventory.page.spec.ts` + cobertura E2E en quick actions de store/tenant detail | Si cambia prefill por query (`storeId`, `itemType`, `search`) actualizar pruebas de inicialización y navegación contextual desde hubs de tenant/store. |
 | Frontend Platform Tenant Stores (`/app/platform/tenants/:tenantId/stores`) filtro `withoutAdminStore=true` | `frontend/src/app/features/platform/pages/tenant-stores/tenant-stores.page.spec.ts` | Mantener filtro frontend-only por query param y `data-testid` del estado de filtro activo. |
+
+## 2026-02-28 — Platform Stores Admin v1.1 UX (frontend)
+
+| Feature / Flow | Tests a mantener | Cobertura mínima obligatoria |
+| --- | --- | --- |
+| `/app/platform/stores/:storeId` panel operativo | `frontend/src/app/features/platform/pages/store-details/store-details.page.spec.ts` | Verificar visualización de `isDefaultStore`, `hasAdminStore`, `adminStoreUserCount`, `totalUsersInStore`; validar CTA primaria contextual (`Crear AdminStore` vs `Ver usuarios`). |
+| `/app/platform/tenants/:tenantId/stores` listado operativo | `frontend/src/app/features/platform/pages/tenant-stores/tenant-stores.page.spec.ts` | Verificar resaltado visual de default store, badges de AdminStore y quick actions `Crear AdminStore`/`Ver detalle` por fila. |
+| UI-contract stores admin operativo | `frontend/e2e/platform.stores.contract.spec.ts` | Validar navegación contextual con `data-testid` estable para detalle sin AdminStore, detalle con AdminStore, quick actions desde listado y estado visual de default store. |
+
+Test IDs estables agregados en este ciclo:
+- Store Detail: `platform-store-details-primary-action`, `platform-store-details-admin-count`, `platform-store-details-users-count`.
+- Stores list: `platform-tenant-stores-view-details-{storeId}` (además de `platform-tenant-stores-default-{storeId}`, `platform-tenant-stores-has-admin-{storeId}`, `platform-tenant-stores-create-adminstore-{storeId}`).
