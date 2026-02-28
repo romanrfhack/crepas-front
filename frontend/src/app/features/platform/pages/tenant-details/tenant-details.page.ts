@@ -55,6 +55,23 @@ type ProblemLike = {
           >
             📊 Dashboard
           </button>
+          <button
+            type="button"
+            class="btn-outline"
+            data-testid="platform-tenant-details-action-reports"
+            (click)="goToReports()"
+          >
+            📈 Reportes
+          </button>
+          <button
+            type="button"
+            class="btn-outline"
+            data-testid="platform-tenant-details-action-inventory"
+            [disabled]="!canOpenInventory()"
+            (click)="goToInventory()"
+          >
+            📦 Inventario
+          </button>
         </div>
       </header>
 
@@ -126,8 +143,13 @@ type ProblemLike = {
             </article>
           </div>
           @if (item.storesWithoutAdminStoreCount > 0) {
-            <button type="button" class="btn-highlight" (click)="goToStores()">
-              Atender stores sin AdminStore
+            <button
+              type="button"
+              class="btn-highlight"
+              data-testid="platform-tenant-details-action-review-stores-without-admin"
+              (click)="goToStoresWithoutAdminFilter()"
+            >
+              Revisar stores sin AdminStore
             </button>
           }
         </section>
@@ -362,6 +384,36 @@ export class TenantDetailsPage {
 
   goToDashboard() {
     void this.router.navigate(['/app/platform/dashboard']);
+  }
+
+  goToReports() {
+    void this.router.navigate(['/app/platform/dashboard'], {
+      queryParams: { tenantId: this.tenantId() },
+    });
+  }
+
+  canOpenInventory() {
+    return !!this.tenant()?.defaultStoreId;
+  }
+
+  goToInventory() {
+    const defaultStoreId = this.tenant()?.defaultStoreId;
+    if (!defaultStoreId) {
+      return;
+    }
+
+    void this.router.navigate(['/app/admin/pos/inventory'], {
+      queryParams: {
+        tenantId: this.tenantId(),
+        storeId: defaultStoreId,
+      },
+    });
+  }
+
+  goToStoresWithoutAdminFilter() {
+    void this.router.navigate(['/app/platform/tenants', this.tenantId(), 'stores'], {
+      queryParams: { withoutAdminStore: 'true' },
+    });
   }
 
   private mapError(error: unknown, fallback: string) {

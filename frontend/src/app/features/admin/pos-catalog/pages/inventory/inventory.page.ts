@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import {
   CatalogInventoryAdjustmentDto,
   CatalogInventoryItemDto,
@@ -245,6 +246,7 @@ export class InventoryPage {
   private readonly adjustmentsApi = inject(PosInventoryAdjustmentsApiService);
   private readonly authService = inject(AuthService);
   private readonly tenantContext = inject(PlatformTenantContextService);
+  private readonly route = inject(ActivatedRoute);
 
   readonly adjustmentReasons: InventoryAdjustmentReason[] = [
     'InitialLoad',
@@ -299,9 +301,31 @@ export class InventoryPage {
   });
 
   constructor() {
+    this.applyContextFromQueryParams();
     void this.loadCatalogItems();
     void this.loadInventory();
     void this.loadHistory();
+  }
+
+  private applyContextFromQueryParams(): void {
+    const storeId = this.route.snapshot.queryParamMap.get('storeId')?.trim() ?? '';
+    const itemType = this.route.snapshot.queryParamMap.get('itemType')?.trim() ?? '';
+    const search = this.route.snapshot.queryParamMap.get('search')?.trim() ?? '';
+
+    if (storeId) {
+      this.storeIdControl.setValue(storeId);
+      this.adjustStoreIdControl.setValue(storeId);
+      this.historyStoreIdControl.setValue(storeId);
+    }
+
+    if (itemType === 'Product' || itemType === 'Extra') {
+      this.adjustItemTypeControl.setValue(itemType);
+      this.historyItemTypeControl.setValue(itemType);
+    }
+
+    if (search) {
+      this.historyItemIdControl.setValue(search);
+    }
   }
 
   async loadInventory() {

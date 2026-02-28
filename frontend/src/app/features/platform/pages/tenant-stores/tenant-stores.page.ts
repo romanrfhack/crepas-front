@@ -20,6 +20,11 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
       @if (loading()) {
         <p>Cargando...</p>
       } @else {
+        @if (showWithoutAdminOnly()) {
+          <p data-testid="platform-tenant-stores-filter-without-admin-active">
+            Mostrando solo stores sin AdminStore.
+          </p>
+        }
         <table>
           <thead>
             <tr>
@@ -33,7 +38,7 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
             </tr>
           </thead>
           <tbody>
-            @for (store of stores(); track store.id) {
+            @for (store of visibleStores(); track store.id) {
               <tr [attr.data-testid]="'platform-tenant-stores-row-' + store.id">
                 <td>{{ store.name }}</td>
                 <td>{{ store.timeZoneId }}</td>
@@ -102,6 +107,8 @@ export class TenantStoresPage {
   readonly error = signal<string | null>(null);
   readonly success = signal<string | null>(null);
   readonly settingDefaultStoreId = signal<string | null>(null);
+  readonly showWithoutAdminOnly = signal(false);
+  readonly visibleStores = signal<PlatformTenantStoreListItemDto[]>([]);
 
   async ngOnInit(): Promise<void> {
     await this.load();
@@ -119,7 +126,14 @@ export class TenantStoresPage {
     this.error.set(null);
 
     try {
-      this.stores.set(await this.api.getTenantStores(tenantId));
+      const stores = await this.api.getTenantStores(tenantId);
+      const showWithoutAdminOnly =
+        this.route.snapshot.queryParamMap.get('withoutAdminStore') === 'true';
+      this.showWithoutAdminOnly.set(showWithoutAdminOnly);
+      this.stores.set(stores);
+      this.visibleStores.set(
+        showWithoutAdminOnly ? stores.filter((store) => !store.hasAdminStore) : stores,
+      );
     } catch (error) {
       this.error.set(this.mapProblemDetails(error));
     } finally {

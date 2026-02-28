@@ -100,12 +100,12 @@ test('platform stores admin v1 ui-contract', async ({ page }) => {
   await expect(page.getByTestId('platform-tenant-stores-page')).toBeVisible();
   await expect(page.getByTestId('platform-tenant-stores-row-store-1')).toBeVisible();
   await expect(page.getByTestId('platform-tenant-stores-default-store-1')).toContainText('Sí');
-  await expect(page.getByTestId('platform-tenant-stores-has-admin-store-2')).toContainText('No');
+  await expect(page.getByTestId('platform-tenant-stores-has-admin-2')).toContainText('No');
 
-  await page.getByTestId('platform-tenant-stores-set-default-store-2').click();
+  await page.getByTestId('platform-tenant-stores-set-default-2').click();
   await expect(page.getByTestId('platform-tenant-stores-default-store-2')).toContainText('Sí');
 
-  await page.getByTestId('platform-tenant-stores-edit-store-2').click();
+  await page.getByTestId('platform-tenant-stores-edit-2').click();
   await expect(page.getByTestId('platform-store-details-page')).toBeVisible();
   await page.getByTestId('platform-store-edit-open').click();
   await page.getByTestId('platform-store-edit-name').fill('Norte Editada');
@@ -113,7 +113,26 @@ test('platform stores admin v1 ui-contract', async ({ page }) => {
   await page.getByTestId('platform-store-edit-submit').click();
   await expect(page.getByTestId('platform-store-edit-success')).toBeVisible();
 
+  await page.getByTestId('platform-store-details-action-users').click();
+  await expect(page).toHaveURL('/app/admin/users?tenantId=tenant-1&storeId=store-2');
+
+  await page.goto('/app/platform/stores/store-2');
+  await page.getByTestId('platform-store-details-action-create-adminstore').click();
+  await expect(page).toHaveURL('/app/admin/users?tenantId=tenant-1&storeId=store-2&intent=create-user&suggestedRole=AdminStore');
+
+  await page.goto('/app/platform/stores/store-2');
+  await page.getByTestId('platform-store-details-action-create-user').click();
+  await expect(page).toHaveURL('/app/admin/users?tenantId=tenant-1&storeId=store-2&intent=create-user');
+
+  await page.goto('/app/platform/stores/store-2');
+  await page.getByTestId('platform-store-details-action-inventory').click();
+  await expect(page).toHaveURL('/app/admin/pos/inventory?tenantId=tenant-1&storeId=store-2');
+
+  await page.goto('/app/platform/stores/store-2');
+  await page.getByTestId('platform-store-details-action-reports').click();
+  await expect(page).toHaveURL('/app/platform/dashboard?tenantId=tenant-1&storeId=store-2');
+
   await page.goto('/app/platform/tenants/tenant-1/stores');
-  await page.getByTestId('platform-tenant-stores-create-adminstore-store-2').click();
+  await page.getByTestId('platform-tenant-stores-create-adminstore-2').click();
   await expect(page).toHaveURL(/\/app\/admin\/users\?tenantId=tenant-1&storeId=store-2&intent=create-user&suggestedRole=AdminStore/);
 });

@@ -121,4 +121,16 @@ test('tenant details/settings v1 ui-contract', async ({ page }) => {
   await page.goBack();
   await page.getByTestId('platform-tenant-details-action-users').click();
   await expect(page).toHaveURL('/app/admin/users?tenantId=tenant-1');
+
+  await page.goBack();
+  await page.getByTestId('platform-tenant-details-action-review-stores-without-admin').click();
+  await expect(page).toHaveURL('/app/platform/tenants/tenant-1/stores?withoutAdminStore=true');
+
+  await page.goto('/app/platform/tenants/tenant-1');
+  await page.getByTestId('platform-tenant-details-action-reports').click();
+  await expect(page).toHaveURL('/app/platform/dashboard?tenantId=tenant-1');
+
+  await page.goto('/app/platform/tenants/tenant-1');
+  await page.getByTestId('platform-tenant-details-action-inventory').click();
+  await expect(page).toHaveURL('/app/admin/pos/inventory?tenantId=tenant-1&storeId=store-1');
 });

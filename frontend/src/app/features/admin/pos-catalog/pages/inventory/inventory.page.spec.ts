@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
 import { PosInventoryAdjustmentsApiService } from '../../services/pos-inventory-adjustments-api.service';
 import { PosInventoryAdminApiService } from '../../services/pos-inventory-admin-api.service';
@@ -120,6 +121,10 @@ describe('InventoryPage', () => {
           useValue: { listAdjustments, createAdjustment },
         },
         { provide: AuthService, useValue: { hasRole: () => false } },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { queryParamMap: convertToParamMap({}) } },
+        },
         { provide: PlatformTenantContextService, useValue: { getSelectedTenantId: () => null } },
       ],
     }).compileComponents();

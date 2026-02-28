@@ -53,7 +53,12 @@ describe('TenantStoresPage', () => {
         },
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: convertToParamMap({ tenantId: 'tenant-1' }) } },
+          useValue: {
+            snapshot: {
+              paramMap: convertToParamMap({ tenantId: 'tenant-1' }),
+              queryParamMap: convertToParamMap({}),
+            },
+          },
         },
         { provide: Router, useValue: { navigate } },
       ],

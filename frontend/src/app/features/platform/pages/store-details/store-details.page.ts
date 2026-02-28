@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { PlatformStoreDetailsDto } from '../../models/platform.models';
 import { PlatformStoresApiService } from '../../services/platform-stores-api.service';
 
@@ -27,6 +27,53 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
           <p data-testid="platform-store-details-timezone">{{ details()!.timeZoneId }}</p>
           <p data-testid="platform-store-details-default">{{ details()!.isDefaultStore ? 'Default' : 'No default' }}</p>
           <p data-testid="platform-store-details-has-admin">{{ details()!.hasAdminStore ? 'Con AdminStore' : 'Sin AdminStore' }}</p>
+
+          <div>
+            <button
+              type="button"
+              data-testid="platform-store-details-action-users"
+              (click)="goToUsers()"
+            >
+              Ver usuarios de la sucursal
+            </button>
+            @if (!details()!.hasAdminStore) {
+              <button
+                type="button"
+                data-testid="platform-store-details-action-create-adminstore"
+                (click)="goToCreateAdminStore()"
+              >
+                Crear AdminStore
+              </button>
+            }
+            <button
+              type="button"
+              data-testid="platform-store-details-action-create-user"
+              (click)="goToCreateUser()"
+            >
+              Crear usuario en sucursal
+            </button>
+            <button
+              type="button"
+              data-testid="platform-store-details-action-dashboard"
+              (click)="goToDashboard()"
+            >
+              Ir al dashboard
+            </button>
+            <button
+              type="button"
+              data-testid="platform-store-details-action-reports"
+              (click)="goToReports()"
+            >
+              Ver reportes de la sucursal
+            </button>
+            <button
+              type="button"
+              data-testid="platform-store-details-action-inventory"
+              (click)="goToInventory()"
+            >
+              Ver inventario de la sucursal
+            </button>
+          </div>
 
           @if (!details()!.isDefaultStore) {
             <button type="button" [disabled]="settingDefault()" (click)="setAsDefault()">Set default store</button>
@@ -76,6 +123,7 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
 })
 export class StoreDetailsPage {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly api = inject(PlatformStoresApiService);
 
   readonly loading = signal(true);
@@ -188,6 +236,79 @@ export class StoreDetailsPage {
     } finally {
       this.settingDefault.set(false);
     }
+  }
+
+  goToUsers(): void {
+    const current = this.details();
+    if (!current) {
+      return;
+    }
+
+    void this.router.navigate(['/app/admin/users'], {
+      queryParams: {
+        tenantId: current.tenantId,
+        storeId: current.id,
+      },
+    });
+  }
+
+  goToCreateAdminStore(): void {
+    const current = this.details();
+    if (!current) {
+      return;
+    }
+
+    void this.router.navigate(['/app/admin/users'], {
+      queryParams: {
+        tenantId: current.tenantId,
+        storeId: current.id,
+        intent: 'create-user',
+        suggestedRole: 'AdminStore',
+      },
+    });
+  }
+
+  goToCreateUser(): void {
+    const current = this.details();
+    if (!current) {
+      return;
+    }
+
+    void this.router.navigate(['/app/admin/users'], {
+      queryParams: {
+        tenantId: current.tenantId,
+        storeId: current.id,
+        intent: 'create-user',
+      },
+    });
+  }
+
+  goToDashboard(): void {
+    const current = this.details();
+    void this.router.navigate(['/app/platform/dashboard'], {
+      queryParams: {
+        tenantId: current?.tenantId,
+        storeId: current?.id,
+      },
+    });
+  }
+
+  goToReports(): void {
+    this.goToDashboard();
+  }
+
+  goToInventory(): void {
+    const current = this.details();
+    if (!current) {
+      return;
+    }
+
+    void this.router.navigate(['/app/admin/pos/inventory'], {
+      queryParams: {
+        tenantId: current.tenantId,
+        storeId: current.id,
+      },
+    });
   }
 
   private storeId(): string | null {

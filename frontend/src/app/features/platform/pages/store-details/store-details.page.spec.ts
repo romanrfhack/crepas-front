@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { convertToParamMap } from '@angular/router';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { PlatformStoresApiService } from '../../services/platform-stores-api.service';
 import { StoreDetailsPage } from './store-details.page';
 
@@ -10,8 +10,14 @@ describe('StoreDetailsPage', () => {
   const getStoreDetails = vi.fn();
   const updateStore = vi.fn();
   const updateTenantDefaultStore = vi.fn();
+  const navigate = vi.fn();
 
   beforeEach(async () => {
+    navigate.mockReset();
+    getStoreDetails.mockReset();
+    updateStore.mockReset();
+    updateTenantDefaultStore.mockReset();
+
     getStoreDetails.mockResolvedValue({
       id: 'store-1',
       tenantId: 'tenant-1',
@@ -53,6 +59,7 @@ describe('StoreDetailsPage', () => {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: convertToParamMap({ storeId: 'store-1' }) } },
         },
+        { provide: Router, useValue: { navigate } },
       ],
     }).compileComponents();
 
@@ -92,5 +99,60 @@ describe('StoreDetailsPage', () => {
     await fixture.componentInstance.submit(new Event('submit'));
 
     expect(fixture.componentInstance.error()).toContain('TimeZoneId is required.');
+  });
+
+  it('navigates with contextual quick actions', () => {
+    fixture.componentInstance.goToUsers();
+    fixture.componentInstance.goToCreateAdminStore();
+    fixture.componentInstance.goToCreateUser();
+    fixture.componentInstance.goToDashboard();
+    fixture.componentInstance.goToReports();
+    fixture.componentInstance.goToInventory();
+
+    expect(navigate).toHaveBeenCalledWith(['/app/admin/users'], {
+      queryParams: { tenantId: 'tenant-1', storeId: 'store-1' },
+    });
+    expect(navigate).toHaveBeenCalledWith(['/app/admin/users'], {
+      queryParams: {
+        tenantId: 'tenant-1',
+        storeId: 'store-1',
+        intent: 'create-user',
+        suggestedRole: 'AdminStore',
+      },
+    });
+    expect(navigate).toHaveBeenCalledWith(['/app/admin/users'], {
+      queryParams: { tenantId: 'tenant-1', storeId: 'store-1', intent: 'create-user' },
+    });
+    expect(navigate).toHaveBeenCalledWith(['/app/platform/dashboard'], {
+      queryParams: { tenantId: 'tenant-1', storeId: 'store-1' },
+    });
+    expect(navigate).toHaveBeenCalledWith(['/app/admin/pos/inventory'], {
+      queryParams: { tenantId: 'tenant-1', storeId: 'store-1' },
+    });
+  });
+
+  it('hides create-adminstore action when store already has admin', async () => {
+    getStoreDetails.mockResolvedValueOnce({
+      id: 'store-1',
+      tenantId: 'tenant-1',
+      tenantName: 'Tenant Uno',
+      name: 'Centro',
+      isActive: true,
+      isDefaultStore: false,
+      hasAdminStore: true,
+      adminStoreUserCount: 1,
+      totalUsersInStore: 2,
+      timeZoneId: 'UTC',
+      createdAtUtc: '2026-01-01',
+      updatedAtUtc: '2026-01-01',
+    });
+
+    await fixture.componentInstance.load();
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(
+      host.querySelector('[data-testid="platform-store-details-action-create-adminstore"]'),
+    ).toBeNull();
   });
 });
