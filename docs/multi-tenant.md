@@ -398,3 +398,23 @@ Reglas:
 - Test IDs contractuales Stores Admin v1:
   - Listado: `platform-tenant-stores-page`, `platform-tenant-stores-row-{storeId}`, `platform-tenant-stores-default-{storeId}`, `platform-tenant-stores-has-admin-{storeId}`, `platform-tenant-stores-edit-{storeId}`, `platform-tenant-stores-set-default-{storeId}`, `platform-tenant-stores-users-{storeId}`, `platform-tenant-stores-create-adminstore-{storeId}`.
   - Detalle/edición: `platform-store-details-page`, `platform-store-details-name`, `platform-store-details-timezone`, `platform-store-details-default`, `platform-store-details-has-admin`, `platform-store-edit-open`, `platform-store-edit-form`, `platform-store-edit-name`, `platform-store-edit-timezone`, `platform-store-edit-submit`, `platform-store-edit-cancel`, `platform-store-edit-success`, `platform-store-edit-error`.
+
+## Platform Tenant details/settings v1 (SuperAdmin)
+
+Nuevos endpoints de plataforma para configuración de tenant en modo global:
+
+- `GET /api/v1/platform/tenants/{tenantId}`
+- `PUT /api/v1/platform/tenants/{tenantId}`
+
+Reglas:
+- `PlatformOnly` (`SuperAdmin` únicamente).
+- Cross-tenant, sin requerir `X-Tenant-Id`.
+- `403` para `TenantAdmin`, `AdminStore`, `Manager`, `Cashier`.
+
+Contrato útil para frontend:
+- Coexisten identificadores y campos amigables en details: `verticalId` + `verticalName`, `defaultStoreId` + `defaultStoreName`, `catalogTemplateId` + `catalogTemplateName`.
+- Se incluyen métricas operativas por tenant: `storeCount`, `activeStoreCount`, `usersCount`, `usersWithoutStoreAssignmentCount`, `storesWithoutAdminStoreCount`.
+- `PUT` permite editar: `name`, `slug`, `isActive`, `verticalId` (si válido); `defaultStoreId` permanece en endpoint dedicado (`PUT /platform/tenants/{tenantId}/default-store`).
+
+Auditoría:
+- `PUT` escribe acción `UpdateTenant` con before/after de campos editables.

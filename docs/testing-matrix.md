@@ -219,6 +219,7 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
   - `frontend/e2e/platform.dashboard.v3.contract.spec.ts` valida flujo dashboard→users con quick actions v3.2 y asserts por `data-testid` (`platform-alert-drilldown-action-create-adminstore-{index}`, `platform-tenant-overview-action-create-tenantadmin`, `platform-store-stockout-action-create-user`, `admin-users-create-intent-active`).
 
 | Platform Stores/Tenants Admin v1 (`GET /platform/tenants/{tenantId}/stores`, `GET|PUT /platform/stores/{storeId}`, `PUT /platform/tenants/{tenantId}/default-store`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformStoresAdminIntegrationTests.cs` | Validar authz `SuperAdmin` only (403 resto de roles), cálculo `isDefaultStore` y `hasAdminStore`, detalle/404, update de store, cambio de default store, rechazo de store de otro tenant y auditoría `UpdateStore` + `UpdateTenantDefaultStore`. |
+| Platform Tenant Details/Settings v1 (`GET|PUT /platform/tenants/{tenantId}`) | Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformTenantDetailsIntegrationTests.cs` | Validar authz `SuperAdmin` only (403 resto de roles), details con friendly fields (`verticalName`, `defaultStoreName`), métricas (`storeCount`, `activeStoreCount`, `usersCount`, `usersWithoutStoreAssignmentCount`, `storesWithoutAdminStoreCount`), `404`, validaciones (`slug` duplicado / `verticalId` inválido) y auditoría `UpdateTenant`. |
 
 ## 2026-02-28 — Platform Stores Admin v1 frontend
 
@@ -228,3 +229,12 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
   - `frontend/src/app/features/platform/pages/store-details/store-details.page.spec.ts` valida submit de edición (`PUT /platform/stores/{storeId}`), cambio de default store desde detalle y manejo de `ProblemDetails`.
 - Frontend E2E Playwright UI-contract:
   - `frontend/e2e/platform.stores.contract.spec.ts` valida flujo determinista `/app/platform/tenants/:tenantId/stores` → detalle/edición → cambio de default store → quick action a `/app/admin/users` con `tenantId/storeId/intent/suggestedRole`.
+
+## 2026-03-01 — Platform Tenant details/settings v1
+
+- Backend integration: `backend/tests/CobranzaDigital.Api.Tests/PlatformTenantDetailsIntegrationTests.cs`.
+- Cobertura obligatoria:
+  - `PlatformOnly` + `SuperAdmin` only (`403` resto de roles).
+  - `GET /platform/tenants/{tenantId}` con fields amigables (`verticalName`, `defaultStoreName`, `catalogTemplateName`) y métricas operativas.
+  - `PUT /platform/tenants/{tenantId}` con persistencia de `name/slug/isActive/verticalId`, validación de `slug` duplicado y `verticalId` inválido.
+  - Auditoría `UpdateTenant` con before/after.

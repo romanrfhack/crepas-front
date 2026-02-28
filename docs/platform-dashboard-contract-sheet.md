@@ -207,6 +207,55 @@ Decisión MVP v3:
 - Se implementan A + B + D para priorizar drill-down accionable inmediato.
 - `tenant void-details` y `tenant stockout-details` quedan fuera de este corte para evitar duplicidad de contrato con B/D y mantener v3 aditivo/simple.
 
+## Platform Tenant Details/Settings v1 (SuperAdmin)
+
+### `GET /api/v1/platform/tenants/{tenantId}`
+
+Devuelve el detalle completo del tenant para vista de configuración con campos amigables para UI.
+
+`200 OK`:
+- `id`, `name`, `slug`, `isActive`
+- `verticalId`, `verticalName`
+- `defaultStoreId`, `defaultStoreName`
+- `storeCount`, `activeStoreCount`
+- `usersCount`, `usersWithoutStoreAssignmentCount`, `storesWithoutAdminStoreCount`
+- `hasCatalogTemplate`, `catalogTemplateId`, `catalogTemplateName`
+- `createdAtUtc`, `updatedAtUtc`
+
+Errores:
+- `404` si `tenantId` no existe.
+
+Notas de contrato:
+- El endpoint es cross-tenant y **no requiere** `X-Tenant-Id`.
+- Incluye IDs + friendly fields (`verticalName`, `defaultStoreName`, `catalogTemplateName`) para consumo frontend.
+
+### `PUT /api/v1/platform/tenants/{tenantId}`
+
+Actualiza datos básicos del tenant sin tocar `defaultStoreId` (se mantiene en endpoint dedicado).
+
+Request:
+```json
+{
+  "name": "Tenant Uno Norte",
+  "slug": "tenant-uno-norte",
+  "verticalId": "00000000-0000-0000-0000-000000000000",
+  "isActive": true
+}
+```
+
+Reglas de validación:
+- `tenantId` debe existir.
+- `name` requerido.
+- `slug` requerido y único entre tenants.
+- `verticalId` (si se envía) debe existir y estar activo.
+- `defaultStoreId` no es editable por este endpoint.
+
+`200 OK`:
+- Retorna `PlatformTenantDetailsDto` actualizado (incluye IDs + friendly fields).
+
+Auditoría:
+- Acción `UpdateTenant` con before/after de `name`, `slug`, `verticalId`, `isActive`.
+
 ## Platform Stores/Tenants Admin v1 (SuperAdmin)
 
 ### `GET /api/v1/platform/tenants/{tenantId}/stores`
