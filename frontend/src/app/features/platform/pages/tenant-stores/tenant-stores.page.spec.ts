@@ -111,6 +111,34 @@ describe('TenantStoresPage', () => {
     expect(navigate).toHaveBeenCalledWith(['/app/platform/stores', 'store-2']);
   });
 
+
+  it('navigates to users, dashboard and inventory with row context', () => {
+    const targetStore = fixture.componentInstance.stores()[1]!;
+
+    fixture.componentInstance.goToUsers(targetStore);
+    fixture.componentInstance.goToDashboard(targetStore);
+    fixture.componentInstance.goToInventory(targetStore);
+
+    expect(navigate).toHaveBeenCalledWith(['/app/admin/users'], {
+      queryParams: { tenantId: 'tenant-1', storeId: 'store-2' },
+    });
+    expect(navigate).toHaveBeenCalledWith(['/app/platform/dashboard'], {
+      queryParams: { tenantId: 'tenant-1', storeId: 'store-2' },
+    });
+    expect(navigate).toHaveBeenCalledWith(['/app/admin/pos/inventory'], {
+      queryParams: { tenantId: 'tenant-1', storeId: 'store-2' },
+    });
+  });
+
+  it('shows contextual badge when withoutAdminStore=true', () => {
+    fixture.componentInstance.showWithoutAdminOnly.set(true);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="platform-tenant-stores-context-without-admin"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="platform-tenant-stores-context-badge"]')).not.toBeNull();
+  });
+
   it('maps backend problem details errors consistently', async () => {
     updateTenantDefaultStore.mockRejectedValueOnce(
       new HttpErrorResponse({

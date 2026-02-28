@@ -134,11 +134,25 @@ test('platform stores admin v1.1 ui-contract', async ({ page }) => {
 
   await page.goto('/app/platform/tenants/tenant-1/stores');
   await expect(page.getByTestId('platform-tenant-stores-page')).toBeVisible();
+  await expect(page.getByTestId('platform-tenant-stores-users-store-2')).toBeVisible();
+  await expect(page.getByTestId('platform-tenant-stores-dashboard-store-2')).toBeVisible();
+  await expect(page.getByTestId('platform-tenant-stores-inventory-store-2')).toBeVisible();
   await expect(page.getByTestId('platform-tenant-stores-default-store-1')).toContainText('Principal');
   await expect(page.getByTestId('platform-tenant-stores-has-admin-store-2')).toContainText('Sin AdminStore');
   await expect(page.getByTestId('platform-tenant-stores-create-adminstore-store-2')).toBeVisible();
   await page.getByTestId('platform-tenant-stores-create-adminstore-store-2').click();
   await expect(page).toHaveURL(/\/app\/admin\/users\?tenantId=tenant-1&storeId=store-2&intent=create-user&suggestedRole=AdminStore/);
+
+
+  await page.goto('/app/platform/tenants/tenant-1/stores?withoutAdminStore=true');
+  await expect(page.getByTestId('platform-tenant-stores-context-without-admin')).toBeVisible();
+  await expect(page.getByTestId('platform-tenant-stores-context-badge')).toBeVisible();
+  await page.getByTestId('platform-tenant-stores-dashboard-store-2').click();
+  await expect(page).toHaveURL('/app/platform/dashboard?tenantId=tenant-1&storeId=store-2');
+
+  await page.goto('/app/platform/tenants/tenant-1/stores?withoutAdminStore=true');
+  await page.getByTestId('platform-tenant-stores-users-store-2').click();
+  await expect(page).toHaveURL('/app/admin/users?tenantId=tenant-1&storeId=store-2');
 
   await page.goto('/app/platform/tenants/tenant-1/stores');
   await page.getByTestId('platform-tenant-stores-view-details-store-2').click();
@@ -150,4 +164,13 @@ test('platform stores admin v1.1 ui-contract', async ({ page }) => {
 
   await page.goto('/app/platform/stores/store-2');
   await expect(page.getByTestId('platform-store-details-default')).toContainText('Sucursal principal');
+
+  await page.goto('/app/platform/stores/store-2');
+  await page.getByTestId('platform-store-details-action-dashboard').click();
+  await expect(page).toHaveURL('/app/platform/dashboard?tenantId=tenant-1&storeId=store-2');
+
+  await page.goto('/app/platform/stores/store-2');
+  await page.getByTestId('platform-store-details-action-inventory').click();
+  await expect(page).toHaveURL('/app/admin/pos/inventory?tenantId=tenant-1&storeId=store-2');
+
 });

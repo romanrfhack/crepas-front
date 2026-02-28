@@ -555,4 +555,16 @@ describe('PlatformDashboardPage', () => {
     fixture.detectChanges();
     expect(host.querySelector('[data-testid="platform-store-stockout-error"]')).toBeTruthy();
   });
+
+  it('renders dashboard context badge when tenant/store context exists', () => {
+    fixture.componentInstance.contextTenantId.set('tenant-ctx');
+    fixture.componentInstance.contextStoreId.set('store-ctx');
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="platform-dashboard-context-badge"]')?.textContent).toContain(
+      'Tenant: tenant-ctx · Store: store-ctx',
+    );
+  });
+
 });

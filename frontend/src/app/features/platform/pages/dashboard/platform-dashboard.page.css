@@ -1,6 +1,7 @@
 :host { display:block; }
 .platform-dashboard { display:grid; gap:1rem; }
 .toolbar { display:flex; justify-content:space-between; align-items:center; }
+.context-badge { display:inline-block; width:fit-content; border-radius:999px; background:#dbeafe; color:#1e3a8a; font-weight:600; padding:.3rem .7rem; }
 .kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.5rem; }
 .card { background:#fff; border:1px solid #ddd; border-radius:8px; padding:1rem; }
 .filters { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.5rem; }

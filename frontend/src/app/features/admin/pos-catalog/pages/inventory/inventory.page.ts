@@ -41,6 +41,12 @@ interface ItemOption {
     <section class="inventory-page" data-testid="inventory-page">
       <h2>Inventory Lite</h2>
 
+      @if (hasContextBadge()) {
+        <p data-testid="inventory-context-badge" class="context-badge">
+          Contexto activo: {{ contextBadgeLabel() }}
+        </p>
+      }
+
       @if (tenantRequiredError(); as tenantError) {
         <p class="error" role="alert" data-testid="inventory-tenant-required">{{ tenantError }}</p>
       }
@@ -228,6 +234,7 @@ interface ItemOption {
   styles: `
     .inventory-page { display: flex; flex-direction: column; gap: 1rem; }
     .card { border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem; display: grid; gap: 0.5rem; }
+    .context-badge { width: fit-content; border-radius: 999px; background: #dbeafe; color: #1e3a8a; padding: 0.2rem 0.6rem; font-weight: 600; }
     .error { color: #b91c1c; }
     .success { color: #15803d; }
     .filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
@@ -272,6 +279,9 @@ export class InventoryPage {
   readonly adjustErrorReason = signal<string | null>(null);
   readonly adjustSuccess = signal<string | null>(null);
   readonly adjustBusy = signal(false);
+  readonly contextStoreId = signal('');
+  readonly contextItemType = signal('');
+  readonly contextSearch = signal('');
 
   readonly availableItems = computed(() =>
     this.adjustItemTypeControl.value === 'Extra' ? this.extras() : this.products(),
@@ -312,6 +322,10 @@ export class InventoryPage {
     const itemType = this.route.snapshot.queryParamMap.get('itemType')?.trim() ?? '';
     const search = this.route.snapshot.queryParamMap.get('search')?.trim() ?? '';
 
+    this.contextStoreId.set(storeId);
+    this.contextItemType.set(itemType === 'Product' || itemType === 'Extra' ? itemType : '');
+    this.contextSearch.set(search);
+
     if (storeId) {
       this.storeIdControl.setValue(storeId);
       this.adjustStoreIdControl.setValue(storeId);
@@ -326,6 +340,20 @@ export class InventoryPage {
     if (search) {
       this.historyItemIdControl.setValue(search);
     }
+  }
+
+  hasContextBadge(): boolean {
+    return !!this.contextStoreId() || !!this.contextItemType() || !!this.contextSearch();
+  }
+
+  contextBadgeLabel(): string {
+    const chunks = [
+      this.contextStoreId() ? `Store: ${this.contextStoreId()}` : '',
+      this.contextItemType() ? `Tipo: ${this.contextItemType()}` : '',
+      this.contextSearch() ? `Búsqueda: ${this.contextSearch()}` : '',
+    ];
+
+    return chunks.filter((item) => !!item).join(' · ');
   }
 
   async loadInventory() {

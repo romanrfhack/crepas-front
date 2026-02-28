@@ -75,6 +75,9 @@ export class PlatformDashboardPage {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
+  readonly contextTenantId = signal('');
+  readonly contextStoreId = signal('');
+
   readonly summary = signal<PlatformDashboardSummaryDto>(DEFAULT_SUMMARY);
   readonly summaryLoading = signal(false);
   readonly summaryError = signal<string | null>(null);
@@ -171,6 +174,9 @@ export class PlatformDashboardPage {
     const itemType = this.route.snapshot.queryParamMap.get('itemType')?.trim() ?? '';
     const thresholdQuery = this.route.snapshot.queryParamMap.get('threshold')?.trim() ?? '';
     const threshold = Number.parseInt(thresholdQuery, 10);
+
+    this.contextTenantId.set(tenantId);
+    this.contextStoreId.set(storeId);
 
     this.recentTenantId.set(tenantId);
     this.recentStoreId.set(storeId);
@@ -534,6 +540,17 @@ export class PlatformDashboardPage {
     }
 
     return 'severity-low';
+  }
+
+  hasOperationalContext(): boolean {
+    return !!this.contextTenantId() || !!this.contextStoreId();
+  }
+
+  operationalContextLabel(): string {
+    const tenantLabel = this.contextTenantId() ? `Tenant: ${this.contextTenantId()}` : '';
+    const storeLabel = this.contextStoreId() ? `Store: ${this.contextStoreId()}` : '';
+
+    return [tenantLabel, storeLabel].filter((item) => !!item).join(' · ');
   }
 
   money(value: number) {

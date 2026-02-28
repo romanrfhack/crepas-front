@@ -6,6 +6,12 @@
     </button>
   </header>
 
+  @if (hasOperationalContext()) {
+    <p data-testid="platform-dashboard-context-badge" class="context-badge">
+      Contexto activo: {{ operationalContextLabel() }}
+    </p>
+  }
+
   <section class="card" data-testid="platform-executive-signals">
     <h3>Executive signals</h3>
     @if (executiveSignalsLoading()) {

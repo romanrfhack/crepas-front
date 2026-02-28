@@ -55,15 +55,13 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
         </div>
 
         <div class="quick-actions">
-          @if (!details()!.hasAdminStore) {
-            <button
-              type="button"
-              data-testid="platform-store-details-action-users"
-              (click)="goToUsers()"
-            >
-              Ver usuarios de la sucursal
-            </button>
-          }
+          <button
+            type="button"
+            data-testid="platform-store-details-action-users"
+            (click)="goToUsers()"
+          >
+            Ver usuarios de la sucursal
+          </button>
           <button
             type="button"
             data-testid="platform-store-details-action-create-user"
