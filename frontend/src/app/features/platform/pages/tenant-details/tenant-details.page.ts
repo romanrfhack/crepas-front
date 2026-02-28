@@ -16,14 +16,15 @@ type ProblemLike = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ReactiveFormsModule],
   template: `
-    <section class="tenant-details-page" data-testid="platform-tenant-details-page">
-      <header class="header">
+    <div class="tenant-details-page" data-testid="platform-tenant-details-page">
+      <!-- HEADER con título y acciones -->
+      <header class="dashboard-header">
         <div>
           <h2>{{ tenant()?.name ?? 'Tenant' }}</h2>
-          <p>Detalle y configuración básica del tenant</p>
-          <p class="subtitle">Centro de operaciones del tenant</p>
+          <p class="page-subtitle">Detalle y configuración básica del tenant</p>
+          <div class="header-decoration"></div>
         </div>
-        <div class="actions">
+        <div class="header-actions">
           <button
             type="button"
             class="btn-outline"
@@ -46,7 +47,7 @@ type ProblemLike = {
             data-testid="platform-tenant-details-action-users"
             (click)="goToUsers()"
           >
-            👥 Ver usuarios del tenant
+            👥 Usuarios
           </button>
           <button
             type="button"
@@ -68,219 +69,627 @@ type ProblemLike = {
         </div>
       </header>
 
+      <!-- MENSAJES DE ÉXITO / ERROR -->
       @if (error()) {
-        <p class="alert error" data-testid="platform-tenant-edit-error">{{ error() }}</p>
+        <div class="error-message" data-testid="platform-tenant-edit-error">
+          <span class="error-icon">⚠️</span>
+          <span>{{ error() }}</span>
+        </div>
       }
       @if (success()) {
-        <p class="alert success" data-testid="platform-tenant-edit-success">{{ success() }}</p>
+        <div class="success-message" data-testid="platform-tenant-edit-success">
+          <span class="success-icon">✅</span>
+          <span>{{ success() }}</span>
+        </div>
       }
 
+      <!-- DATOS DEL TENANT (solo si hay tenant cargado) -->
       @if (tenant(); as item) {
-        <section class="card">
-          <h3>Identidad</h3>
-          <div class="grid">
-            <div>
-              <strong>Name:</strong>
-              <span data-testid="platform-tenant-details-name">{{ item.name }}</span>
+        <!-- TARJETA DE IDENTIDAD -->
+        <div class="section-card">
+          <div class="section-header">
+            <span class="section-icon">🏷️</span>
+            <h3>Identidad</h3>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Name</span>
+              <span class="info-value" data-testid="platform-tenant-details-name">{{ item.name }}</span>
             </div>
-            <div>
-              <strong>Slug:</strong>
-              <span data-testid="platform-tenant-details-slug">{{ item.slug }}</span>
+            <div class="info-item">
+              <span class="info-label">Slug</span>
+              <span class="info-value" data-testid="platform-tenant-details-slug">{{ item.slug }}</span>
             </div>
-            <div>
-              <strong>Vertical:</strong>
-              <span data-testid="platform-tenant-details-vertical">{{
+            <div class="info-item">
+              <span class="info-label">Vertical</span>
+              <span class="info-value" data-testid="platform-tenant-details-vertical">{{
                 item.verticalName ?? '—'
               }}</span>
             </div>
-            <div>
-              <strong>Template:</strong>
-              <span data-testid="platform-tenant-details-template">{{
+            <div class="info-item">
+              <span class="info-label">Template</span>
+              <span class="info-value" data-testid="platform-tenant-details-template">{{
                 item.catalogTemplateName ?? 'Sin template'
               }}</span>
             </div>
-            <div>
-              <strong>Default store:</strong>
-              <span data-testid="platform-tenant-details-default-store">{{
-                item.defaultStoreName ?? 'Sin tienda por defecto'
+            <div class="info-item">
+              <span class="info-label">Tienda por defecto</span>
+              <span class="info-value" data-testid="platform-tenant-details-default-store">{{
+                item.defaultStoreName ?? 'Sin tienda'
               }}</span>
             </div>
-            <div>
-              <strong>Activo:</strong>
-              <span data-testid="platform-tenant-details-active">{{
+            <div class="info-item">
+              <span class="info-label">Activo</span>
+              <span class="info-value" data-testid="platform-tenant-details-active">{{
                 item.isActive ? 'Sí' : 'No'
               }}</span>
             </div>
           </div>
-        </section>
+        </div>
 
-        <section class="card metrics">
-          <h3>Métricas</h3>
-          <div class="metrics-grid">
-            <article data-testid="platform-tenant-details-metric-store-count">
-              <span>Stores</span><strong>{{ item.storeCount }}</strong>
-            </article>
-            <article data-testid="platform-tenant-details-metric-active-store-count">
-              <span>Stores activas</span><strong>{{ item.activeStoreCount }}</strong>
-            </article>
-            <article data-testid="platform-tenant-details-metric-users-count">
-              <span>Usuarios</span><strong>{{ item.usersCount }}</strong>
-            </article>
-            <article data-testid="platform-tenant-details-metric-users-without-store">
-              <span>Usuarios sin store</span
-              ><strong>{{ item.usersWithoutStoreAssignmentCount }}</strong>
-            </article>
-            <article data-testid="platform-tenant-details-metric-stores-without-admin">
-              <span>Stores sin AdminStore</span
-              ><strong>{{ item.storesWithoutAdminStoreCount }}</strong>
-            </article>
+        <!-- TARJETA DE MÉTRICAS -->
+        <div class="section-card">
+          <div class="section-header">
+            <span class="section-icon">📊</span>
+            <h3>Métricas</h3>
+          </div>
+          <div class="kpi-grid">
+            <div class="kpi-card" data-testid="platform-tenant-details-metric-store-count">
+              <span>Stores</span>
+              <strong>{{ item.storeCount }}</strong>
+            </div>
+            <div class="kpi-card" data-testid="platform-tenant-details-metric-active-store-count">
+              <span>Stores activas</span>
+              <strong>{{ item.activeStoreCount }}</strong>
+            </div>
+            <div class="kpi-card" data-testid="platform-tenant-details-metric-users-count">
+              <span>Usuarios</span>
+              <strong>{{ item.usersCount }}</strong>
+            </div>
+            <div class="kpi-card" data-testid="platform-tenant-details-metric-users-without-store">
+              <span>Usuarios sin store</span>
+              <strong>{{ item.usersWithoutStoreAssignmentCount }}</strong>
+            </div>
+            <div class="kpi-card" data-testid="platform-tenant-details-metric-stores-without-admin">
+              <span>Stores sin AdminStore</span>
+              <strong>{{ item.storesWithoutAdminStoreCount }}</strong>
+            </div>
           </div>
           @if (item.storesWithoutAdminStoreCount > 0) {
             <button
               type="button"
-              class="btn-highlight"
+              class="btn-primary"
+              style="margin-top: 0.5rem; align-self: flex-start;"
               data-testid="platform-tenant-details-action-review-stores-without-admin"
               (click)="goToStoresWithoutAdminFilter()"
             >
               Revisar stores sin AdminStore
             </button>
           }
-        </section>
+        </div>
 
-        <section class="card technical">
-          <h3>Metadata técnica</h3>
-          <p><strong>Tenant ID:</strong> {{ item.id }}</p>
-          <p><strong>Vertical ID:</strong> {{ item.verticalId }}</p>
-          <p><strong>DefaultStore ID:</strong> {{ item.defaultStoreId ?? '—' }}</p>
-          <p><strong>CatalogTemplate ID:</strong> {{ item.catalogTemplateId ?? '—' }}</p>
-        </section>
+        <!-- TARJETA DE METADATOS TÉCNICOS -->
+        <div class="section-card">
+          <div class="section-header">
+            <span class="section-icon">⚙️</span>
+            <h3>Metadata técnica</h3>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Tenant ID</span>
+              <span class="info-value">{{ item.id }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Vertical ID</span>
+              <span class="info-value">{{ item.verticalId }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">DefaultStore ID</span>
+              <span class="info-value">{{ item.defaultStoreId ?? '—' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">CatalogTemplate ID</span>
+              <span class="info-value">{{ item.catalogTemplateId ?? '—' }}</span>
+            </div>
+          </div>
+        </div>
       }
 
+      <!-- FORMULARIO DE EDICIÓN -->
       @if (showEdit()) {
-        <section class="card">
-          <h3>Editar tenant</h3>
-          <form data-testid="platform-tenant-edit-form" (submit)="save($event)">
-            <label>
-              Name
-              <input data-testid="platform-tenant-edit-name" [formControl]="nameControl" />
-            </label>
-            <label>
-              Slug
-              <input data-testid="platform-tenant-edit-slug" [formControl]="slugControl" />
-            </label>
-            <label>
-              Vertical
-              <select data-testid="platform-tenant-edit-vertical" [formControl]="verticalControl">
-                <option value="">Sin cambio</option>
-                @for (vertical of verticals(); track vertical.id) {
-                  <option [value]="vertical.id">{{ vertical.name }}</option>
+        <div class="section-card">
+          <div class="section-header">
+            <span class="section-icon">✏️</span>
+            <h3>Editar tenant</h3>
+          </div>
+          <form data-testid="platform-tenant-edit-form" (submit)="save($event)" class="edit-form">
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="edit-name">Name</label>
+                <input
+                  id="edit-name"
+                  type="text"
+                  data-testid="platform-tenant-edit-name"
+                  [formControl]="nameControl"
+                  class="form-input"
+                />
+                @if (nameControl.invalid && nameControl.touched) {
+                  <div class="field-error">El nombre es obligatorio</div>
                 }
-              </select>
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                data-testid="platform-tenant-edit-active"
-                [formControl]="isActiveControl"
-              />
-              Is Active
-            </label>
-            <div class="actions">
-              <button type="submit" data-testid="platform-tenant-edit-submit" [disabled]="saving()">
-                Guardar
-              </button>
-              <button
-                type="button"
-                data-testid="platform-tenant-edit-cancel"
-                (click)="cancelEdit()"
-                [disabled]="saving()"
-              >
-                Cancelar
-              </button>
+              </div>
+
+              <div class="form-field">
+                <label for="edit-slug">Slug</label>
+                <input
+                  id="edit-slug"
+                  type="text"
+                  data-testid="platform-tenant-edit-slug"
+                  [formControl]="slugControl"
+                  class="form-input"
+                />
+                @if (slugControl.invalid && slugControl.touched) {
+                  <div class="field-error">El slug es obligatorio</div>
+                }
+              </div>
+
+              <div class="form-field">
+                <label for="edit-vertical">Vertical</label>
+                <div class="select-wrapper">
+                  <select
+                    id="edit-vertical"
+                    data-testid="platform-tenant-edit-vertical"
+                    [formControl]="verticalControl"
+                    class="form-select"
+                  >
+                    <option value="">Sin cambio</option>
+                    @for (vertical of verticals(); track vertical.id) {
+                      <option [value]="vertical.id">{{ vertical.name }}</option>
+                    }
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-field checkbox-field">
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    data-testid="platform-tenant-edit-active"
+                    [formControl]="isActiveControl"
+                    class="checkbox-input"
+                  />
+                  <span class="checkbox-text">Activo</span>
+                </label>
+              </div>
+
+              <div class="form-actions">
+                <button
+                  type="submit"
+                  class="btn-primary"
+                  data-testid="platform-tenant-edit-submit"
+                  [disabled]="saving()"
+                >
+                  💾 Guardar
+                </button>
+                <button
+                  type="button"
+                  class="btn-outline"
+                  data-testid="platform-tenant-edit-cancel"
+                  (click)="cancelEdit()"
+                  [disabled]="saving()"
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
           </form>
-        </section>
+        </div>
       }
-    </section>
+    </div>
   `,
-  styles: [
-    `
-      :host {
-        display: block;
+  styles: [`
+    :host {
+      display: block;
+      /* Variables de diseño - mismas que en el resto del sistema */
+      --brand-rose: #f3b6c2;
+      --brand-rose-strong: #e89aac;
+      --brand-cream: #fbf6ef;
+      --brand-cocoa: #6b3f2a;
+      --brand-ink: #0f172a;
+      --brand-muted: #475569;
+      --ring: rgba(232, 154, 172, 0.55);
+      --border: rgba(243, 182, 194, 0.35);
+      --shadow: 0 20px 60px rgba(15, 23, 42, 0.14);
+      --shadow-sm: 0 8px 20px rgba(201, 141, 106, 0.12);
+      --shadow-hover: 0 12px 28px rgba(201, 141, 106, 0.25);
+      --radius-md: 0.75rem;
+      --radius-lg: 22px;
+      --radius-card: 18px;
+      --transition: 140ms ease;
+    }
+
+    .tenant-details-page {
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+    }
+
+    /* ===== HEADER ===== */
+    .dashboard-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .dashboard-header h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--brand-cocoa);
+      letter-spacing: -0.02em;
+    }
+
+    .page-subtitle {
+      margin: 0.25rem 0 0;
+      color: var(--brand-muted);
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+
+    .header-decoration {
+      width: 60px;
+      height: 4px;
+      background: linear-gradient(90deg, var(--brand-rose-strong), #c98d6a);
+      border-radius: 999px;
+      margin-top: 0.5rem;
+    }
+
+    .header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    /* ===== TARJETAS ===== */
+    .section-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .section-icon {
+      font-size: 1.5rem;
+      color: var(--brand-cocoa);
+    }
+
+    .section-header h3 {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--brand-ink);
+    }
+
+    /* ===== GRID DE INFORMACIÓN (identidad y metadata) ===== */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .info-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--brand-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .info-value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--brand-ink);
+    }
+
+    /* ===== KPIs ===== */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+    }
+
+    .kpi-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 1rem;
+      background: rgba(243, 182, 194, 0.08);
+      border-radius: var(--radius-card);
+      border: 1px solid var(--border);
+    }
+
+    .kpi-card span {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--brand-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .kpi-card strong {
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: var(--brand-cocoa);
+      line-height: 1.2;
+    }
+
+    /* ===== BOTONES ===== */
+    .btn-primary {
+      background: linear-gradient(135deg, var(--brand-rose-strong), #c98d6a);
+      color: white;
+      border: none;
+      border-radius: 999px;
+      padding: 0.65rem 1.6rem;
+      font-weight: 700;
+      font-size: 0.9rem;
+      letter-spacing: 0.02em;
+      box-shadow: 0 8px 20px rgba(201, 141, 106, 0.25);
+      transition: transform var(--transition), filter var(--transition), box-shadow var(--transition);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      white-space: nowrap;
+    }
+
+    .btn-primary:hover:not([disabled]) {
+      transform: translateY(-2px);
+      filter: saturate(1.1) brightness(0.98);
+      box-shadow: 0 12px 28px rgba(201, 141, 106, 0.4);
+    }
+
+    .btn-primary[disabled] {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+      filter: grayscale(0.4);
+    }
+
+    .btn-outline {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.65rem 1.4rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--brand-cocoa);
+      transition: all var(--transition);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .btn-outline:hover:not([disabled]) {
+      background: rgba(243, 182, 194, 0.1);
+      border-color: var(--brand-rose-strong);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-outline[disabled] {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* ===== FORMULARIO ===== */
+    .edit-form {
+      width: 100%;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      align-items: flex-end;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .form-field label {
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: var(--brand-ink);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 0.65rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(107, 63, 42, 0.16);
+      background: white;
+      font-size: 0.95rem;
+      transition: all var(--transition);
+    }
+
+    .form-input:hover {
+      border-color: rgba(232, 154, 172, 0.45);
+    }
+
+    .form-input:focus-visible {
+      outline: 3px solid var(--ring);
+      outline-offset: 1px;
+      border-color: rgba(232, 154, 172, 0.55);
+      box-shadow: 0 0 0 4px rgba(232, 154, 172, 0.16);
+    }
+
+    .select-wrapper {
+      width: 100%;
+    }
+
+    .form-select {
+      width: 100%;
+      padding: 0.65rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(107, 63, 42, 0.16);
+      background: white;
+      font-size: 0.95rem;
+      transition: all var(--transition);
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b3f2a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 1rem center;
+      background-size: 1rem;
+    }
+
+    .form-select:hover {
+      border-color: rgba(232, 154, 172, 0.45);
+    }
+
+    .form-select:focus-visible {
+      outline: 3px solid var(--ring);
+      outline-offset: 1px;
+      border-color: rgba(232, 154, 172, 0.55);
+      box-shadow: 0 0 0 4px rgba(232, 154, 172, 0.16);
+    }
+
+    .checkbox-field {
+      justify-content: flex-end;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 500;
+      color: var(--brand-ink);
+      cursor: pointer;
+      padding: 0.5rem 0;
+    }
+
+    .checkbox-input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--brand-rose-strong);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .field-error {
+      font-size: 0.75rem;
+      color: #b42318;
+      margin-top: 0.1rem;
+      padding-left: 0.5rem;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+      grid-column: -1 / 1;
+    }
+
+    /* ===== MENSAJES DE ÉXITO / ERROR ===== */
+    .error-message,
+    .success-message {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-radius: var(--radius-md);
+      font-weight: 500;
+      animation: slide-down 200ms ease-out;
+    }
+
+    .error-message {
+      background: rgba(180, 35, 24, 0.08);
+      border: 1px solid rgba(180, 35, 24, 0.2);
+      color: #b42318;
+    }
+
+    .success-message {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: #065f46;
+    }
+
+    .error-icon,
+    .success-icon {
+      font-size: 1.1rem;
+    }
+
+    @keyframes slide-down {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
       }
-      .tenant-details-page {
-        display: flex;
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 900px) {
+      .dashboard-header {
         flex-direction: column;
-        gap: 1rem;
+        align-items: flex-start;
       }
-      .header,
-      .actions {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        justify-content: space-between;
+
+      .header-actions {
+        width: 100%;
+        justify-content: flex-start;
       }
-      .card {
-        border: 1px solid #ead7c8;
-        border-radius: 12px;
-        padding: 1rem;
-        background: #fff;
+    }
+
+    @media (max-width: 600px) {
+      .section-card {
+        padding: 1.25rem;
       }
-      .grid,
-      .metrics-grid {
-        display: grid;
-        gap: 0.75rem;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+
+      .kpi-grid {
+        grid-template-columns: 1fr;
       }
-      .metrics article {
-        border: 1px solid #efe4dc;
-        border-radius: 10px;
-        padding: 0.75rem;
-        display: flex;
-        justify-content: space-between;
+
+      .info-grid {
+        grid-template-columns: 1fr;
       }
-      .technical p {
-        margin: 0.25rem 0;
-        color: #64748b;
+
+      .form-actions {
+        flex-direction: column;
       }
-      .subtitle {
-        margin: 0.25rem 0 0;
-        color: #64748b;
-      }
-      .alert {
-        margin: 0;
-        padding: 0.6rem 0.8rem;
-        border-radius: 8px;
-      }
-      .error {
-        background: #fee2e2;
-        color: #b91c1c;
-      }
-      .success {
-        background: #dcfce7;
-        color: #166534;
-      }
-      form {
-        display: grid;
-        gap: 0.75rem;
-      }
-      input,
-      select {
+
+      .btn-primary,
+      .btn-outline {
         width: 100%;
       }
-      .btn-outline,
-      .btn-highlight,
-      button {
-        border-radius: 8px;
-        border: 1px solid #d5bca8;
-        background: #fff;
-        padding: 0.5rem 0.8rem;
-      }
-      .btn-highlight {
-        background: #fef3c7;
-      }
-    `,
-  ],
+    }
+  `],
 })
 export class TenantDetailsPage {
   private readonly route = inject(ActivatedRoute);
