@@ -451,3 +451,32 @@ Cobertura:
 
 - Vitest: servicio tenants details GET/PUT + página tenant details/settings.
 - Playwright: `e2e/platform.tenant-details.contract.spec.ts`.
+
+
+## 2026-02-28 — Tenant/Store detail quick actions (frontend hubs)
+
+Se enriquecen las pantallas:
+
+- `/app/platform/tenants/:tenantId`
+- `/app/platform/stores/:storeId`
+
+Acciones rápidas operativas:
+
+- Tenant detail:
+  - Stores del tenant: `/app/platform/tenants/:tenantId/stores`.
+  - Usuarios del tenant: `/app/admin/users?tenantId={tenantId}`.
+  - Dashboard base: `/app/platform/dashboard`.
+  - Reportes contextuales (frontend): `/app/platform/dashboard?tenantId={tenantId}`.
+  - Inventario contextual (si existe default store): `/app/admin/pos/inventory?tenantId={tenantId}&storeId={defaultStoreId}`.
+  - CTA destacada stores sin AdminStore: `/app/platform/tenants/:tenantId/stores?withoutAdminStore=true`.
+- Store detail:
+  - Usuarios de sucursal: `/app/admin/users?tenantId={tenantId}&storeId={storeId}`.
+  - Crear AdminStore: `/app/admin/users?tenantId={tenantId}&storeId={storeId}&intent=create-user&suggestedRole=AdminStore`.
+  - Crear usuario en sucursal: `/app/admin/users?tenantId={tenantId}&storeId={storeId}&intent=create-user`.
+  - Dashboard / reportes contextuales (frontend): `/app/platform/dashboard?tenantId={tenantId}&storeId={storeId}`.
+  - Inventario contextual: `/app/admin/pos/inventory?tenantId={tenantId}&storeId={storeId}`.
+
+Notas de compatibilidad:
+
+- No se agregan endpoints backend nuevos.
+- El contexto se pasa por query params donde la UI ya soporta consumo o donde el ajuste fue puramente frontend.

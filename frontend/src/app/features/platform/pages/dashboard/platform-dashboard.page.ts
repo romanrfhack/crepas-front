@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {
   PlatformActivityFeedEventType,
   PlatformActivityFeedItemDto,
@@ -73,6 +73,7 @@ type DashboardDrilldownPanel = 'none' | 'alert' | 'tenant' | 'stockout';
 export class PlatformDashboardPage {
   private readonly api = inject(PlatformDashboardApiService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly summary = signal<PlatformDashboardSummaryDto>(DEFAULT_SUMMARY);
   readonly summaryLoading = signal(false);
@@ -159,7 +160,35 @@ export class PlatformDashboardPage {
   readonly stockoutDetailsTake = signal(200);
 
   constructor() {
+    this.applyInitialContextFromQueryParams();
     void this.refreshAll();
+  }
+
+  private applyInitialContextFromQueryParams(): void {
+    const tenantId = this.route.snapshot.queryParamMap.get('tenantId')?.trim() ?? '';
+    const storeId = this.route.snapshot.queryParamMap.get('storeId')?.trim() ?? '';
+    const search = this.route.snapshot.queryParamMap.get('search')?.trim() ?? '';
+    const itemType = this.route.snapshot.queryParamMap.get('itemType')?.trim() ?? '';
+    const thresholdQuery = this.route.snapshot.queryParamMap.get('threshold')?.trim() ?? '';
+    const threshold = Number.parseInt(thresholdQuery, 10);
+
+    this.recentTenantId.set(tenantId);
+    this.recentStoreId.set(storeId);
+    this.outTenantId.set(tenantId);
+    this.outStoreId.set(storeId);
+    this.outSearch.set(search);
+    this.stockoutDetailsSearch.set(search);
+
+    if (itemType === 'Product' || itemType === 'Extra') {
+      this.outItemType.set(itemType);
+      this.stockoutItemType.set(itemType);
+      this.stockoutDetailsItemType.set(itemType);
+    }
+
+    if (Number.isFinite(threshold) && threshold > 0) {
+      this.stockoutThreshold.set(threshold);
+      this.stockoutDetailsThreshold.set(threshold);
+    }
   }
 
   async refreshAll() {

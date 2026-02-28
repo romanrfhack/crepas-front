@@ -31,6 +31,9 @@ describe('TenantDetailsPage', () => {
   };
 
   beforeEach(async () => {
+    navigate.mockReset();
+    updateTenantDetails.mockReset();
+
     await TestBed.configureTestingModule({
       imports: [TenantDetailsPage],
       providers: [
@@ -107,10 +110,41 @@ describe('TenantDetailsPage', () => {
     host
       .querySelector('[data-testid="platform-tenant-details-action-users"]')
       ?.dispatchEvent(new Event('click'));
+    host
+      .querySelector('[data-testid="platform-tenant-details-action-dashboard"]')
+      ?.dispatchEvent(new Event('click'));
+    host
+      .querySelector('[data-testid="platform-tenant-details-action-reports"]')
+      ?.dispatchEvent(new Event('click'));
+    host
+      .querySelector('[data-testid="platform-tenant-details-action-inventory"]')
+      ?.dispatchEvent(new Event('click'));
 
     expect(navigate).toHaveBeenCalledWith(['/app/platform/tenants', 'tenant-1', 'stores']);
     expect(navigate).toHaveBeenCalledWith(['/app/admin/users'], {
       queryParams: { tenantId: 'tenant-1' },
+    });
+    expect(navigate).toHaveBeenCalledWith(['/app/platform/dashboard']);
+    expect(navigate).toHaveBeenCalledWith(['/app/platform/dashboard'], {
+      queryParams: { tenantId: 'tenant-1' },
+    });
+    expect(navigate).toHaveBeenCalledWith(['/app/admin/pos/inventory'], {
+      queryParams: { tenantId: 'tenant-1', storeId: 'store-1' },
+    });
+  });
+
+  it('shows highlighted CTA to review stores without admin', () => {
+    const host = fixture.nativeElement as HTMLElement;
+    const cta = host.querySelector(
+      '[data-testid="platform-tenant-details-action-review-stores-without-admin"]',
+    );
+
+    expect(cta).toBeTruthy();
+
+    cta?.dispatchEvent(new Event('click'));
+
+    expect(navigate).toHaveBeenCalledWith(['/app/platform/tenants', 'tenant-1', 'stores'], {
+      queryParams: { withoutAdminStore: 'true' },
     });
   });
 

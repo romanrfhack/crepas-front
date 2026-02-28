@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { PlatformDashboardApiService } from '../../services/platform-dashboard-api.service';
 import { PlatformDashboardPage } from './platform-dashboard.page';
 
@@ -266,6 +266,10 @@ describe('PlatformDashboardPage', () => {
       imports: [PlatformDashboardPage],
       providers: [
         { provide: PlatformDashboardApiService, useValue: service },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { queryParamMap: convertToParamMap({}) } },
+        },
         { provide: Router, useValue: { navigate } },
       ],
     }).compileComponents();
