@@ -207,7 +207,7 @@ export class StoreDetailsPage {
   );
   readonly primaryActionTestId = computed(() =>
     this.details()?.hasAdminStore
-      ? 'platform-store-details-action-users'
+      ? 'platform-store-details-primary-action-users'
       : 'platform-store-details-action-create-adminstore',
   );
 

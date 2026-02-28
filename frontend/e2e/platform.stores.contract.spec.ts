@@ -156,8 +156,8 @@ test('platform stores admin v1.1 ui-contract', async ({ page }) => {
 
   await page.goto('/app/platform/stores/store-1');
   await expect(page.getByTestId('platform-store-details-action-create-adminstore')).toHaveCount(0);
-  await expect(page.getByTestId('platform-store-details-action-users')).toBeVisible();
-  await page.getByTestId('platform-store-details-action-users').click();
+  await expect(page.getByTestId('platform-store-details-primary-action-users')).toBeVisible();
+  await page.getByTestId('platform-store-details-primary-action-users').click();
   await expect(page).toHaveURL('/app/admin/users?tenantId=tenant-1&storeId=store-1');
 
   await page.goto('/app/platform/tenants/tenant-1/stores');
