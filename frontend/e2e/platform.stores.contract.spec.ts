@@ -99,11 +99,11 @@ test('platform stores admin v1 ui-contract', async ({ page }) => {
   await page.goto('/app/platform/tenants/tenant-1/stores');
   await expect(page.getByTestId('platform-tenant-stores-page')).toBeVisible();
   await expect(page.getByTestId('platform-tenant-stores-row-store-1')).toBeVisible();
-  await expect(page.getByTestId('platform-tenant-stores-default-store-1')).toContainText('Sí');
+  await expect(page.getByTestId('platform-tenant-stores-default-1')).toContainText('Sí');
   await expect(page.getByTestId('platform-tenant-stores-has-admin-2')).toContainText('No');
 
   await page.getByTestId('platform-tenant-stores-set-default-2').click();
-  await expect(page.getByTestId('platform-tenant-stores-default-store-2')).toContainText('Sí');
+  await expect(page.getByTestId('platform-tenant-stores-default-2')).toContainText('Sí');
 
   await page.getByTestId('platform-tenant-stores-edit-2').click();
   await expect(page.getByTestId('platform-store-details-page')).toBeVisible();
