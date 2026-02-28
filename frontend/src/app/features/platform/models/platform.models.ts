@@ -44,6 +44,45 @@ export interface PlatformTenantDto {
   updatedAtUtc: string;
 }
 
+export interface PlatformTenantStoreListItemDto {
+  id: string;
+  tenantId: string;
+  name: string;
+  isActive: boolean;
+  isDefaultStore: boolean;
+  hasAdminStore: boolean;
+  adminStoreUserCount: number;
+  totalUsersInStore: number;
+  timeZoneId: string;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+export interface PlatformStoreDetailsDto {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  name: string;
+  isActive: boolean;
+  isDefaultStore: boolean;
+  hasAdminStore: boolean;
+  adminStoreUserCount: number;
+  totalUsersInStore: number;
+  timeZoneId: string;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+export interface UpdatePlatformStoreRequestDto {
+  name: string;
+  timeZoneId: string;
+  isActive: boolean;
+}
+
+export interface UpdateTenantDefaultStoreRequestDto {
+  defaultStoreId: string;
+}
+
 export interface CreatePlatformTenantRequest {
   verticalId: string;
   name: string;

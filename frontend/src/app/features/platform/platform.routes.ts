@@ -43,6 +43,22 @@ export const platformRoutes: Routes = [
     loadComponent: () => import('./pages/tenants/tenants.page').then((m) => m.TenantsPage),
   },
   {
+    path: 'tenants/:tenantId/stores',
+    canMatch: [roleGuard(['SuperAdmin'])],
+    canActivate: [roleGuard(['SuperAdmin'])],
+    data: { roles: ['SuperAdmin'] },
+    loadComponent: () =>
+      import('./pages/tenant-stores/tenant-stores.page').then((m) => m.TenantStoresPage),
+  },
+  {
+    path: 'stores/:storeId',
+    canMatch: [roleGuard(['SuperAdmin'])],
+    canActivate: [roleGuard(['SuperAdmin'])],
+    data: { roles: ['SuperAdmin'] },
+    loadComponent: () =>
+      import('./pages/store-details/store-details.page').then((m) => m.StoreDetailsPage),
+  },
+  {
     path: 'tenant-context',
     canMatch: [roleGuard(['SuperAdmin'])],
     canActivate: [roleGuard(['SuperAdmin'])],
