@@ -479,7 +479,9 @@
                     <button
                       type="button"
                       [attr.data-testid]="
-                        'platform-alert-drilldown-action-' + alertDrilldownCode() + '-' + idx
+                        alertDrilldownCode() === 'STORE_WITHOUT_ADMINSTORE'
+                          ? 'platform-alert-drilldown-action-create-adminstore-' + idx
+                          : 'platform-alert-drilldown-action-' + alertDrilldownCode() + '-' + idx
                       "
                       (click)="navigateFromAlert(alertDrilldownCode(), item)"
                     >
@@ -553,10 +555,10 @@
             <div class="drilldown-actions">
               <button
                 type="button"
-                data-testid="platform-tenant-overview-action-users"
+                data-testid="platform-tenant-overview-action-create-tenantadmin"
                 (click)="navigateToTenantUsers()"
               >
-                Ver usuarios del tenant
+                Crear TenantAdmin
               </button>
             </div>
           }
@@ -623,10 +625,10 @@
             <div class="drilldown-actions">
               <button
                 type="button"
-                data-testid="platform-store-stockout-action-users"
+                data-testid="platform-store-stockout-action-create-user"
                 (click)="navigateToStoreUsers()"
               >
-                Ver usuarios de la sucursal
+                Crear usuario en sucursal
               </button>
             </div>
             @for (item of stockoutDetails()?.items; track item.itemId; let idx = $index) {

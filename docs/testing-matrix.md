@@ -208,3 +208,12 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 
 - Frontend E2E Playwright UI-contract:
   - `frontend/e2e/admin.users.scoped-ux.contract.spec.ts` valida flujo determinista de edición básica (`PUT /api/v1/admin/users/{id}`) con caso success + error usando `data-testid` estables `admin-user-edit-*`.
+
+
+## 2026-02-28 — Platform Dashboard v3.2 quick actions to contextual user create
+
+- Frontend Unit (Vitest):
+  - `frontend/src/app/features/platform/pages/dashboard/platform-dashboard.page.spec.ts` valida navegación contextual con `intent=create-user` y `suggestedRole` para: alerta `STORE_WITHOUT_ADMINSTORE`, tenant overview y stockout details.
+  - `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts` valida apertura automática del formulario cuando llega `intent=create-user`, aplicación de `suggestedRole`, y cierre del formulario sin perder filtros `tenantId/storeId`.
+- E2E Playwright UI-contract:
+  - `frontend/e2e/platform.dashboard.v3.contract.spec.ts` valida flujo dashboard→users con quick actions v3.2 y asserts por `data-testid` (`platform-alert-drilldown-action-create-adminstore-{index}`, `platform-tenant-overview-action-create-tenantadmin`, `platform-store-stockout-action-create-user`, `admin-users-create-intent-active`).
