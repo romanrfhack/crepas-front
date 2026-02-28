@@ -22,6 +22,7 @@ import {
   PlatformTopVoidTenantRowDto,
 } from '../../models/platform.models';
 import { PlatformDashboardApiService } from '../../services/platform-dashboard-api.service';
+import { DatePipe, PercentPipe } from '@angular/common';
 
 const DEFAULT_SUMMARY: PlatformDashboardSummaryDto = {
   activeTenants: 0,
@@ -65,7 +66,7 @@ type DashboardDrilldownPanel = 'none' | 'alert' | 'tenant' | 'stockout';
 
 @Component({
   selector: 'app-platform-dashboard-page',
-  imports: [FormsModule],
+  imports: [FormsModule, DatePipe, PercentPipe],
   templateUrl: './platform-dashboard.page.html',
   styleUrl: './platform-dashboard.page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
