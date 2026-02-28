@@ -42,10 +42,10 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
               <tr [attr.data-testid]="'platform-tenant-stores-row-' + store.id">
                 <td>{{ store.name }}</td>
                 <td>{{ store.timeZoneId }}</td>
-                <td [attr.data-testid]="'platform-tenant-stores-default-' + store.id">
+                <td [attr.data-testid]="'platform-tenant-stores-default-' + testIdSuffix(store.id)">
                   {{ store.isDefaultStore ? 'Sí' : 'No' }}
                 </td>
-                <td [attr.data-testid]="'platform-tenant-stores-has-admin-' + store.id">
+                <td [attr.data-testid]="'platform-tenant-stores-has-admin-' + testIdSuffix(store.id)">
                   {{ store.hasAdminStore ? 'Sí' : 'No' }}
                 </td>
                 <td>{{ store.adminStoreUserCount }}</td>
@@ -53,7 +53,7 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
                 <td>
                   <button
                     type="button"
-                    [attr.data-testid]="'platform-tenant-stores-edit-' + store.id"
+                    [attr.data-testid]="'platform-tenant-stores-edit-' + testIdSuffix(store.id)"
                     (click)="openDetails(store.id)"
                   >
                     Ver / Editar
@@ -62,7 +62,7 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
                   @if (!store.isDefaultStore) {
                     <button
                       type="button"
-                      [attr.data-testid]="'platform-tenant-stores-set-default-' + store.id"
+                      [attr.data-testid]="'platform-tenant-stores-set-default-' + testIdSuffix(store.id)"
                       [disabled]="settingDefaultStoreId() === store.id"
                       (click)="setAsDefault(store.id)"
                     >
@@ -72,7 +72,7 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
 
                   <button
                     type="button"
-                    [attr.data-testid]="'platform-tenant-stores-users-' + store.id"
+                    [attr.data-testid]="'platform-tenant-stores-users-' + testIdSuffix(store.id)"
                     (click)="goToUsers(store)"
                   >
                     Ver usuarios
@@ -81,7 +81,7 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
                   @if (!store.hasAdminStore) {
                     <button
                       type="button"
-                      [attr.data-testid]="'platform-tenant-stores-create-adminstore-' + store.id"
+                      [attr.data-testid]="'platform-tenant-stores-create-adminstore-' + testIdSuffix(store.id)"
                       (click)="createAdminStore(store)"
                     >
                       Crear AdminStore
@@ -185,6 +185,10 @@ export class TenantStoresPage {
 
   private tenantId(): string | null {
     return this.route.snapshot.paramMap.get('tenantId');
+  }
+
+  testIdSuffix(storeId: string): string {
+    return storeId.startsWith('store-') ? storeId.slice('store-'.length) : storeId;
   }
 
   private mapProblemDetails(error: unknown): string {
