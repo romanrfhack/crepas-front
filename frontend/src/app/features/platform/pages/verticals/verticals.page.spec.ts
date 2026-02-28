@@ -41,6 +41,7 @@ describe('VerticalsPage', () => {
 
   it('renders table and supports create/edit states', async () => {
     const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="platform-verticals-page"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="vertical-row-v1"]')).toBeTruthy();
 
     host.querySelector('[data-testid="vertical-create-open"]')?.dispatchEvent(new Event('click'));
@@ -48,7 +49,7 @@ describe('VerticalsPage', () => {
     const nameInput = host.querySelector('[data-testid="vertical-form-name"]') as HTMLInputElement;
     nameInput.value = 'Food';
     nameInput.dispatchEvent(new Event('input'));
-    fixture.debugElement.query(By.css('form')).triggerEventHandler('submit', new Event('submit'));
+    fixture.debugElement.query(By.css('[data-testid="vertical-form"]')).triggerEventHandler('submit', new Event('submit'));
     await fixture.whenStable();
 
     expect(createVertical).toHaveBeenCalled();
@@ -56,7 +57,7 @@ describe('VerticalsPage', () => {
 
     host.querySelector('[data-testid="vertical-edit-v1"]')?.dispatchEvent(new Event('click'));
     fixture.detectChanges();
-    fixture.debugElement.query(By.css('form')).triggerEventHandler('submit', new Event('submit'));
+    fixture.debugElement.query(By.css('[data-testid="vertical-form"]')).triggerEventHandler('submit', new Event('submit'));
     await fixture.whenStable();
 
     expect(updateVertical).toHaveBeenCalledWith('v1', { name: 'Retail', description: 'Shop' });
@@ -72,7 +73,7 @@ describe('VerticalsPage', () => {
     input.value = 'Bad';
     input.dispatchEvent(new Event('input'));
 
-    const form = fixture.debugElement.query(By.css('form'));
+    const form = fixture.debugElement.query(By.css('[data-testid="vertical-form"]'));
     form.triggerEventHandler('submit', new Event('submit'));
     await fixture.whenStable();
     fixture.detectChanges();
