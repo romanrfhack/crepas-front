@@ -17,6 +17,7 @@ describe('UsersAdminPage', () => {
   let getUsersMock: ReturnType<typeof vi.fn>;
   let createUserMock: ReturnType<typeof vi.fn>;
   let setTemporaryPasswordMock: ReturnType<typeof vi.fn>;
+  let updateUserMock: ReturnType<typeof vi.fn>;
 
   const buildUsersResponse = () => ({
     items: [
@@ -47,6 +48,15 @@ describe('UsersAdminPage', () => {
       isLockedOut: false,
     });
     setTemporaryPasswordMock = vi.fn().mockResolvedValue({ message: 'Contraseña temporal restablecida.' });
+    updateUserMock = vi.fn().mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      userName: 'User Updated',
+      isLockedOut: false,
+      roles: ['TenantAdmin'],
+      tenantId: 'tenant-1',
+      storeId: null,
+    });
 
     await TestBed.configureTestingModule({
       imports: [UsersAdminPage],
@@ -57,6 +67,7 @@ describe('UsersAdminPage', () => {
             getUsers: getUsersMock,
             createUser: createUserMock,
             setTemporaryPassword: setTemporaryPasswordMock,
+            updateUser: updateUserMock,
             updateUserRoles: vi.fn().mockResolvedValue({
               id: 'user-1',
               email: 'user@example.com',
@@ -359,5 +370,101 @@ describe('UsersAdminPage', () => {
     await component.onSubmitCreate(new Event('submit'));
 
     expect(component.errorMessage()).toContain('Store no pertenece al tenant');
+  });
+
+  it('opens edit modal from row and prefills userName/tenant/store', async () => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.openEditUser(buildUsersResponse().items[0]);
+
+    expect(component.editModalOpen()).toBe(true);
+    expect(component.editUserNameControl.value).toBe('User One');
+    expect(component.editTenantControl.value).toBe('tenant-1');
+    expect(component.editStoreControl.value).toBe('');
+  });
+
+  it('shows visual store required flag in edit form for store-required role', async () => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.openEditUser({
+      id: 'user-2',
+      email: 'cashier@example.com',
+      userName: 'Cashier',
+      isLockedOut: false,
+      roles: ['Cashier'],
+      tenantId: 'tenant-1',
+      storeId: null,
+    });
+
+    expect(component.editStoreRequiredForCurrentRoles()).toBe(true);
+  });
+
+  it('submits edit successfully, calls endpoint and refreshes list', async () => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.openEditUser(buildUsersResponse().items[0]);
+    component.editUserNameControl.setValue('updated-name');
+    component.editTenantControl.setValue('tenant-1');
+    component.editStoreControl.setValue('');
+
+    await component.onSubmitEditUser(new Event('submit'));
+
+    expect(updateUserMock).toHaveBeenCalledWith('user-1', {
+      userName: 'updated-name',
+      tenantId: 'tenant-1',
+      storeId: null,
+    });
+    expect(getUsersMock).toHaveBeenCalledTimes(2);
+    expect(component.editSuccess()).toContain('actualizado');
+  });
+
+  it.each([
+    [400, { errors: { storeId: ['Store inválido.'] } }, 'Store inválido'],
+    [403, { detail: 'Forbidden by scope.' }, 'Forbidden by scope'],
+    [404, { detail: 'User not found.' }, 'User not found'],
+    [409, { detail: 'UserName duplicado.' }, 'UserName duplicado'],
+  ])('maps edit backend errors for status %s', async (status: number, errorBody: unknown, expected: string) => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+    await createComponent();
+
+    updateUserMock.mockRejectedValueOnce(
+      new HttpErrorResponse({
+        status,
+        error: errorBody,
+      }),
+    );
+
+    const component = fixture.componentInstance;
+    component.openEditUser(buildUsersResponse().items[0]);
+    component.editUserNameControl.setValue('updated-name');
+    component.editTenantControl.setValue('tenant-1');
+    component.editStoreControl.setValue('');
+
+    await component.onSubmitEditUser(new Event('submit'));
+
+    expect(component.editError()).toContain(expected);
+    expect(component.editSuccess()).toBe('');
   });
 });

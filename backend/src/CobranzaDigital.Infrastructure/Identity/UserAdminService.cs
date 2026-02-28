@@ -246,6 +246,38 @@ public sealed class UserAdminService : IUserAdminService
         return await MapUserAsync(user).ConfigureAwait(false);
     }
 
+    public async Task<AdminUserDto> UpdateUserAsync(string userId, UpdateAdminUserRequestDto request, CancellationToken cancellationToken)
+    {
+        var normalizedUserName = request.UserName.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedUserName))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["userName"] = ["UserName is required."] });
+        }
+
+        var actor = await ResolveActorScopeAsync(cancellationToken).ConfigureAwait(false);
+        var user = await FindUserOrThrowAsync(userId).ConfigureAwait(false);
+        EnsureInScope(user, actor);
+
+        var targetRoles = (await _userManager.GetRolesAsync(user).ConfigureAwait(false)).ToArray();
+        ValidateActorUpdateScope(actor, request.TenantId, request.StoreId);
+        await ValidateTenantStoreAndRoleConsistencyAsync(request.TenantId, request.StoreId, targetRoles, cancellationToken).ConfigureAwait(false);
+
+        var existingByUserName = await _userManager.FindByNameAsync(normalizedUserName).ConfigureAwait(false);
+        if (existingByUserName is not null && existingByUserName.Id != user.Id)
+        {
+            throw new ConflictException($"User with userName '{normalizedUserName}' already exists.");
+        }
+
+        user.UserName = normalizedUserName;
+        user.TenantId = request.TenantId;
+        user.StoreId = request.StoreId;
+
+        var result = await _userManager.UpdateAsync(user).ConfigureAwait(false);
+        EnsureIdentitySuccess(result, "Failed to update user.");
+
+        return await MapUserAsync(user).ConfigureAwait(false);
+    }
+
     public async Task<AdminUserDto> ReplaceUserRolesAsync(string userId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken)
     {
         if (roles.Count == 0)
@@ -490,6 +522,86 @@ public sealed class UserAdminService : IUserAdminService
         if (disallowed.Length > 0)
         {
             throw new ForbiddenException($"Roles not allowed for your scope: {string.Join(", ", disallowed)}.");
+        }
+    }
+
+    private static void ValidateActorUpdateScope(ActorScope actor, Guid? tenantId, Guid? storeId)
+    {
+        if (actor.IsSuperAdmin)
+        {
+            return;
+        }
+
+        if (actor.IsTenantAdmin)
+        {
+            if (!actor.TenantId.HasValue || actor.TenantId != tenantId)
+            {
+                throw new ForbiddenException("Target user is outside your tenant scope.");
+            }
+
+            return;
+        }
+
+        if (actor.IsAdminStore)
+        {
+            if (!actor.TenantId.HasValue || actor.TenantId != tenantId)
+            {
+                throw new ForbiddenException("Target user is outside your tenant scope.");
+            }
+
+            if (!actor.StoreId.HasValue || actor.StoreId != storeId)
+            {
+                throw new ForbiddenException("Target user is outside your store scope.");
+            }
+
+            return;
+        }
+
+        throw new ForbiddenException("You do not have access to user administration.");
+    }
+
+    private async Task ValidateTenantStoreAndRoleConsistencyAsync(Guid? tenantId, Guid? storeId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken)
+    {
+        var requiresTenant = roles.Any(role =>
+            string.Equals(role, "TenantAdmin", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(role, "Manager", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase));
+
+        if (requiresTenant && !tenantId.HasValue)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["tenantId"] = ["TenantId is required for current user roles."] });
+        }
+
+        if (roles.Any(role => RolesRequiringStore.Contains(role)) && !storeId.HasValue)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["storeId"] = ["StoreId is required for current user roles."] });
+        }
+
+        if (tenantId.HasValue)
+        {
+            var tenantExists = await _db.Tenants.AsNoTracking().AnyAsync(x => x.Id == tenantId.Value, cancellationToken).ConfigureAwait(false);
+            if (!tenantExists)
+            {
+                throw new ValidationException(new Dictionary<string, string[]> { ["tenantId"] = ["Tenant does not exist."] });
+            }
+        }
+
+        if (storeId.HasValue)
+        {
+            if (!tenantId.HasValue)
+            {
+                throw new ValidationException(new Dictionary<string, string[]> { ["tenantId"] = ["TenantId is required when StoreId is provided."] });
+            }
+
+            var storeBelongsToTenant = await _db.Stores.AsNoTracking()
+                .AnyAsync(x => x.Id == storeId.Value && x.TenantId == tenantId.Value, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!storeBelongsToTenant)
+            {
+                throw new ValidationException(new Dictionary<string, string[]> { ["storeId"] = ["Store does not belong to tenant."] });
+            }
         }
     }
 

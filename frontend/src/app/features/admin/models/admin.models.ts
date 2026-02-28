@@ -57,3 +57,9 @@ export interface SetTemporaryPasswordResponseDto {
   storeId: string | null;
   message: string;
 }
+
+export interface UpdateAdminUserRequestDto {
+  userName: string;
+  tenantId: string | null;
+  storeId: string | null;
+}

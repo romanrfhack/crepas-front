@@ -237,6 +237,15 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
 
               <button
                 type="button"
+                [attr.data-testid]="'admin-users-edit-open-' + user.id"
+                (click)="openEditUser(user)"
+                [disabled]="loading()"
+              >
+                Editar
+              </button>
+
+              <button
+                type="button"
                 [attr.data-testid]="
                   isLocked(user) ? 'admin-users-unlock-' + user.id : 'admin-users-lock-' + user.id
                 "
@@ -307,6 +316,70 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
                 data-testid="admin-users-reset-password-cancel"
                 [disabled]="resetPasswordSubmitting()"
                 (click)="closeResetPasswordModal()"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </section>
+      }
+
+      @if (editModalOpen() && editTargetUser()) {
+        <section class="reset-modal" data-testid="admin-user-edit-form">
+          <h2>Editar usuario</h2>
+          <p>{{ editTargetUser()!.email }}</p>
+
+          <form class="inline-form" (submit)="onSubmitEditUser($event)">
+            <label>
+              UserName
+              <input
+                type="text"
+                [formControl]="editUserNameControl"
+                data-testid="admin-user-edit-username"
+              />
+            </label>
+
+            <label>
+              Tenant
+              <input
+                type="text"
+                [formControl]="editTenantControl"
+                data-testid="admin-user-edit-tenant"
+              />
+            </label>
+
+            <label>
+              Store
+              <input
+                type="text"
+                [formControl]="editStoreControl"
+                data-testid="admin-user-edit-store"
+              />
+            </label>
+
+            @if (editStoreRequiredForCurrentRoles()) {
+              <small data-testid="admin-user-edit-store-required"
+                >StoreId es obligatorio para los roles actuales.</small
+              >
+            }
+
+            @if (editError()) {
+              <div class="error" data-testid="admin-user-edit-error">{{ editError() }}</div>
+            }
+
+            @if (editSuccess()) {
+              <div class="success" data-testid="admin-user-edit-success">{{ editSuccess() }}</div>
+            }
+
+            <div class="actions-row">
+              <button type="submit" data-testid="admin-user-edit-submit" [disabled]="editSubmitting()">
+                {{ editSubmitting() ? 'Guardando...' : 'Guardar' }}
+              </button>
+              <button
+                type="button"
+                data-testid="admin-user-edit-cancel"
+                [disabled]="editSubmitting()"
+                (click)="closeEditUserModal()"
               >
                 Cancelar
               </button>
@@ -420,6 +493,14 @@ export class UsersAdminPage {
   readonly resetPasswordSubmitting = signal(false);
   readonly resetPasswordError = signal('');
   readonly resetPasswordSuccess = signal('');
+  readonly editModalOpen = signal(false);
+  readonly editTargetUser = signal<UserSummary | null>(null);
+  readonly editUserNameControl = new FormControl('', { nonNullable: true });
+  readonly editTenantControl = new FormControl('', { nonNullable: true });
+  readonly editStoreControl = new FormControl('', { nonNullable: true });
+  readonly editSubmitting = signal(false);
+  readonly editError = signal('');
+  readonly editSuccess = signal('');
 
   private readonly roleDrafts = signal<Record<string, FormControl<string>>>({});
   private readonly initialTenantQuery = this.route.snapshot.queryParamMap.get('tenantId')?.trim() ?? '';
@@ -534,6 +615,79 @@ export class UsersAdminPage {
     }
 
     return false;
+  }
+
+  openEditUser(user: UserSummary) {
+    this.editTargetUser.set(user);
+    this.editModalOpen.set(true);
+    this.editUserNameControl.setValue(user.userName ?? '');
+    this.editTenantControl.setValue(user.tenantId ?? '');
+    this.editStoreControl.setValue(user.storeId ?? '');
+    this.editError.set('');
+    this.editSuccess.set('');
+  }
+
+  closeEditUserModal() {
+    this.editModalOpen.set(false);
+    this.editTargetUser.set(null);
+    this.editUserNameControl.setValue('');
+    this.editTenantControl.setValue('');
+    this.editStoreControl.setValue('');
+    this.editSubmitting.set(false);
+    this.editError.set('');
+    this.editSuccess.set('');
+  }
+
+  editStoreRequiredForCurrentRoles() {
+    const user = this.editTargetUser();
+    return user ? user.roles.some((role) => this.roleRequiresStore(role)) : false;
+  }
+
+  editTenantRequiredForCurrentRoles() {
+    const user = this.editTargetUser();
+    return user
+      ? user.roles.some((role) => ['TenantAdmin', 'AdminStore', 'Manager', 'Cashier'].includes(role))
+      : false;
+  }
+
+  async onSubmitEditUser(event: Event) {
+    event.preventDefault();
+
+    if (this.editSubmitting()) {
+      return;
+    }
+
+    const target = this.editTargetUser();
+    if (!target) {
+      return;
+    }
+
+    const validationError = this.validateEditForm();
+    if (validationError) {
+      this.editError.set(validationError);
+      this.editSuccess.set('');
+      return;
+    }
+
+    this.editSubmitting.set(true);
+    this.editError.set('');
+    this.editSuccess.set('');
+
+    try {
+      await this.adminUsersService.updateUser(target.id, {
+        userName: this.editUserNameControl.value.trim(),
+        tenantId: this.editTenantControl.value.trim() || null,
+        storeId: this.editStoreControl.value.trim() || null,
+      });
+      await this.loadUsers();
+      this.editSuccess.set('Usuario actualizado correctamente.');
+      this.editError.set('');
+    } catch (error) {
+      this.editError.set(this.resolveEditErrorMessage(error));
+      this.editSuccess.set('');
+    } finally {
+      this.editSubmitting.set(false);
+    }
   }
 
   openResetPassword(user: UserSummary) {
@@ -773,6 +927,38 @@ export class UsersAdminPage {
     }
 
     return '';
+  }
+
+  private validateEditForm() {
+    const userName = this.editUserNameControl.value.trim();
+    const tenantId = this.editTenantControl.value.trim();
+    const storeId = this.editStoreControl.value.trim();
+
+    if (!userName) {
+      return 'UserName es obligatorio.';
+    }
+
+    if (this.editTenantRequiredForCurrentRoles() && !tenantId) {
+      return 'TenantId es obligatorio para los roles actuales del usuario.';
+    }
+
+    if (this.editStoreRequiredForCurrentRoles() && !storeId) {
+      return 'StoreId es obligatorio para los roles actuales del usuario.';
+    }
+
+    return '';
+  }
+
+  private resolveEditErrorMessage(error: unknown) {
+    if (!(error instanceof HttpErrorResponse)) {
+      return 'No fue posible actualizar el usuario.';
+    }
+
+    if ([400, 403, 404, 409].includes(error.status)) {
+      return this.resolveErrorMessage(error, 'No fue posible actualizar el usuario.');
+    }
+
+    return this.resolveErrorMessage(error, 'No fue posible actualizar el usuario.');
   }
 
   private resolveResetPasswordErrorMessage(error: unknown) {

@@ -7,6 +7,7 @@ import {
   PagedResult,
   SetTemporaryPasswordRequestDto,
   SetTemporaryPasswordResponseDto,
+  UpdateAdminUserRequestDto,
   UpdateUserRolesRequest,
   UserSummary,
 } from '../models/admin.models';
@@ -53,6 +54,10 @@ export class AdminUsersService {
 
   async updateUserRoles(id: string, payload: UpdateUserRolesRequest) {
     return firstValueFrom(this.apiClient.put<UserSummary>(`/v1/admin/users/${id}/roles`, payload));
+  }
+
+  async updateUser(id: string, payload: UpdateAdminUserRequestDto) {
+    return firstValueFrom(this.apiClient.put<UserSummary>(`/v1/admin/users/${id}`, payload));
   }
 
   async setUserLockState(id: string, lock: boolean) {

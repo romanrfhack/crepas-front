@@ -255,3 +255,84 @@ test('tenant-only context keeps tenant prefill and suggested tenant role', async
   await expect(page.getByTestId('admin-users-create-context-store')).toContainText('N/A');
   await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('TenantAdmin');
 });
+
+test('edit user success flow submits PUT and refreshes list', async ({ page }) => {
+  let getUsersCalls = 0;
+
+  await page.route('**/api/v1/admin/users**', (route) => {
+    const method = route.request().method();
+    if (method === 'GET') {
+      getUsersCalls += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(usersResponse),
+      });
+    }
+
+    if (method === 'PUT' && route.request().url().includes('/api/v1/admin/users/user-1')) {
+      expect(route.request().postDataJSON()).toEqual({
+        userName: 'User 1 Updated',
+        tenantId: 'tenant-1',
+        storeId: null,
+      });
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'user-1',
+          email: 'user1@test.local',
+          userName: 'User 1 Updated',
+          isLockedOut: false,
+          roles: ['TenantAdmin'],
+          tenantId: 'tenant-1',
+          storeId: null,
+        }),
+      });
+    }
+
+    return route.continue();
+  });
+
+  await page.goto('/app/admin/users');
+  await page.getByTestId('admin-users-edit-open-user-1').click();
+
+  await expect(page.getByTestId('admin-user-edit-form')).toBeVisible();
+  await expect(page.getByTestId('admin-user-edit-username')).toHaveValue('User 1');
+  await expect(page.getByTestId('admin-user-edit-tenant')).toHaveValue('tenant-1');
+  await page.getByTestId('admin-user-edit-username').fill('User 1 Updated');
+  await page.getByTestId('admin-user-edit-submit').click();
+
+  await expect(page.getByTestId('admin-user-edit-success')).toBeVisible();
+  await expect(page.getByTestId('admin-user-edit-error')).toHaveCount(0);
+  expect(getUsersCalls).toBeGreaterThanOrEqual(2);
+});
+
+test('edit user error flow renders stable error testid', async ({ page }) => {
+  await page.route('**/api/v1/admin/users**', (route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(usersResponse),
+      });
+    }
+
+    if (route.request().method() === 'PUT' && route.request().url().includes('/api/v1/admin/users/user-1')) {
+      return route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Forbidden by scope.' }),
+      });
+    }
+
+    return route.continue();
+  });
+
+  await page.goto('/app/admin/users');
+  await page.getByTestId('admin-users-edit-open-user-1').click();
+  await page.getByTestId('admin-user-edit-username').fill('User 1 Updated');
+  await page.getByTestId('admin-user-edit-submit').click();
+
+  await expect(page.getByTestId('admin-user-edit-error')).toBeVisible();
+});
