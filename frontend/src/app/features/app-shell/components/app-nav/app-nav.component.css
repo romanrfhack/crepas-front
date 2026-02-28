@@ -1,7 +1,30 @@
 :host {
   display: block;
-  /* Variables heredadas del shell */
+  /* Altura máxima basada en el viewport, restando espacio para el header y padding */
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  /* Scrollbar personalizada (coherente con otros componentes) */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(232, 154, 172, 0.4) rgba(243, 182, 194, 0.08);
+  /* Variables heredadas */
   --shadow-sm: 0 8px 20px rgba(201, 141, 106, 0.12);
+}
+
+/* Scrollbar para navegadores WebKit (Chrome, Safari, Edge) */
+:host::-webkit-scrollbar {
+  width: 6px;
+}
+:host::-webkit-scrollbar-track {
+  background: rgba(243, 182, 194, 0.08);
+  border-radius: 10px;
+}
+:host::-webkit-scrollbar-thumb {
+  background: rgba(232, 154, 172, 0.4);
+  border-radius: 10px;
+  transition: background var(--transition);
+}
+:host::-webkit-scrollbar-thumb:hover {
+  background: rgba(232, 154, 172, 0.7);
 }
 
 .app-nav {
@@ -164,5 +187,12 @@
 
   .app-nav__link {
     padding: 0.5rem 0.9rem;
+  }
+}
+
+/* Ajuste de altura máxima en pantallas pequeñas */
+@media (max-width: 700px) {
+  :host {
+    max-height: calc(100vh - 80px);
   }
 }

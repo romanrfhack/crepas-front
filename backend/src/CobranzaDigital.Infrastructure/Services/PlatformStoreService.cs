@@ -173,9 +173,9 @@ public sealed class PlatformStoreService : IPlatformStoreService
         return store.Id;
     }
 
-    private async Task<Dictionary<Guid, int>> GetAdminStoreCountsByStoreAsync(IReadOnlyCollection<Guid> storeIds, CancellationToken ct)
+    private async Task<Dictionary<Guid, int>> GetAdminStoreCountsByStoreAsync(Guid[] storeIds, CancellationToken ct)
     {
-        if (storeIds.Count == 0)
+        if (storeIds.Length == 0)
         {
             return new Dictionary<Guid, int>();
         }
@@ -190,9 +190,9 @@ public sealed class PlatformStoreService : IPlatformStoreService
             .ConfigureAwait(false);
     }
 
-    private async Task<Dictionary<Guid, int>> GetTotalUsersByStoreAsync(IReadOnlyCollection<Guid> storeIds, CancellationToken ct)
+    private async Task<Dictionary<Guid, int>> GetTotalUsersByStoreAsync(Guid[] storeIds, CancellationToken ct)
     {
-        if (storeIds.Count == 0)
+        if (storeIds.Length == 0)
         {
             return new Dictionary<Guid, int>();
         }

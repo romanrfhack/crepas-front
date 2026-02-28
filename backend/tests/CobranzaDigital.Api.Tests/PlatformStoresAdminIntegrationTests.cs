@@ -54,13 +54,13 @@ public sealed class PlatformStoresAdminIntegrationTests : IClassFixture<Cobranza
             Assert.Equal(HttpStatusCode.Forbidden, putDefaultResponse.StatusCode);
         }
 
-        using var getStoresRequest = CreateRequest(HttpMethod.Get, $"/api/v1/platform/tenants/{seed.Tenant1Id}/stores", superToken);
-        using var getStoresResponse = await _client.SendAsync(getStoresRequest);
-        Assert.Equal(HttpStatusCode.OK, getStoresResponse.StatusCode);
+        using var superGetStoresRequest = CreateRequest(HttpMethod.Get, $"/api/v1/platform/tenants/{seed.Tenant1Id}/stores", superToken);
+        using var superGetStoresResponse = await _client.SendAsync(superGetStoresRequest);
+        Assert.Equal(HttpStatusCode.OK, superGetStoresResponse.StatusCode);
 
-        using var getStoreRequest = CreateRequest(HttpMethod.Get, $"/api/v1/platform/stores/{seed.Store1Id}", superToken);
-        using var getStoreResponse = await _client.SendAsync(getStoreRequest);
-        Assert.Equal(HttpStatusCode.OK, getStoreResponse.StatusCode);
+        using var superGetStoreRequest = CreateRequest(HttpMethod.Get, $"/api/v1/platform/stores/{seed.Store1Id}", superToken);
+        using var superGetStoreResponse = await _client.SendAsync(superGetStoreRequest);
+        Assert.Equal(HttpStatusCode.OK, superGetStoreResponse.StatusCode);
 
         using var updateStoreRequest = CreateRequest(HttpMethod.Put, $"/api/v1/platform/stores/{seed.Store1Id}", superToken, new
         {
@@ -90,8 +90,8 @@ public sealed class PlatformStoresAdminIntegrationTests : IClassFixture<Cobranza
         Assert.NotNull(payload);
         Assert.Equal(2, payload!.Count);
 
-        var store1 = Assert.Single(payload.Where(x => x.Id == seed.Store1Id));
-        var store2 = Assert.Single(payload.Where(x => x.Id == seed.Store2Id));
+        var store1 = Assert.Single(payload, x => x.Id == seed.Store1Id);
+        var store2 = Assert.Single(payload, x => x.Id == seed.Store2Id);
 
         Assert.True(store1.IsDefaultStore);
         Assert.True(store1.HasAdminStore);
@@ -199,7 +199,7 @@ public sealed class PlatformStoresAdminIntegrationTests : IClassFixture<Cobranza
         var payload = await response.Content.ReadFromJsonAsync<IReadOnlyList<PlatformTenantStoreListItemDto>>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var legacyAdminOnlyStore = Assert.Single(payload!.Where(x => x.Id == seed.Store2Id));
+        var legacyAdminOnlyStore = Assert.Single(payload!, x => x.Id == seed.Store2Id);
         Assert.False(legacyAdminOnlyStore.HasAdminStore);
         Assert.Equal(0, legacyAdminOnlyStore.AdminStoreUserCount);
     }
@@ -335,7 +335,7 @@ public sealed class PlatformStoresAdminIntegrationTests : IClassFixture<Cobranza
     private async Task<string> LoginAsync(string email, string password)
     {
         using var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
+        var payload = await response.Content.ReadFromJsonAsync<AuthResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return payload!.AccessToken;
