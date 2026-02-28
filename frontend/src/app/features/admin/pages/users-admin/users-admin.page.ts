@@ -224,6 +224,17 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
                 </button>
               </form>
 
+              @if (canResetTemporaryPassword(user)) {
+                <button
+                  type="button"
+                  [attr.data-testid]="'admin-users-reset-password-open-' + user.id"
+                  (click)="openResetPassword(user)"
+                  [disabled]="loading()"
+                >
+                  Restablecer contraseña
+                </button>
+              }
+
               <button
                 type="button"
                 [attr.data-testid]="
@@ -237,6 +248,71 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
             </li>
           }
         </ul>
+      }
+
+      @if (resetPasswordModalOpen() && resetTargetUser()) {
+        <section class="reset-modal" data-testid="admin-users-reset-password-modal">
+          <h2>Restablecer contraseña temporal</h2>
+          <p data-testid="admin-users-reset-password-user">
+            {{ displayName(resetTargetUser()!) }} ({{ resetTargetUser()!.email }})
+          </p>
+
+          <form class="inline-form" (submit)="onSubmitResetPassword($event)">
+            <label>
+              Contraseña temporal
+              <input
+                type="password"
+                [formControl]="resetPasswordControl"
+                data-testid="admin-users-reset-password-password"
+              />
+            </label>
+
+            <label>
+              Confirmar contraseña
+              <input
+                type="password"
+                [formControl]="resetPasswordConfirmControl"
+                data-testid="admin-users-reset-password-confirm"
+              />
+            </label>
+
+            <small>
+              Contraseña temporal para acceso inicial. No se muestra ni se persiste en la UI. Mínimo 8
+              caracteres.
+            </small>
+
+            @if (resetPasswordError()) {
+              <div class="error" data-testid="admin-users-reset-password-error">
+                {{ resetPasswordError() }}
+              </div>
+            }
+
+            @if (resetPasswordSuccess()) {
+              <div class="success" data-testid="admin-users-reset-password-success">
+                {{ resetPasswordSuccess() }}
+              </div>
+            }
+
+            <div class="actions-row">
+              <button
+                type="submit"
+                data-testid="admin-users-reset-password-submit"
+                [disabled]="resetPasswordSubmitting()"
+              >
+                {{ resetPasswordSubmitting() ? 'Guardando...' : 'Restablecer' }}
+              </button>
+
+              <button
+                type="button"
+                data-testid="admin-users-reset-password-cancel"
+                [disabled]="resetPasswordSubmitting()"
+                (click)="closeResetPasswordModal()"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </section>
       }
     </section>
   `,
@@ -287,6 +363,20 @@ type AdminScope = 'global' | 'tenant' | 'store' | 'none';
       gap: 0.5rem;
       max-width: 320px;
     }
+    .actions-row {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .reset-modal {
+      border: 1px solid #e4e4e7;
+      border-radius: 0.75rem;
+      padding: 0.75rem;
+      max-width: 420px;
+      display: grid;
+      gap: 0.5rem;
+      background: #ffffff;
+    }
     .success {
       color: #065f46;
     }
@@ -313,6 +403,9 @@ export class UsersAdminPage {
   readonly createUserNameControl = new FormControl('', { nonNullable: true });
   readonly createPasswordControl = new FormControl('', { nonNullable: true });
 
+  readonly resetPasswordControl = new FormControl('', { nonNullable: true });
+  readonly resetPasswordConfirmControl = new FormControl('', { nonNullable: true });
+
   readonly users = signal<UserSummary[]>([]);
   readonly loading = signal(false);
   readonly errorMessage = signal('');
@@ -322,6 +415,11 @@ export class UsersAdminPage {
   readonly createContextMessage = signal('');
   readonly createSuggestedRole = signal('');
   readonly createSubmitting = signal(false);
+  readonly resetPasswordModalOpen = signal(false);
+  readonly resetTargetUser = signal<UserSummary | null>(null);
+  readonly resetPasswordSubmitting = signal(false);
+  readonly resetPasswordError = signal('');
+  readonly resetPasswordSuccess = signal('');
 
   private readonly roleDrafts = signal<Record<string, FormControl<string>>>({});
   private readonly initialTenantQuery = this.route.snapshot.queryParamMap.get('tenantId')?.trim() ?? '';
@@ -410,6 +508,87 @@ export class UsersAdminPage {
 
   primaryRole(user: UserSummary) {
     return user.roles[0] ?? 'Sin rol';
+  }
+
+  canResetTemporaryPassword(user: UserSummary) {
+    const targetRole = this.primaryRole(user);
+    if (!['TenantAdmin', 'AdminStore', 'Manager', 'Cashier'].includes(targetRole)) {
+      return false;
+    }
+
+    if (this.scope() === 'global') {
+      return true;
+    }
+
+    if (this.scope() === 'tenant') {
+      const actorTenantId = this.authService.getTenantId();
+      return !actorTenantId || user.tenantId === actorTenantId;
+    }
+
+    if (this.scope() === 'store') {
+      if (!['Manager', 'Cashier'].includes(targetRole)) {
+        return false;
+      }
+      const actorStoreId = this.authService.getStoreId();
+      return !actorStoreId || user.storeId === actorStoreId;
+    }
+
+    return false;
+  }
+
+  openResetPassword(user: UserSummary) {
+    this.resetTargetUser.set(user);
+    this.resetPasswordModalOpen.set(true);
+    this.resetPasswordControl.setValue('');
+    this.resetPasswordConfirmControl.setValue('');
+    this.resetPasswordError.set('');
+    this.resetPasswordSuccess.set('');
+  }
+
+  closeResetPasswordModal() {
+    this.resetPasswordModalOpen.set(false);
+    this.resetTargetUser.set(null);
+    this.resetPasswordControl.setValue('');
+    this.resetPasswordConfirmControl.setValue('');
+    this.resetPasswordError.set('');
+    this.resetPasswordSuccess.set('');
+    this.resetPasswordSubmitting.set(false);
+  }
+
+  async onSubmitResetPassword(event: Event) {
+    event.preventDefault();
+    if (this.resetPasswordSubmitting()) {
+      return;
+    }
+
+    const targetUser = this.resetTargetUser();
+    if (!targetUser) {
+      return;
+    }
+
+    const validationError = this.validateResetPasswordForm();
+    if (validationError) {
+      this.resetPasswordError.set(validationError);
+      this.resetPasswordSuccess.set('');
+      return;
+    }
+
+    this.resetPasswordSubmitting.set(true);
+    this.resetPasswordError.set('');
+    this.resetPasswordSuccess.set('');
+
+    try {
+      const response = await this.adminUsersService.setTemporaryPassword(targetUser.id, {
+        temporaryPassword: this.resetPasswordControl.value.trim(),
+      });
+      this.resetPasswordControl.setValue('');
+      this.resetPasswordConfirmControl.setValue('');
+      this.resetPasswordSuccess.set(response.message || 'Contraseña temporal restablecida.');
+    } catch (error) {
+      this.resetPasswordError.set(this.resolveResetPasswordErrorMessage(error));
+    } finally {
+      this.resetPasswordSubmitting.set(false);
+    }
   }
 
   async loadUsers() {
@@ -575,6 +754,45 @@ export class UsersAdminPage {
     }
 
     return '';
+  }
+
+  private validateResetPasswordForm() {
+    const password = this.resetPasswordControl.value.trim();
+    const confirmPassword = this.resetPasswordConfirmControl.value.trim();
+
+    if (!password || !confirmPassword) {
+      return 'Captura y confirma la contraseña temporal.';
+    }
+
+    if (password.length < 8) {
+      return 'La contraseña temporal debe tener al menos 8 caracteres.';
+    }
+
+    if (password !== confirmPassword) {
+      return 'La confirmación de contraseña no coincide.';
+    }
+
+    return '';
+  }
+
+  private resolveResetPasswordErrorMessage(error: unknown) {
+    if (!(error instanceof HttpErrorResponse)) {
+      return 'No fue posible restablecer la contraseña temporal.';
+    }
+
+    if (error.status === 403) {
+      return this.resolveErrorMessage(error, 'No tienes permisos para restablecer la contraseña.');
+    }
+
+    if (error.status === 404) {
+      return this.resolveErrorMessage(error, 'El usuario objetivo no existe.');
+    }
+
+    if (error.status === 400) {
+      return this.resolveErrorMessage(error, 'La contraseña no cumple la política requerida.');
+    }
+
+    return this.resolveErrorMessage(error, 'No fue posible restablecer la contraseña temporal.');
   }
 
   private buildCreateRequest(): CreateAdminUserRequestDto {

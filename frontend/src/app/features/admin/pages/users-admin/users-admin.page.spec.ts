@@ -16,6 +16,7 @@ describe('UsersAdminPage', () => {
   };
   let getUsersMock: ReturnType<typeof vi.fn>;
   let createUserMock: ReturnType<typeof vi.fn>;
+  let setTemporaryPasswordMock: ReturnType<typeof vi.fn>;
 
   const buildUsersResponse = () => ({
     items: [
@@ -45,6 +46,7 @@ describe('UsersAdminPage', () => {
       storeId: 'store-ctx',
       isLockedOut: false,
     });
+    setTemporaryPasswordMock = vi.fn().mockResolvedValue({ message: 'Contraseña temporal restablecida.' });
 
     await TestBed.configureTestingModule({
       imports: [UsersAdminPage],
@@ -54,6 +56,7 @@ describe('UsersAdminPage', () => {
           useValue: {
             getUsers: getUsersMock,
             createUser: createUserMock,
+            setTemporaryPassword: setTemporaryPasswordMock,
             updateUserRoles: vi.fn().mockResolvedValue({
               id: 'user-1',
               email: 'user@example.com',
@@ -127,6 +130,25 @@ describe('UsersAdminPage', () => {
     expect(component.createRoleControl.value).toBe('AdminStore');
   });
 
+  it('opens reset password modal from user row action', async () => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    const openButton = fixture.nativeElement.querySelector(
+      '[data-testid="admin-users-reset-password-open-user-1"]',
+    ) as HTMLButtonElement;
+    openButton.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="admin-users-reset-password-modal"]')).not.toBeNull();
+    expect(fixture.componentInstance.resetTargetUser()?.id).toBe('user-1');
+  });
+
   it('submits create user, shows success and refreshes list', async () => {
     queryParams = { tenantId: 'tenant-ctx', storeId: 'store-ctx' };
     authMock = {
@@ -160,6 +182,100 @@ describe('UsersAdminPage', () => {
     expect(component.successMessage()).toBe('Usuario creado.');
     expect(getUsersMock).toHaveBeenCalledTimes(2);
   });
+
+  it('validates reset password min length before submit', async () => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.openResetPassword(buildUsersResponse().items[0]);
+    component.resetPasswordControl.setValue('1234567');
+    component.resetPasswordConfirmControl.setValue('1234567');
+
+    await component.onSubmitResetPassword(new Event('submit'));
+
+    expect(setTemporaryPasswordMock).not.toHaveBeenCalled();
+    expect(component.resetPasswordError()).toContain('al menos 8');
+  });
+
+  it('validates reset password confirmation mismatch', async () => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.openResetPassword(buildUsersResponse().items[0]);
+    component.resetPasswordControl.setValue('Temp1234!');
+    component.resetPasswordConfirmControl.setValue('Temp9999!');
+
+    await component.onSubmitResetPassword(new Event('submit'));
+
+    expect(setTemporaryPasswordMock).not.toHaveBeenCalled();
+    expect(component.resetPasswordError()).toContain('no coincide');
+  });
+
+  it('submits reset password successfully and shows stable success', async () => {
+    authMock = {
+      hasRole: (role: string) => role === 'SuperAdmin',
+      getTenantId: () => null,
+      getStoreId: () => null,
+    };
+
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.openResetPassword(buildUsersResponse().items[0]);
+    component.resetPasswordControl.setValue('Temp1234!');
+    component.resetPasswordConfirmControl.setValue('Temp1234!');
+
+    await component.onSubmitResetPassword(new Event('submit'));
+
+    expect(setTemporaryPasswordMock).toHaveBeenCalledWith('user-1', { temporaryPassword: 'Temp1234!' });
+    expect(component.resetPasswordSuccess()).toContain('restablecida');
+    expect(component.resetPasswordError()).toBe('');
+  });
+
+  it.each([
+    [400, { errors: { temporaryPassword: ['Policy failed.'] } }, 'Policy failed'],
+    [403, { detail: 'Forbidden by scope.' }, 'Forbidden by scope'],
+    [404, { detail: 'User not found.' }, 'User not found'],
+  ])(
+    'maps backend reset password errors for status %s',
+    async (status: number, errorBody: unknown, expected: string) => {
+      authMock = {
+        hasRole: (role: string) => role === 'SuperAdmin',
+        getTenantId: () => null,
+        getStoreId: () => null,
+      };
+      await createComponent();
+
+      setTemporaryPasswordMock.mockRejectedValueOnce(
+        new HttpErrorResponse({
+          status,
+          error: errorBody,
+        }),
+      );
+
+      const component = fixture.componentInstance;
+      component.openResetPassword(buildUsersResponse().items[0]);
+      component.resetPasswordControl.setValue('Temp1234!');
+      component.resetPasswordConfirmControl.setValue('Temp1234!');
+
+      await component.onSubmitResetPassword(new Event('submit'));
+
+      expect(component.resetPasswordError()).toContain(expected);
+      expect(component.resetPasswordSuccess()).toBe('');
+    },
+  );
 
   it('shows conflict message mapped from ProblemDetails', async () => {
     authMock = {

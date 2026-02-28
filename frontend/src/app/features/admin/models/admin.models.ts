@@ -43,3 +43,17 @@ export interface CreateAdminUserResponseDto {
   storeId: string | null;
   isLockedOut: boolean;
 }
+
+export interface SetTemporaryPasswordRequestDto {
+  temporaryPassword: string;
+}
+
+export interface SetTemporaryPasswordResponseDto {
+  id: string;
+  email: string;
+  userName: string;
+  roles: string[];
+  tenantId: string | null;
+  storeId: string | null;
+  message: string;
+}
