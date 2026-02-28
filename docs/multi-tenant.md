@@ -384,3 +384,17 @@ Reglas:
 - Auditoría obligatoria:
   - `UpdateStore` con before/after de campos editados.
   - `UpdateTenantDefaultStore` con before/after de `defaultStoreId`.
+
+## 2026-02-28 — Platform Stores Admin v1 UI (SuperAdmin)
+
+- Nuevas rutas frontend:
+  - `/app/platform/tenants/:tenantId/stores`
+  - `/app/platform/stores/:storeId`
+- Origen de navegación:
+  - En `/app/platform/tenants`, cada tenant agrega acción `Ver stores` (`tenant-view-stores-{tenantId}`).
+- Quick actions de stores:
+  - `Ver / Editar`, `Hacer principal`, `Ver usuarios`.
+  - Si `hasAdminStore = false`, CTA `Crear AdminStore` navega a `/app/admin/users` con query params `tenantId`, `storeId`, `intent=create-user`, `suggestedRole=AdminStore`.
+- Test IDs contractuales Stores Admin v1:
+  - Listado: `platform-tenant-stores-page`, `platform-tenant-stores-row-{storeId}`, `platform-tenant-stores-default-{storeId}`, `platform-tenant-stores-has-admin-{storeId}`, `platform-tenant-stores-edit-{storeId}`, `platform-tenant-stores-set-default-{storeId}`, `platform-tenant-stores-users-{storeId}`, `platform-tenant-stores-create-adminstore-{storeId}`.
+  - Detalle/edición: `platform-store-details-page`, `platform-store-details-name`, `platform-store-details-timezone`, `platform-store-details-default`, `platform-store-details-has-admin`, `platform-store-edit-open`, `platform-store-edit-form`, `platform-store-edit-name`, `platform-store-edit-timezone`, `platform-store-edit-submit`, `platform-store-edit-cancel`, `platform-store-edit-success`, `platform-store-edit-error`.

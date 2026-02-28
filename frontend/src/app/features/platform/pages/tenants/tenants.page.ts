@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { PlatformTenantDto, PlatformVerticalDto } from '../../models/platform.models';
 import { PlatformTenantContextService } from '../../services/platform-tenant-context.service';
 import { PlatformTenantsApiService } from '../../services/platform-tenants-api.service';
@@ -219,6 +220,14 @@ interface ProblemLike {
                           (click)="setTenantContext(item.id)"
                         >
                           🔑 Usar contexto
+                        </button>
+                        <button
+                          type="button"
+                          class="btn-outline btn-small"
+                          [attr.data-testid]="'tenant-view-stores-' + item.id"
+                          (click)="viewStores(item.id)"
+                        >
+                          🏬 Ver stores
                         </button>
                         @if (selectedTenantId() === item.id) {
                           <span class="context-badge" [attr.data-testid]="'tenant-context-active-' + item.id">
@@ -745,6 +754,7 @@ export class TenantsPage {
   private readonly tenantsApi = inject(PlatformTenantsApiService);
   private readonly verticalsApi = inject(PlatformVerticalsApiService);
   private readonly tenantContext = inject(PlatformTenantContextService);
+  private readonly router = inject(Router);
 
   readonly tenants = signal<PlatformTenantDto[]>([]);
   readonly verticals = signal<PlatformVerticalDto[]>([]);
@@ -879,6 +889,10 @@ export class TenantsPage {
     this.tenantContext.setSelectedTenantId(tenantId);
     this.selectedTenantId.set(tenantId);
     this.success.set('Contexto de tenant actualizado.');
+  }
+
+  viewStores(tenantId: string) {
+    void this.router.navigate(['/app/platform/tenants', tenantId, 'stores']);
   }
 
   private mapError(error: unknown, fallback: string) {

@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { Router } from '@angular/router';
 import { PlatformTenantContextService } from '../../services/platform-tenant-context.service';
 import { PlatformTenantsApiService } from '../../services/platform-tenants-api.service';
 import { PlatformVerticalsApiService } from '../../services/platform-verticals-api.service';
@@ -11,6 +12,7 @@ describe('TenantsPage', () => {
   const updateTenant = vi.fn();
   const deleteTenant = vi.fn();
   const setSelectedTenantId = vi.fn();
+  const navigate = vi.fn();
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -42,6 +44,7 @@ describe('TenantsPage', () => {
             setSelectedTenantId,
           },
         },
+        { provide: Router, useValue: { navigate } },
       ],
     }).compileComponents();
 
@@ -91,5 +94,8 @@ describe('TenantsPage', () => {
     host.querySelector('[data-testid="tenant-delete-t1"]')?.dispatchEvent(new Event('click'));
     await fixture.whenStable();
     expect(deleteTenant).toHaveBeenCalledWith('t1');
+
+    host.querySelector('[data-testid="tenant-view-stores-t1"]')?.dispatchEvent(new Event('click'));
+    expect(navigate).toHaveBeenCalledWith(['/app/platform/tenants', 't1', 'stores']);
   });
 });
