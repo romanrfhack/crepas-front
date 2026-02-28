@@ -206,3 +206,74 @@ Response: `PlatformStoreStockoutDetailDto`
 Decisión MVP v3:
 - Se implementan A + B + D para priorizar drill-down accionable inmediato.
 - `tenant void-details` y `tenant stockout-details` quedan fuera de este corte para evitar duplicidad de contrato con B/D y mantener v3 aditivo/simple.
+
+## Platform Stores/Tenants Admin v1 (SuperAdmin)
+
+### `GET /api/v1/platform/tenants/{tenantId}/stores`
+
+Devuelve listado de stores del tenant con métricas derivadas para UI operativa.
+
+`200 OK` (array):
+- `id`, `tenantId`, `name`, `isActive`, `timeZoneId`, `createdAtUtc`, `updatedAtUtc`
+- `isDefaultStore` (derivado de `tenant.DefaultStoreId`)
+- `hasAdminStore` (derivado por existencia de al menos un usuario con rol `AdminStore` en la store)
+- `adminStoreUserCount`
+- `totalUsersInStore`
+
+Errores:
+- `404` si tenant no existe.
+
+### `GET /api/v1/platform/stores/{storeId}`
+
+Devuelve detalle de store con metadata de tenant y métricas derivadas.
+
+`200 OK`:
+- `id`, `tenantId`, `tenantName`, `name`, `isActive`, `timeZoneId`, `createdAtUtc`, `updatedAtUtc`
+- `isDefaultStore`, `hasAdminStore`, `adminStoreUserCount`, `totalUsersInStore`
+
+Errores:
+- `404` si store no existe.
+
+### `PUT /api/v1/platform/stores/{storeId}`
+
+Actualiza datos básicos editables de store.
+
+Request:
+```json
+{
+  "name": "Sucursal Centro",
+  "timeZoneId": "America/Mexico_City",
+  "isActive": true
+}
+```
+
+Reglas de validación:
+- `name` requerido.
+- `timeZoneId` requerido y válido (`TimeZoneInfo`).
+- `storeId` debe existir.
+
+Auditoría:
+- Acción `UpdateStore` con before/after de `name`, `timeZoneId`, `isActive`.
+
+### `PUT /api/v1/platform/tenants/{tenantId}/default-store`
+
+Cambia la store default del tenant.
+
+Request:
+```json
+{
+  "defaultStoreId": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+Reglas de validación:
+- `tenantId` debe existir.
+- `defaultStoreId` debe existir.
+- La store debe pertenecer al tenant.
+- La store debe estar activa.
+
+Respuesta:
+- `204 NoContent`.
+
+Auditoría:
+- Acción `UpdateTenantDefaultStore` con before/after de `defaultStoreId`.

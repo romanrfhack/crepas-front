@@ -366,3 +366,21 @@ Test IDs contractuales nuevos/actualizados:
 
 - Dashboard: `platform-alert-drilldown-action-create-adminstore-{index}`, `platform-tenant-overview-action-create-tenantadmin`, `platform-store-stockout-action-create-user`.
 - Admin users: `admin-users-create-intent-active` y contexto/formulario existente (`admin-users-create-context-*`, `admin-user-form-*`).
+
+## 2026-02-28 — Platform Stores/Tenants Admin v1 (backend)
+
+Se agregan endpoints de administración operativa de stores (solo plataforma):
+
+- `GET /api/v1/platform/tenants/{tenantId}/stores`
+- `GET /api/v1/platform/stores/{storeId}`
+- `PUT /api/v1/platform/stores/{storeId}`
+- `PUT /api/v1/platform/tenants/{tenantId}/default-store`
+
+Reglas:
+- Policy `PlatformOnly` (`SuperAdmin` only), cross-tenant, sin requerir `X-Tenant-Id`.
+- `hasAdminStore` se deriva estrictamente de usuarios con rol `AdminStore` en la store (no depende de rol legacy `Admin`).
+- `PUT /platform/stores/{storeId}` solo edita campos básicos seguros (`name`, `timeZoneId`, `isActive`).
+- `PUT /platform/tenants/{tenantId}/default-store` valida pertenencia `store -> tenant` y store activa.
+- Auditoría obligatoria:
+  - `UpdateStore` con before/after de campos editados.
+  - `UpdateTenantDefaultStore` con before/after de `defaultStoreId`.
