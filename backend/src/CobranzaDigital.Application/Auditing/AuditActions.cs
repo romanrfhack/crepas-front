@@ -13,4 +13,6 @@ public static class AuditActions
     public const string SetInventoryBalance = "SetInventoryBalance";
     public const string ConsumeInventoryForSale = "ConsumeInventoryForSale";
     public const string ReverseInventoryForVoid = "ReverseInventoryForVoid";
+    public const string UpdateStore = "UpdateStore";
+    public const string UpdateTenantDefaultStore = "UpdateTenantDefaultStore";
 }

@@ -96,6 +96,7 @@ public static class DependencyInjection
         services.AddScoped<IPosSalesService, PosSalesService>();
         services.AddScoped<IPosShiftService, PosShiftService>();
         services.AddScoped<IPlatformDashboardService, PlatformDashboardService>();
+        services.AddScoped<IPlatformStoreService, PlatformStoreService>();
 
         return services;
     }
