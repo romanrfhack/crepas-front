@@ -72,4 +72,37 @@ describe('AdminUsersService', () => {
     });
   });
 
+  it('updateUser should put exact backend payload', async () => {
+    const putMock = vi.fn().mockReturnValue(of({ id: 'user-1' }));
+
+    TestBed.configureTestingModule({
+      providers: [
+        AdminUsersService,
+        {
+          provide: ApiClient,
+          useValue: {
+            get: vi.fn(),
+            post: vi.fn(),
+            put: putMock,
+            delete: vi.fn(),
+          },
+        },
+      ],
+    });
+
+    const service = TestBed.inject(AdminUsersService);
+
+    await service.updateUser('user-1', {
+      userName: 'updated-user',
+      tenantId: 'tenant-1',
+      storeId: 'store-1',
+    });
+
+    expect(putMock).toHaveBeenCalledWith('/v1/admin/users/user-1', {
+      userName: 'updated-user',
+      tenantId: 'tenant-1',
+      storeId: 'store-1',
+    });
+  });
+
 });

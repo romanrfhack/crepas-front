@@ -144,6 +144,55 @@ public sealed class AdminUsersController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPut("{id}")]
+    [ProducesResponseType(typeof(AdminUserDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateUser(
+        string id,
+        [FromBody] UpdateAdminUserRequest request,
+        CancellationToken cancellationToken)
+    {
+        var before = await _userAdminService.GetUserByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        var result = await _userAdminService.UpdateUserAsync(
+            id,
+            new UpdateAdminUserRequestDto(request.UserName, request.TenantId, request.StoreId),
+            cancellationToken).ConfigureAwait(false);
+
+        var correlationId = _auditRequestContextAccessor.GetCorrelationId();
+        var actorUserId = _auditRequestContextAccessor.GetUserId();
+
+        await _auditLogger.LogAsync(new AuditEntry(
+                AuditActions.UpdateUser,
+                actorUserId,
+                correlationId,
+                EntityType: "User",
+                EntityId: result.Id,
+                Before: new
+                {
+                    before.UserName,
+                    before.TenantId,
+                    before.StoreId
+                },
+                After: new
+                {
+                    result.UserName,
+                    result.TenantId,
+                    result.StoreId,
+                    roles = before.Roles
+                },
+                Source: "Api",
+                Notes: null),
+            cancellationToken).ConfigureAwait(false);
+
+        LogAuditWritten(_logger, AuditActions.UpdateUser, "User", result.Id, correlationId, actorUserId);
+
+        return Ok(result);
+    }
+
     [HttpPut("{id}/roles")]
     [ProducesResponseType(typeof(AdminUserDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -309,6 +358,16 @@ public sealed class CreateAdminUserRequest
 public sealed class SetUserLockRequest
 {
     public bool Lock { get; init; }
+}
+
+public sealed class UpdateAdminUserRequest
+{
+    [Required]
+    public string UserName { get; init; } = string.Empty;
+
+    public Guid? TenantId { get; init; }
+
+    public Guid? StoreId { get; init; }
 }
 
 public sealed class SetTemporaryPasswordRequest

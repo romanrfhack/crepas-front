@@ -190,3 +190,21 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
   - `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts` valida apertura del modal desde fila, validación mínima de contraseña, confirm mismatch, submit exitoso y manejo de `400/403/404` por `ProblemDetails`.
 - E2E Playwright UI-contract:
   - `frontend/e2e/admin.users.scoped-ux.contract.spec.ts` valida flujo determinista de reset temporal (success + errores `400/403`) usando `data-testid` estables `admin-users-reset-password-*`.
+
+## 2026-02-28 — Admin Users v6 scoped basic edit (backend + frontend)
+
+- Backend Integration (API): `backend/tests/CobranzaDigital.Api.Tests/AdminUsersUpdateIntegrationTests.cs`.
+  - SuperAdmin puede editar `userName/tenantId/storeId` en combinaciones válidas.
+  - TenantAdmin solo edita dentro de su tenant.
+  - AdminStore solo edita dentro de su store.
+  - Manager/Cashier reciben `403`.
+  - Validaciones: `userName` faltante/duplicado, `storeId` faltante para rol que lo requiere, store fuera de tenant, usuario inexistente.
+  - Auditoría: `UpdateUser` con metadata `before/after` y `roles` del target.
+  - `GET /api/v1/admin/users` refleja cambios tras update.
+
+- Frontend Unit (Vitest):
+  - `frontend/src/app/features/admin/services/admin-users.service.spec.ts` valida contrato `PUT /v1/admin/users/{id}`.
+  - `frontend/src/app/features/admin/pages/users-admin/users-admin.page.spec.ts` valida apertura modal editar, prefill (`userName/tenant/store`), visual `store required`, submit exitoso con refresh y mapeo estable de errores backend `400/403/404/409`.
+
+- Frontend E2E Playwright UI-contract:
+  - `frontend/e2e/admin.users.scoped-ux.contract.spec.ts` valida flujo determinista de edición básica (`PUT /api/v1/admin/users/{id}`) con caso success + error usando `data-testid` estables `admin-user-edit-*`.

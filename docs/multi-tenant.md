@@ -281,3 +281,64 @@ Auditoría:
   - `admin-users-reset-password-cancel`
   - `admin-users-reset-password-error`
   - `admin-users-reset-password-success`
+
+## Backend Admin Users v6: edición básica scoped (`PUT /api/v1/admin/users/{id}`)
+
+Contrato de request:
+
+- `userName` (required, único)
+- `tenantId` (nullable, pero requerido cuando roles actuales del target lo exigen)
+- `storeId` (nullable, pero requerido para roles actuales `AdminStore`/`Manager`/`Cashier`)
+
+Contrato de response (200 OK):
+
+- `id`, `email`, `userName`, `roles`, `tenantId`, `storeId`, `isLockedOut`, `lockoutEnd`
+
+Reglas de autorización por actor:
+
+- `SuperAdmin`: puede editar en cualquier tenant/store válido.
+- `TenantAdmin`: solo usuarios de su tenant; no puede mover target a otro tenant.
+- `AdminStore`: solo usuarios de su store; solo puede mantener tenant/store en su propio contexto.
+- `Manager`/`Cashier`: sin acceso (`403`).
+
+Reglas por roles actuales del target (sin cambiar roles en este endpoint):
+
+- `TenantAdmin`: `tenantId` requerido, `storeId` opcional.
+- `AdminStore` / `Manager` / `Cashier`: `tenantId` y `storeId` requeridos.
+- Siempre se valida que `storeId` pertenezca a `tenantId`.
+
+Errores esperados:
+
+- `400`: validación (`userName` faltante, tenant/store inconsistentes, store fuera de tenant, store faltante para rol que lo requiere).
+- `403`: fuera del scope actor.
+- `404`: usuario no existe.
+- `409`: conflicto por `userName` duplicado.
+
+Auditoría:
+
+- Se registra `AuditActions.UpdateUser` (`Action = "UpdateUser"`).
+- Metadata incluye `before/after` de `userName`, `tenantId`, `storeId` y `roles` actuales del target.
+
+Decisión v6 sobre email:
+
+- **No se incluye cambio de `email`** en v6 para evitar riesgos de compatibilidad en normalización/confirmación de Identity.
+
+## Frontend Admin Users v6: edición básica desde listado (`/app/admin/users`)
+
+- Se agrega acción por fila `Editar` (`admin-users-edit-open-{id}`) con modal/panel de edición.
+- Prefill desde usuario objetivo: `userName`, `tenantId`, `storeId`.
+- Submit real contra `PUT /api/v1/admin/users/{id}` y refresh de listado al éxito.
+- Validaciones UI:
+  - `userName` requerido.
+  - `storeId` obligatorio visual cuando roles actuales del target lo requieren (`admin-user-edit-store-required`).
+  - mapeo estable de `ProblemDetails` para `400/403/404/409`.
+- Test IDs contractuales:
+  - `admin-user-edit-form`
+  - `admin-user-edit-username`
+  - `admin-user-edit-tenant`
+  - `admin-user-edit-store`
+  - `admin-user-edit-store-required`
+  - `admin-user-edit-submit`
+  - `admin-user-edit-cancel`
+  - `admin-user-edit-error`
+  - `admin-user-edit-success`
