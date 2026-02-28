@@ -492,3 +492,23 @@ Notas de compatibilidad:
   - sucursales sin AdminStore (`hasAdminStore = false`),
   - quick actions por fila para resolver el problema detectado (`Crear AdminStore`) y para entrar al detalle (`Ver detalle`).
 - No se agregaron endpoints nuevos; se reutilizan contratos actuales de Platform Stores y navegación contextual existente de Admin Users.
+
+## 2026-02-28 — Tenant/Store operational navigation v1.2 (frontend)
+
+Se refuerza navegación operativa contextual en superficies platform:
+
+- `Tenant Detail` (`/app/platform/tenants/:tenantId`) como hub operativo con acciones directas a:
+  - stores del tenant,
+  - users scoped (`/app/admin/users?tenantId=...`),
+  - dashboard contextual (`/app/platform/dashboard?tenantId=...`),
+  - inventory contextual (`/app/admin/pos/inventory?tenantId=...&storeId=...` usando default store cuando existe),
+  - revisión de stores sin AdminStore (`?withoutAdminStore=true`).
+- `Tenant Stores` (`/app/platform/tenants/:tenantId/stores`) agrega quick actions por fila a users/dashboard/inventory y badge contextual cuando llega `withoutAdminStore=true`.
+- `Store Detail` (`/app/platform/stores/:storeId`) mantiene flujo de create user/AdminStore y agrega navegación operativa explícita a users/dashboard/inventory scoped por `tenantId/storeId`.
+- Se agregan badges de contexto visible en:
+  - dashboard (`platform-dashboard-context-badge`) cuando llega `tenantId`/`storeId` por query params,
+  - inventory (`inventory-context-badge`) cuando llega `storeId`/`itemType`/`search` por query params.
+
+Compatibilidad:
+- No se agregan endpoints nuevos.
+- Se reutilizan rutas y query params ya soportados por superficies existentes.

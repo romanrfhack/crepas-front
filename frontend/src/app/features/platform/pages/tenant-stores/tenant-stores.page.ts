@@ -21,8 +21,14 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
         <p>Cargando...</p>
       } @else {
         @if (showWithoutAdminOnly()) {
-          <p data-testid="platform-tenant-stores-filter-without-admin-active" class="filter-chip">
+          <p
+            data-testid="platform-tenant-stores-context-without-admin"
+            class="filter-chip"
+          >
             Mostrando solo stores sin AdminStore.
+          </p>
+          <p data-testid="platform-tenant-stores-context-badge" class="context-badge">
+            Contexto activo: resolución de stores sin AdminStore.
           </p>
         }
         <table>
@@ -94,6 +100,22 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
                   >
                     Ver usuarios
                   </button>
+
+                  <button
+                    type="button"
+                    [attr.data-testid]="'platform-tenant-stores-dashboard-' + store.id"
+                    (click)="goToDashboard(store)"
+                  >
+                    Ver dashboard
+                  </button>
+
+                  <button
+                    type="button"
+                    [attr.data-testid]="'platform-tenant-stores-inventory-' + store.id"
+                    (click)="goToInventory(store)"
+                  >
+                    Ver inventario
+                  </button>
                 </td>
               </tr>
             }
@@ -109,6 +131,15 @@ import { PlatformStoresApiService } from '../../services/platform-stores-api.ser
       border-radius: 999px;
       background: #fef3c7;
       margin-bottom: 0.7rem;
+      font-weight: 600;
+    }
+
+    .context-badge {
+      display: inline-block;
+      margin: 0 0 0.7rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      background: #dbeafe;
       font-weight: 600;
     }
 
@@ -217,6 +248,19 @@ export class TenantStoresPage {
 
   goToUsers(store: PlatformTenantStoreListItemDto): void {
     void this.router.navigate(['/app/admin/users'], {
+      queryParams: { tenantId: store.tenantId, storeId: store.id },
+    });
+  }
+
+
+  goToDashboard(store: PlatformTenantStoreListItemDto): void {
+    void this.router.navigate(['/app/platform/dashboard'], {
+      queryParams: { tenantId: store.tenantId, storeId: store.id },
+    });
+  }
+
+  goToInventory(store: PlatformTenantStoreListItemDto): void {
+    void this.router.navigate(['/app/admin/pos/inventory'], {
       queryParams: { tenantId: store.tenantId, storeId: store.id },
     });
   }

@@ -260,3 +260,14 @@ Base inicial derivada de `docs/Corte-Implementacion.md` para estandarizar manten
 Test IDs estables agregados en este ciclo:
 - Store Detail: `platform-store-details-primary-action`, `platform-store-details-admin-count`, `platform-store-details-users-count`.
 - Stores list: `platform-tenant-stores-view-details-{storeId}` (además de `platform-tenant-stores-default-{storeId}`, `platform-tenant-stores-has-admin-{storeId}`, `platform-tenant-stores-create-adminstore-{storeId}`).
+
+## 2026-02-28 — Tenant/Store operational navigation v1.2 (frontend)
+
+- Frontend Unit (Vitest):
+  - `frontend/src/app/features/platform/pages/tenant-details/tenant-details.page.spec.ts` valida quick actions operativas a stores/users/dashboard/inventory con `tenantId` contextual.
+  - `frontend/src/app/features/platform/pages/tenant-stores/tenant-stores.page.spec.ts` valida quick actions por fila a users/dashboard/inventory y contexto visual cuando `withoutAdminStore=true`.
+  - `frontend/src/app/features/platform/pages/store-details/store-details.page.spec.ts` valida quick actions de sucursal a users/dashboard/inventory y flujos existentes de create user/admin store.
+  - `frontend/src/app/features/platform/pages/dashboard/platform-dashboard.page.spec.ts` y `frontend/src/app/features/admin/pos-catalog/pages/inventory/inventory.page.spec.ts` validan render de badges de contexto aplicado.
+- E2E Playwright UI-contract:
+  - `frontend/e2e/platform.tenant-details.contract.spec.ts` valida tenant detail como hub operativo (stores/users/dashboard/inventory + review stores sin AdminStore).
+  - `frontend/e2e/platform.stores.contract.spec.ts` valida stores list contextual (`withoutAdminStore=true`) y navegación operativa desde store detail/list hacia users/dashboard/inventory.

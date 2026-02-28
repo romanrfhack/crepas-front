@@ -21,6 +21,7 @@ type ProblemLike = {
         <div>
           <h2>{{ tenant()?.name ?? 'Tenant' }}</h2>
           <p>Detalle y configuración básica del tenant</p>
+          <p class="subtitle">Centro de operaciones del tenant</p>
         </div>
         <div class="actions">
           <button
@@ -54,14 +55,6 @@ type ProblemLike = {
             (click)="goToDashboard()"
           >
             📊 Dashboard
-          </button>
-          <button
-            type="button"
-            class="btn-outline"
-            data-testid="platform-tenant-details-action-reports"
-            (click)="goToReports()"
-          >
-            📈 Reportes
           </button>
           <button
             type="button"
@@ -250,6 +243,10 @@ type ProblemLike = {
         margin: 0.25rem 0;
         color: #64748b;
       }
+      .subtitle {
+        margin: 0.25rem 0 0;
+        color: #64748b;
+      }
       .alert {
         margin: 0;
         padding: 0.6rem 0.8rem;
@@ -383,10 +380,6 @@ export class TenantDetailsPage {
   }
 
   goToDashboard() {
-    void this.router.navigate(['/app/platform/dashboard']);
-  }
-
-  goToReports() {
     void this.router.navigate(['/app/platform/dashboard'], {
       queryParams: { tenantId: this.tenantId() },
     });

@@ -235,4 +235,15 @@ describe('InventoryPage', () => {
     const row = fixture.nativeElement.querySelector('[data-testid="inventory-history-row-adj-2"]');
     expect(row).not.toBeNull();
   });
+
+  it('renders inventory context badge when contextual filters are present', () => {
+    fixture.componentInstance.contextStoreId.set('store-9');
+    fixture.componentInstance.contextItemType.set('Product');
+    fixture.componentInstance.contextSearch.set('latte');
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector('[data-testid="inventory-context-badge"]');
+    expect(badge?.textContent).toContain('Store: store-9 · Tipo: Product · Búsqueda: latte');
+  });
+
 });

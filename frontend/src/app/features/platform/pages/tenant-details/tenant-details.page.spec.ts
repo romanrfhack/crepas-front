@@ -114,9 +114,6 @@ describe('TenantDetailsPage', () => {
       .querySelector('[data-testid="platform-tenant-details-action-dashboard"]')
       ?.dispatchEvent(new Event('click'));
     host
-      .querySelector('[data-testid="platform-tenant-details-action-reports"]')
-      ?.dispatchEvent(new Event('click'));
-    host
       .querySelector('[data-testid="platform-tenant-details-action-inventory"]')
       ?.dispatchEvent(new Event('click'));
 
@@ -124,7 +121,6 @@ describe('TenantDetailsPage', () => {
     expect(navigate).toHaveBeenCalledWith(['/app/admin/users'], {
       queryParams: { tenantId: 'tenant-1' },
     });
-    expect(navigate).toHaveBeenCalledWith(['/app/platform/dashboard']);
     expect(navigate).toHaveBeenCalledWith(['/app/platform/dashboard'], {
       queryParams: { tenantId: 'tenant-1' },
     });

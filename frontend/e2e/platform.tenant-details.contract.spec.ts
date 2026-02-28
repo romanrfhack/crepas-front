@@ -127,7 +127,7 @@ test('tenant details/settings v1 ui-contract', async ({ page }) => {
   await expect(page).toHaveURL('/app/platform/tenants/tenant-1/stores?withoutAdminStore=true');
 
   await page.goto('/app/platform/tenants/tenant-1');
-  await page.getByTestId('platform-tenant-details-action-reports').click();
+  await page.getByTestId('platform-tenant-details-action-dashboard').click();
   await expect(page).toHaveURL('/app/platform/dashboard?tenantId=tenant-1');
 
   await page.goto('/app/platform/tenants/tenant-1');
