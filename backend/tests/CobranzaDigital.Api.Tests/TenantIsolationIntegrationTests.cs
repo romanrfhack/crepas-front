@@ -228,6 +228,62 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         Assert.Equal(HttpStatusCode.OK, superResp.StatusCode);
     }
 
+    [Fact]
+    public async Task Snapshot_Uses_Contextual_Store_Before_Global_PosSettings_Default()
+    {
+        var setup = await SeedIsolationDataAsync();
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+            var settings = await db.PosSettings.OrderBy(x => x.Id).FirstAsync();
+            settings.MultiStoreEnabled = false;
+            settings.DefaultStoreId = setup.StoreAId;
+            await db.SaveChangesAsync();
+        }
+
+        var managerAToken = await LoginAndGetAccessTokenAsync(setup.ManagerAEmail, setup.Password);
+        var managerBToken = await LoginAndGetAccessTokenAsync(setup.ManagerBEmail, setup.Password);
+
+        var snapshotA = await GetSnapshotAsync(managerAToken);
+        var snapshotB = await GetSnapshotAsync(managerBToken);
+
+        Assert.Equal(setup.StoreAId, snapshotA.StoreId);
+        Assert.Equal(setup.StoreBId, snapshotB.StoreId);
+    }
+
+    [Fact]
+    public async Task Snapshot_Fallback_To_PosSettings_Default_Is_Rejected_When_Default_Belongs_To_Other_Tenant()
+    {
+        var setup = await SeedIsolationDataAsync();
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+            var settings = await db.PosSettings.OrderBy(x => x.Id).FirstAsync();
+            settings.MultiStoreEnabled = false;
+            settings.DefaultStoreId = setup.StoreAId;
+
+            var managerB = await db.Users.SingleAsync(x => x.Email == setup.ManagerBEmail);
+            managerB.StoreId = null;
+            await db.SaveChangesAsync();
+        }
+
+        var managerBToken = await LoginAndGetAccessTokenAsync(setup.ManagerBEmail, setup.Password);
+
+        using var implicitRequest = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", managerBToken);
+        using var implicitResponse = await _client.SendAsync(implicitRequest);
+        Assert.Equal(HttpStatusCode.NotFound, implicitResponse.StatusCode);
+
+        using var explicitRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/catalog/snapshot?storeId={setup.StoreBId:D}", managerBToken);
+        using var explicitResponse = await _client.SendAsync(explicitRequest);
+        var explicitSnapshot = await explicitResponse.Content.ReadFromJsonAsync<SnapshotScopeResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, explicitResponse.StatusCode);
+        Assert.NotNull(explicitSnapshot);
+        Assert.Equal(setup.StoreBId, explicitSnapshot!.StoreId);
+    }
+
     private async Task<SeedResult> SeedIsolationDataAsync()
     {
         var password = "User1234!";
@@ -440,9 +496,22 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
         return request;
     }
 
+    private async Task<SnapshotScopeResponse> GetSnapshotAsync(string accessToken)
+    {
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", accessToken);
+        using var response = await _client.SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<SnapshotScopeResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.True(response.Headers.ETag is not null);
+        return payload!;
+    }
+
     private sealed record SeedResult(string ManagerAEmail, string ManagerBEmail, string CashierAEmail, string SuperAdminEmail, string Password, Guid TenantAId, Guid TenantBId, Guid StoreAId, Guid StoreBId, DateOnly SalesDate, Guid TenantBProductId);
     private sealed record PagedResponse(List<UserListItem> Items);
     private sealed record UserListItem([property: JsonPropertyName("id")] string Id);
 
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
+    private sealed record SnapshotScopeResponse(Guid StoreId);
 }

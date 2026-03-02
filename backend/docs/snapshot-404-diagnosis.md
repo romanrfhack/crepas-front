@@ -314,3 +314,12 @@ ORDER BY CaseName;
 1. `PosSettings` parece global (sin `TenantId`) y se toma `TOP(1) ORDER BY Id`; en entorno multi-tenant eso puede mezclar contexto entre tenants.
 2. La resolución de tienda en snapshot no considera `user.StoreId` del cashier ni claim de store; depende de query param + configuración global.
 3. `StoreCatalogAvailability` tiene endpoints propios, pero snapshot no la utiliza actualmente (podría ser brecha de diseño/expectativa funcional).
+
+
+## Corrección implementada
+Se ajustó `PosStoreContextService.ResolveStoreAsync` para resolver tienda por precedencia segura:
+1. `storeId` explícito del request.
+2. `storeId` contextual del usuario/token (`claim storeId`, fallback `AspNetUsers.StoreId`).
+3. `PosSettings.DefaultStoreId` solo como fallback final válido para el tenant actual y con `IsActive = 1`.
+
+Con esto, `PosSettings.DefaultStoreId` global ya no puede forzar tiendas de otro tenant ni provocar mezcla cross-tenant en `ComputeCatalogEtagAsync`/`GetSnapshotAsync`, porque ambos usan `ResolveStoreAsync` antes de ejecutar queries del snapshot.
