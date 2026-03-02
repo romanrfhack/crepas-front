@@ -350,14 +350,17 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
             if (user.Email == managerAEmail || user.Email == cashierAEmail)
             {
                 user.TenantId = tenantA.Id;
+                user.StoreId = storeA.Id;
             }
             else if (user.Email == managerBEmail)
             {
                 user.TenantId = tenantB.Id;
+                user.StoreId = storeB.Id;
             }
             else
             {
                 user.TenantId = null;
+                user.StoreId = null;
             }
         }
 
