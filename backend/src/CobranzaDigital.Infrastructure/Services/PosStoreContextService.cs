@@ -49,15 +49,17 @@ public sealed class PosStoreContextService
         {
             candidates.Add(requestedStoreId.Value);
         }
-
-        if (contextualStoreId.HasValue && !candidates.Contains(contextualStoreId.Value))
+        else
         {
-            candidates.Add(contextualStoreId.Value);
-        }
+            if (contextualStoreId.HasValue)
+            {
+                candidates.Add(contextualStoreId.Value);
+            }
 
-        if (settings.DefaultStoreId != Guid.Empty && !candidates.Contains(settings.DefaultStoreId))
-        {
-            candidates.Add(settings.DefaultStoreId);
+            if (settings.DefaultStoreId != Guid.Empty && !candidates.Contains(settings.DefaultStoreId))
+            {
+                candidates.Add(settings.DefaultStoreId);
+            }
         }
 
         foreach (var candidateStoreId in candidates)
