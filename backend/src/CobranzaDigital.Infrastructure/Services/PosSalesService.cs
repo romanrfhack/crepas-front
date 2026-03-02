@@ -1113,6 +1113,8 @@ public sealed class PosSalesService : IPosSalesService
 
     private async Task<(Guid? StoreId, TimeZoneInfo TimeZoneInfo)> ResolveReportScopeAsync(Guid? storeId, CancellationToken ct)
     {
+        var scopedTenantId = _tenantContext.EffectiveTenantId ?? (_tenantContext.IsPlatformAdmin ? null : _tenantContext.TenantId);
+
         Guid? resolvedStoreId = storeId;
         if (!resolvedStoreId.HasValue && _tenantContext.EffectiveTenantId.HasValue)
         {
@@ -1134,9 +1136,9 @@ public sealed class PosSalesService : IPosSalesService
         }
 
         var storesQuery = _db.Stores.AsNoTracking().Where(x => x.Id == resolvedStoreId.Value && x.IsActive);
-        if (_tenantContext.EffectiveTenantId.HasValue)
+        if (scopedTenantId.HasValue)
         {
-            storesQuery = storesQuery.Where(x => x.TenantId == _tenantContext.EffectiveTenantId.Value);
+            storesQuery = storesQuery.Where(x => x.TenantId == scopedTenantId.Value);
         }
 
         var timeZoneId = await storesQuery
