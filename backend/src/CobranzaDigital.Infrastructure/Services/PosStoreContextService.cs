@@ -1,8 +1,13 @@
+using System.Security.Claims;
+
 using CobranzaDigital.Application.Common.Exceptions;
 using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Domain.Entities;
+using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace CobranzaDigital.Infrastructure.Services;
@@ -11,11 +16,19 @@ public sealed class PosStoreContextService
 {
     private readonly CobranzaDigitalDbContext _db;
     private readonly ITenantContext _tenantContext;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly UserManager<ApplicationUser> _userManager;
 
-    public PosStoreContextService(CobranzaDigitalDbContext db, ITenantContext tenantContext)
+    public PosStoreContextService(
+        CobranzaDigitalDbContext db,
+        ITenantContext tenantContext,
+        IHttpContextAccessor httpContextAccessor,
+        UserManager<ApplicationUser> userManager)
     {
         _db = db;
         _tenantContext = tenantContext;
+        _httpContextAccessor = httpContextAccessor;
+        _userManager = userManager;
     }
 
     public async Task<(Guid StoreId, PosSettings Settings)> ResolveStoreAsync(Guid? requestedStoreId, CancellationToken ct)
@@ -29,24 +42,57 @@ public sealed class PosStoreContextService
             throw new ForbiddenException("Tenant context is required.");
         }
 
-        var storeId = settings.MultiStoreEnabled && requestedStoreId.HasValue
-            ? requestedStoreId.Value
-            : settings.DefaultStoreId;
+        var contextualStoreId = await ResolveContextStoreIdAsync(ct).ConfigureAwait(false);
 
-        var storeExists = await _db.Stores.AsNoTracking()
-            .AnyAsync(x => x.Id == storeId && x.TenantId == tenantId.Value && x.IsActive, ct)
-            .ConfigureAwait(false);
-
-        if (!storeExists)
+        var candidates = new List<Guid>();
+        if (requestedStoreId.HasValue)
         {
-            throw new NotFoundException("Store was not found for current tenant.");
+            candidates.Add(requestedStoreId.Value);
+        }
+        else
+        {
+            if (contextualStoreId.HasValue)
+            {
+                candidates.Add(contextualStoreId.Value);
+            }
+
+            if (settings.DefaultStoreId != Guid.Empty && !candidates.Contains(settings.DefaultStoreId))
+            {
+                candidates.Add(settings.DefaultStoreId);
+            }
         }
 
-        if (!settings.MultiStoreEnabled && requestedStoreId.HasValue && requestedStoreId.Value != settings.DefaultStoreId)
+        foreach (var candidateStoreId in candidates)
         {
-            throw new ValidationException(new Dictionary<string, string[]> { ["storeId"] = ["Multi-store is disabled."] });
+            var storeExists = await _db.Stores.AsNoTracking()
+                .AnyAsync(x => x.Id == candidateStoreId && x.TenantId == tenantId.Value && x.IsActive, ct)
+                .ConfigureAwait(false);
+            if (storeExists)
+            {
+                return (candidateStoreId, settings);
+            }
         }
 
-        return (storeId, settings);
+        throw new NotFoundException("Store was not found for current tenant.");
+    }
+
+    private async Task<Guid?> ResolveContextStoreIdAsync(CancellationToken ct)
+    {
+        var user = _httpContextAccessor.HttpContext?.User;
+        var claimValue = user?.FindFirstValue("storeId");
+        if (Guid.TryParse(claimValue, out var storeIdFromClaim))
+        {
+            return storeIdFromClaim;
+        }
+
+        var userIdRaw = user?.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdRaw, out var userId))
+        {
+            return null;
+        }
+
+        var appUser = await _userManager.FindByIdAsync(userId.ToString()).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        return appUser?.StoreId;
     }
 }

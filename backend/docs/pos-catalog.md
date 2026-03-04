@@ -30,3 +30,12 @@ Incluye Category, Product, OptionSet/OptionItem, CustomizationSchema/SelectionGr
   "versionStamp": "ABCDEF..."
 }
 ```
+
+
+## Resolución de tienda efectiva (`/pos/catalog/snapshot`)
+Precedencia final para resolver `storeId` en contexto multi-tenant:
+1. `storeId` explícito del request (`?storeId=`).
+2. `storeId` contextual del usuario actual (claim JWT `storeId`; fallback al `AspNetUsers.StoreId`).
+3. `PosSettings.DefaultStoreId` **solo** como último fallback y únicamente si pertenece al `tenant` efectivo y la store está activa.
+
+Si una tienda candidata no pertenece al tenant efectivo, se descarta y se evalúa el siguiente candidato (sin contaminación cross-tenant). Si no hay ninguna tienda válida, el endpoint responde `404 Store was not found for current tenant.`
