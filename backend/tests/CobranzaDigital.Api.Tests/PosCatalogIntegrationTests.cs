@@ -741,6 +741,68 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         return (await resp.Content.ReadFromJsonAsync<T>())!;
     }
 
+    [Fact]
+    public async Task InventoryV2_Balances_Supports_Pagination_And_Filters()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var categoryA = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-v2-a-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var categoryB = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-v2-b-{Guid.NewGuid():N}", sortOrder = 2, isActive = true });
+        var trackedProduct = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 Tracked Latte", externalCode = "LAT-V2", categoryId = categoryA.Id, basePrice = 30m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var notTrackedProduct = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 Untracked Mocha", externalCode = "MOC-V2", categoryId = categoryB.Id, basePrice = 31m, isActive = true, isAvailable = true, isInventoryTracked = false });
+        var trackedExtra = await PostAsync<ExtraResponse>("/api/v1/pos/admin/extras", token, new { name = "V2 Shot", price = 5m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        using (var upsertTracked = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/inventory", token))
+        {
+            upsertTracked.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = trackedProduct.Id, onHandQty = 1.250m });
+            using var resp = await _client.SendAsync(upsertTracked);
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        }
+
+        using (var upsertExtra = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/inventory", token))
+        {
+            upsertExtra.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Extra", itemId = trackedExtra.Id, onHandQty = 2.500m });
+            using var resp = await _client.SendAsync(upsertExtra);
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        }
+
+        using var pageRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/balances?storeId={snapshot.StoreId:D}&page=1&pageSize=2", token);
+        using var pageResponse = await _client.SendAsync(pageRequest);
+        Assert.Equal(HttpStatusCode.OK, pageResponse.StatusCode);
+        var paged = (await pageResponse.Content.ReadFromJsonAsync<PagedInventoryBalancesResponse>())!;
+        Assert.Equal(1, paged.Page);
+        Assert.Equal(2, paged.PageSize);
+        Assert.Equal(2, paged.Items.Count);
+        Assert.True(paged.TotalCount >= 3);
+
+        using var trackedRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/balances?storeId={snapshot.StoreId:D}&tracked=true", token);
+        using var trackedResponse = await _client.SendAsync(trackedRequest);
+        var trackedRows = (await trackedResponse.Content.ReadFromJsonAsync<PagedInventoryBalancesResponse>())!;
+        Assert.All(trackedRows.Items, row => Assert.True(row.IsInventoryTracked));
+        Assert.DoesNotContain(trackedRows.Items, row => row.ItemId == notTrackedProduct.Id);
+
+        using var searchRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/balances?storeId={snapshot.StoreId:D}&q=LAT-V2", token);
+        using var searchResponse = await _client.SendAsync(searchRequest);
+        var searchRows = (await searchResponse.Content.ReadFromJsonAsync<PagedInventoryBalancesResponse>())!;
+        Assert.Contains(searchRows.Items, row => row.ItemId == trackedProduct.Id);
+
+        using var categoryRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/balances?storeId={snapshot.StoreId:D}&categoryId={categoryA.Id:D}", token);
+        using var categoryResponse = await _client.SendAsync(categoryRequest);
+        var categoryRows = (await categoryResponse.Content.ReadFromJsonAsync<PagedInventoryBalancesResponse>())!;
+        Assert.DoesNotContain(categoryRows.Items, row => row.ItemId == notTrackedProduct.Id);
+    }
+
+    [Fact]
+    public async Task InventoryV2_Balances_Validates_Store_Belongs_To_Tenant()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/balances?storeId={Guid.NewGuid():D}", token);
+        using var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     private static async Task AssertStatusAsync(HttpResponseMessage response, HttpStatusCode expectedStatus)
     {
         if (response.StatusCode == expectedStatus)
@@ -851,7 +913,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        if (url.StartsWith("/api/v1/pos/", StringComparison.OrdinalIgnoreCase))
+        if (url.StartsWith("/api/v1/pos/", StringComparison.OrdinalIgnoreCase)
+            || url.StartsWith("/api/v2/pos/", StringComparison.OrdinalIgnoreCase))
         {
             request.Headers.Add("X-Tenant-Id", _tenantHeaderValue);
         }
@@ -871,6 +934,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record StoreInventoryItemResponse(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset? UpdatedAtUtc, bool HasInventoryRow);
     private sealed record CatalogInventoryAdjustmentResponse(Guid Id, Guid StoreId, string ItemType, Guid ItemId, decimal QtyBefore, decimal QtyDelta, decimal QtyAfter, string Reason, string? Reference, string? Note, string? ClientOperationId, DateTimeOffset CreatedAtUtc, Guid? PerformedByUserId, string? ItemName = null, string? ItemSku = null, string? ReferenceType = null, Guid? ReferenceId = null, string? MovementKind = null);
     private sealed record InventoryReportRowResponse(string ItemType, Guid ItemId, string ItemName, string? ItemSku, Guid StoreId, decimal StockOnHandQty, bool IsInventoryTracked, string AvailabilityReason, string? StoreOverrideState, DateTimeOffset? UpdatedAtUtc, DateTimeOffset? LastAdjustmentAtUtc);
+    private sealed record InventoryBalanceRowResponse(string ItemType, Guid ItemId, string Name, string? Sku, string? CategoryName, bool IsInventoryTracked, decimal OnHandQty, DateTimeOffset? UpdatedAtUtc);
+    private sealed record PagedInventoryBalancesResponse(List<InventoryBalanceRowResponse> Items, int TotalCount, int Page, int PageSize);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
     private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<OptionItemResponse> OptionItems, List<ExtraResponse> Extras, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record PagedResponse(List<UserListItem> Items);

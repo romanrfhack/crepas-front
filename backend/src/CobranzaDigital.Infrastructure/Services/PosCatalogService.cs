@@ -457,6 +457,68 @@ public sealed class PosCatalogService : IPosCatalogService
             .ToListAsync(ct).ConfigureAwait(false);
     }
 
+    public async Task<PagedInventoryBalancesDto> GetInventoryBalancesV2Async(Guid storeId, string? query, Guid? categoryId, bool? tracked, int page, int pageSize, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(storeId, tenantId, ct).ConfigureAwait(false);
+
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 200);
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var term = query?.Trim();
+
+        var productRows = from product in _db.Products.AsNoTracking()
+                          where product.CatalogTemplateId == catalogTemplateId && product.IsActive
+                          join category in _db.Categories.AsNoTracking() on product.CategoryId equals category.Id
+                          join balance in _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.TenantId == tenantId && x.StoreId == storeId && x.ItemType == CatalogItemType.Product)
+                              on product.Id equals balance.ItemId into productBalances
+                          from balance in productBalances.DefaultIfEmpty()
+                          where !tracked.HasValue || product.IsInventoryTracked == tracked.Value
+                          where !categoryId.HasValue || product.CategoryId == categoryId.Value
+                          where string.IsNullOrWhiteSpace(term)
+                                || product.Name.Contains(term!)
+                                || (product.ExternalCode != null && product.ExternalCode.Contains(term!))
+                          select new InventoryBalanceRowDto(
+                              "Product",
+                              product.Id,
+                              product.Name,
+                              product.ExternalCode,
+                              category.Name,
+                              product.IsInventoryTracked,
+                              balance != null ? balance.OnHandQty : 0m,
+                              balance != null ? balance.UpdatedAtUtc : null);
+
+        var extraRows = from extra in _db.Extras.AsNoTracking()
+                        where extra.CatalogTemplateId == catalogTemplateId && extra.IsActive
+                        join balance in _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.TenantId == tenantId && x.StoreId == storeId && x.ItemType == CatalogItemType.Extra)
+                            on extra.Id equals balance.ItemId into extraBalances
+                        from balance in extraBalances.DefaultIfEmpty()
+                        where !tracked.HasValue || extra.IsInventoryTracked == tracked.Value
+                        where string.IsNullOrWhiteSpace(term) || extra.Name.Contains(term!)
+                        select new InventoryBalanceRowDto(
+                            "Extra",
+                            extra.Id,
+                            extra.Name,
+                            null,
+                            null,
+                            extra.IsInventoryTracked,
+                            balance != null ? balance.OnHandQty : 0m,
+                            balance != null ? balance.UpdatedAtUtc : null);
+
+        var merged = productRows.Concat(extraRows);
+
+        var totalCount = await merged.CountAsync(ct).ConfigureAwait(false);
+        var items = await merged
+            .OrderBy(x => x.Name)
+            .ThenBy(x => x.ItemType)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return new PagedInventoryBalancesDto(items, totalCount, safePage, safePageSize);
+    }
+
     public async Task<CatalogInventoryItemDto> UpsertCatalogInventoryAsync(UpsertCatalogInventoryRequest request, CancellationToken ct)
     {
         var tenantId = RequireTenantId();

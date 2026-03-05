@@ -18,6 +18,8 @@ import {
 import { toInventoryAdjustmentReasonUi } from './inventory-adjustment-reason.util';
 import { AuthService } from '../../../../auth/services/auth.service';
 import { PlatformTenantContextService } from '../../../../platform/services/platform-tenant-context.service';
+import { environment } from '../../../../../../environments/environment';
+import { InventoryFacadeService } from './inventory-facade.service';
 
 interface InventoryRow {
   itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
@@ -64,6 +66,44 @@ interface ItemOption {
         <p class="error" role="alert" data-testid="inventory-error">{{ error }}</p>
       }
 
+      @if (inventoryV2Enabled) {
+        <section class="card" data-testid="inventory-v2-panel">
+          <h3>Inventory V2</h3>
+          <div class="filters">
+            <input data-testid="inventory-v2-search" placeholder="Buscar SKU/nombre" (input)="onInventoryV2Search($any($event.target).value)" />
+            <select data-testid="inventory-v2-tracked" (change)="onInventoryV2TrackedChange($any($event.target).value)">
+              <option value="">Todos</option>
+              <option value="true">Tracked</option>
+              <option value="false">No tracked</option>
+            </select>
+            <input data-testid="inventory-v2-category" placeholder="category-id" (change)="onInventoryV2CategoryChange($any($event.target).value)" />
+          </div>
+          <button type="button" data-testid="inventory-v2-load" (click)="loadInventoryV2()">Cargar grid</button>
+          @if (inventoryV2Loading()) {
+            <p data-testid="inventory-v2-loading">Cargando inventario...</p>
+          } @else if (inventoryV2Error(); as inventoryV2Error) {
+            <p class="error" data-testid="inventory-v2-error">{{ inventoryV2Error }}</p>
+            <button type="button" data-testid="inventory-v2-retry" (click)="loadInventoryV2()">Reintentar</button>
+          } @else {
+            <table data-testid="inventory-v2-table">
+              <thead><tr><th>SKU</th><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Tracked</th><th>OnHand</th></tr></thead>
+              <tbody>
+                @for (row of inventoryV2Rows(); track row.itemType + '-' + row.itemId) {
+                  <tr><td>{{ row.sku ?? '—' }}</td><td>{{ row.name }}</td><td>{{ row.itemType }}</td><td>{{ row.categoryName ?? '—' }}</td><td>{{ row.isInventoryTracked ? 'Sí' : 'No' }}</td><td>{{ formatQty(row.onHandQty) }}</td></tr>
+                } @empty {
+                  <tr><td colspan="6" data-testid="inventory-v2-empty">Sin resultados.</td></tr>
+                }
+              </tbody>
+            </table>
+            <div>
+              <button type="button" data-testid="inventory-v2-prev" (click)="inventoryV2PreviousPage()">Anterior</button>
+              <button type="button" data-testid="inventory-v2-next" (click)="inventoryV2NextPage()">Siguiente</button>
+              <span data-testid="inventory-v2-total">Total: {{ inventoryV2TotalCount() }}</span>
+            </div>
+          }
+        </section>
+      }
+
       <section class="card">
         <h3>Stock actual</h3>
         <table data-testid="inventory-table">
@@ -86,6 +126,7 @@ interface ItemOption {
                     [attr.data-testid]="'inventory-stock-input-' + row.itemType + '-' + row.itemId"
                     [value]="getDraftStock(row)"
                     (input)="setDraftStock(row, $any($event.target).value)"
+                    step="0.001"
                   />
                 </td>
                 <td>
@@ -254,6 +295,7 @@ export class InventoryPage {
   private readonly authService = inject(AuthService);
   private readonly tenantContext = inject(PlatformTenantContextService);
   private readonly route = inject(ActivatedRoute);
+  private readonly inventoryFacade = inject(InventoryFacadeService);
 
   readonly adjustmentReasons: InventoryAdjustmentReason[] = [
     'InitialLoad',
@@ -282,6 +324,12 @@ export class InventoryPage {
   readonly contextStoreId = signal('');
   readonly contextItemType = signal('');
   readonly contextSearch = signal('');
+  readonly inventoryV2Enabled = environment.inventoryV2Enabled ?? false;
+
+  readonly inventoryV2Rows = this.inventoryFacade.rows;
+  readonly inventoryV2Loading = this.inventoryFacade.loading;
+  readonly inventoryV2Error = this.inventoryFacade.error;
+  readonly inventoryV2TotalCount = this.inventoryFacade.totalCount;
 
   readonly availableItems = computed(() =>
     this.adjustItemTypeControl.value === 'Extra' ? this.extras() : this.products(),
@@ -315,6 +363,9 @@ export class InventoryPage {
     void this.loadCatalogItems();
     void this.loadInventory();
     void this.loadHistory();
+    if (this.inventoryV2Enabled) {
+      void this.loadInventoryV2();
+    }
   }
 
   private applyContextFromQueryParams(): void {
@@ -340,6 +391,37 @@ export class InventoryPage {
     if (search) {
       this.historyItemIdControl.setValue(search);
     }
+  }
+
+  async loadInventoryV2() {
+    this.inventoryFacade.updateStore(this.storeIdControl.value.trim());
+    await this.inventoryFacade.load();
+  }
+
+  onInventoryV2Search(value: string) {
+    this.inventoryFacade.updateSearch(value);
+  }
+
+  async onInventoryV2TrackedChange(value: '' | 'true' | 'false') {
+    this.inventoryFacade.updateTracked(value);
+    await this.inventoryFacade.load();
+  }
+
+  async onInventoryV2CategoryChange(value: string) {
+    this.inventoryFacade.updateCategory(value);
+    await this.inventoryFacade.load();
+  }
+
+  async inventoryV2NextPage() {
+    const currentPage = this.inventoryFacade.filters().page;
+    this.inventoryFacade.updatePage(currentPage + 1);
+    await this.inventoryFacade.load();
+  }
+
+  async inventoryV2PreviousPage() {
+    const currentPage = this.inventoryFacade.filters().page;
+    this.inventoryFacade.updatePage(Math.max(1, currentPage - 1));
+    await this.inventoryFacade.load();
   }
 
   hasContextBadge(): boolean {
@@ -382,7 +464,7 @@ export class InventoryPage {
 
   getDraftStock(row: InventoryRow) {
     const key = this.getRowKey(row);
-    return this.stockDrafts()[key] ?? `${row.stockOnHandQty}`;
+    return this.stockDrafts()[key] ?? this.formatQty(row.stockOnHandQty);
   }
 
   setDraftStock(row: InventoryRow, value: string) {
@@ -396,7 +478,7 @@ export class InventoryPage {
 
   async saveInventoryRow(row: InventoryRow) {
     const rowKey = this.getRowKey(row);
-    const parsedQty = Number.parseInt(this.getDraftStock(row), 10);
+    const parsedQty = this.parseQty(this.getDraftStock(row));
     if (!Number.isFinite(parsedQty)) {
       this.globalError.set('Cantidad inválida para inventario.');
       return;
@@ -415,7 +497,7 @@ export class InventoryPage {
           this.getRowKey(current) === rowKey ? { ...current, stockOnHandQty: parsedQty } : current,
         ),
       );
-      this.stockDrafts.update((state) => ({ ...state, [rowKey]: `${parsedQty}` }));
+      this.stockDrafts.update((state) => ({ ...state, [rowKey]: this.formatQty(parsedQty) }));
     } catch (error) {
       this.globalError.set(this.toUiError(error));
     } finally {
@@ -508,6 +590,19 @@ export class InventoryPage {
 
   private getRowKey(row: InventoryRow) {
     return `${row.itemType}-${row.itemId}`;
+  }
+
+  private parseQty(value: string) {
+    const parsed = Number.parseFloat(value);
+    if (!Number.isFinite(parsed)) {
+      return Number.NaN;
+    }
+
+    return Number(parsed.toFixed(3));
+  }
+
+  formatQty(value: number) {
+    return value.toFixed(3);
   }
 
   toReasonUi(reason: string | null | undefined, movementKind?: string | null) {

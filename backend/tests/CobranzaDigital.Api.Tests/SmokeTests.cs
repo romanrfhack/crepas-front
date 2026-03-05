@@ -142,6 +142,7 @@ public sealed partial class CobranzaDigitalApiFactory : WebApplicationFactory<Pr
             var settings = new Dictionary<string, string?>
             {
                 ["Features:UserAdmin"] = "true",
+                ["inventory.v2.enabled"] = "true",
                 ["IdentitySeed:AdminEmail"] = "admin@test.local",
                 ["IdentitySeed:AdminPassword"] = "Admin1234!",
                 // NOTE: tests must force deterministic JWT values to avoid token validation drift.

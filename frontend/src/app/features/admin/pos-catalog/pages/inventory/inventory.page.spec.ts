@@ -107,6 +107,14 @@ describe('InventoryPage', () => {
                 isInventoryTracked: true,
               },
             ]),
+            listInventoryV2: vi.fn().mockResolvedValue({
+              items: [
+                { itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 },
+              ],
+              totalCount: 1,
+              page: 1,
+              pageSize: 10,
+            }),
           },
         },
         {
@@ -234,6 +242,57 @@ describe('InventoryPage', () => {
 
     const row = fixture.nativeElement.querySelector('[data-testid="inventory-history-row-adj-2"]');
     expect(row).not.toBeNull();
+  });
+
+  it('saveInventoryRow conserva decimales en payload', async () => {
+    const api = TestBed.inject(PosInventoryAdminApiService);
+    const upsertSpy = vi.spyOn(api, 'upsertInventory').mockResolvedValue({
+      storeId: 'store-1',
+      itemType: 'Product',
+      itemId: 'product-1',
+      onHandQty: 1.25,
+      updatedAtUtc: '2026-01-01T00:00:00Z',
+    });
+
+    const row = fixture.componentInstance.items()[0]!;
+    fixture.componentInstance.setDraftStock(row, '1.250');
+    await fixture.componentInstance.saveInventoryRow(row);
+
+    expect(upsertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onHandQty: 1.25,
+      }),
+    );
+  });
+
+  it('formatQty renderiza 3 decimales', () => {
+    expect(fixture.componentInstance.formatQty(1.25)).toBe('1.250');
+  });
+
+
+  it('inventory v2 renderiza tabla y permite retry en error', async () => {
+    const component = fixture.componentInstance as InventoryPage & { inventoryV2Enabled: boolean };
+    component.inventoryV2Enabled = true;
+    const api = TestBed.inject(PosInventoryAdminApiService);
+    vi.spyOn(api, 'listInventoryV2').mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce({
+      items: [
+        { itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 },
+      ],
+      totalCount: 1,
+      page: 1,
+      pageSize: 10,
+    });
+
+    await fixture.componentInstance.loadInventoryV2();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="inventory-v2-error"]')).not.toBeNull();
+
+    const retry = fixture.nativeElement.querySelector('[data-testid="inventory-v2-retry"]') as HTMLButtonElement;
+    retry.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="inventory-v2-table"]')).not.toBeNull();
   });
 
   it('renders inventory context badge when contextual filters are present', () => {

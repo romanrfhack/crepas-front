@@ -4,6 +4,8 @@ import { ApiClient } from '../../../../core/services/api-client';
 import {
   CatalogItemType,
   CatalogInventoryItemDto,
+  InventoryBalancesQuery,
+  PagedInventoryBalancesDto,
   PosInventorySettingsDto,
   StoreInventoryItemDto,
   UpsertCatalogInventoryRequest,
@@ -33,6 +35,26 @@ export class PosInventoryAdminApiService {
     return firstValueFrom(this.apiClient.get<CatalogInventoryItemDto[]>(`${this.releaseCPath}?${query.toString()}`));
   }
 
+
+  listInventoryV2(queryParams: InventoryBalancesQuery) {
+    const query = new URLSearchParams({ storeId: queryParams.storeId });
+    if (queryParams.q?.trim()) {
+      query.set('q', queryParams.q.trim());
+    }
+
+    if (queryParams.categoryId?.trim()) {
+      query.set('categoryId', queryParams.categoryId.trim());
+    }
+
+    if (typeof queryParams.tracked === 'boolean') {
+      query.set('tracked', queryParams.tracked ? 'true' : 'false');
+    }
+
+    query.set('page', `${queryParams.page ?? 1}`);
+    query.set('pageSize', `${queryParams.pageSize ?? 25}`);
+
+    return firstValueFrom(this.apiClient.get<PagedInventoryBalancesDto>(`/v2/pos/inventory/balances?${query.toString()}`));
+  }
   upsertInventory(payload: UpsertCatalogInventoryRequest) {
     return firstValueFrom(this.apiClient.put<CatalogInventoryItemDto>(this.releaseCPath, payload));
   }
