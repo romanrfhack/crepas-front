@@ -237,3 +237,30 @@ export interface CatalogInventoryAdjustmentDto {
   itemSku?: string | null;
 }
 export type CatalogItemType = 'Product' | 'Extra' | 'OptionItem';
+
+export interface InventoryBalanceRowDto {
+  itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
+  itemId: string;
+  name: string;
+  sku?: string | null;
+  categoryName?: string | null;
+  isInventoryTracked: boolean;
+  onHandQty: number;
+  updatedAtUtc?: string | null;
+}
+
+export interface PagedInventoryBalancesDto {
+  items: InventoryBalanceRowDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface InventoryBalancesQuery {
+  storeId: string;
+  q?: string;
+  categoryId?: string;
+  tracked?: boolean;
+  page?: number;
+  pageSize?: number;
+}
