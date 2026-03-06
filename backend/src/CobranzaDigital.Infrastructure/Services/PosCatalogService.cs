@@ -460,7 +460,14 @@ public sealed class PosCatalogService : IPosCatalogService
     public async Task<PagedInventoryBalancesDto> GetInventoryBalancesV2Async(Guid storeId, string? query, Guid? categoryId, bool? tracked, int page, int pageSize, CancellationToken ct)
     {
         var tenantId = RequireTenantId();
-        await EnsureStoreBelongsToTenantAsync(storeId, tenantId, ct).ConfigureAwait(false);
+        var storeBelongs = await _db.Stores.AsNoTracking().AnyAsync(x => x.Id == storeId && x.TenantId == tenantId, ct).ConfigureAwait(false);
+        if (!storeBelongs)
+        {
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["storeId"] = ["Store does not belong to tenant."]
+            });
+        }
 
         var safePage = Math.Max(page, 1);
         var safePageSize = Math.Clamp(pageSize, 1, 200);
@@ -478,15 +485,17 @@ public sealed class PosCatalogService : IPosCatalogService
                           where string.IsNullOrWhiteSpace(term)
                                 || product.Name.Contains(term!)
                                 || (product.ExternalCode != null && product.ExternalCode.Contains(term!))
-                          select new InventoryBalanceRowDto(
-                              "Product",
-                              product.Id,
+                          select new
+                          {
+                              ItemType = "Product",
+                              ItemId = product.Id,
                               product.Name,
-                              product.ExternalCode,
-                              category.Name,
+                              Sku = product.ExternalCode,
+                              CategoryName = category.Name,
                               product.IsInventoryTracked,
-                              balance != null ? balance.OnHandQty : 0m,
-                              balance != null ? balance.UpdatedAtUtc : null);
+                              OnHandQty = balance != null ? balance.OnHandQty : 0m,
+                              UpdatedAtUtc = balance != null ? balance.UpdatedAtUtc : null
+                          };
 
         var extraRows = from extra in _db.Extras.AsNoTracking()
                         where extra.CatalogTemplateId == catalogTemplateId && extra.IsActive
@@ -495,15 +504,17 @@ public sealed class PosCatalogService : IPosCatalogService
                         from balance in extraBalances.DefaultIfEmpty()
                         where !tracked.HasValue || extra.IsInventoryTracked == tracked.Value
                         where string.IsNullOrWhiteSpace(term) || extra.Name.Contains(term!)
-                        select new InventoryBalanceRowDto(
-                            "Extra",
-                            extra.Id,
+                        select new
+                        {
+                            ItemType = "Extra",
+                            ItemId = extra.Id,
                             extra.Name,
-                            null,
-                            null,
+                            Sku = (string?)null,
+                            CategoryName = (string?)null,
                             extra.IsInventoryTracked,
-                            balance != null ? balance.OnHandQty : 0m,
-                            balance != null ? balance.UpdatedAtUtc : null);
+                            OnHandQty = balance != null ? balance.OnHandQty : 0m,
+                            UpdatedAtUtc = balance != null ? balance.UpdatedAtUtc : null
+                        };
 
         var merged = productRows.Concat(extraRows);
 
@@ -513,6 +524,15 @@ public sealed class PosCatalogService : IPosCatalogService
             .ThenBy(x => x.ItemType)
             .Skip((safePage - 1) * safePageSize)
             .Take(safePageSize)
+            .Select(x => new InventoryBalanceRowDto(
+                x.ItemType,
+                x.ItemId,
+                x.Name,
+                x.Sku,
+                x.CategoryName,
+                x.IsInventoryTracked,
+                x.OnHandQty,
+                x.UpdatedAtUtc))
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
