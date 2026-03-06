@@ -1,9 +1,10 @@
-import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { PosInventoryAdminApiService } from '../../services/pos-inventory-admin-api.service';
 import { InventoryFacadeService } from './inventory-facade.service';
 
 describe('InventoryFacadeService', () => {
-  it('builds query with filters and handles debounce search', fakeAsync(async () => {
+  it('builds query with filters and handles debounce search', async () => {
+    vi.useFakeTimers();
     const listInventoryV2 = vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 10 });
     TestBed.configureTestingModule({
       providers: [InventoryFacadeService, { provide: PosInventoryAdminApiService, useValue: { listInventoryV2 } }],
@@ -14,7 +15,7 @@ describe('InventoryFacadeService', () => {
     service.updateTracked('true');
     service.updateCategory('cat-1');
     service.updateSearch(' latte ');
-    tick(350);
+    await vi.advanceTimersByTimeAsync(350);
     await service.load();
 
     expect(listInventoryV2).toHaveBeenCalledWith({
@@ -25,7 +26,8 @@ describe('InventoryFacadeService', () => {
       page: 1,
       pageSize: 10,
     });
-  }));
+    vi.useRealTimers();
+  });
 
   it('sets error message when API fails', async () => {
     const listInventoryV2 = vi.fn().mockRejectedValue(new Error('boom'));

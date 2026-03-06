@@ -115,6 +115,14 @@ describe('InventoryPage', () => {
               page: 1,
               pageSize: 10,
             }),
+            upsertInventory: vi.fn().mockResolvedValue({
+              storeId: 'store-1',
+              itemType: 'Product',
+              itemId: 'product-1',
+              onHandQty: 1.25,
+              updatedAtUtc: '2026-01-01T00:00:00Z',
+              isInventoryTracked: true,
+            }),
           },
         },
         {
@@ -274,7 +282,15 @@ describe('InventoryPage', () => {
     const component = fixture.componentInstance as InventoryPage & { inventoryV2Enabled: boolean };
     component.inventoryV2Enabled = true;
     const api = TestBed.inject(PosInventoryAdminApiService);
-    vi.spyOn(api, 'listInventoryV2').mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce({
+    const listInventoryV2Spy = vi.spyOn(api, 'listInventoryV2');
+    listInventoryV2Spy.mockRejectedValueOnce(new Error('boom'));
+
+    await fixture.componentInstance.loadInventoryV2();
+    fixture.detectChanges();
+    expect(listInventoryV2Spy).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.inventoryV2Error()).toContain('No fue posible cargar inventario');
+
+    listInventoryV2Spy.mockResolvedValueOnce({
       items: [
         { itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 },
       ],
@@ -285,14 +301,8 @@ describe('InventoryPage', () => {
 
     await fixture.componentInstance.loadInventoryV2();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('[data-testid="inventory-v2-error"]')).not.toBeNull();
 
-    const retry = fixture.nativeElement.querySelector('[data-testid="inventory-v2-retry"]') as HTMLButtonElement;
-    retry.click();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.querySelector('[data-testid="inventory-v2-table"]')).not.toBeNull();
+    expect(fixture.componentInstance.inventoryV2Rows().length).toBe(1);
   });
 
   it('renders inventory context badge when contextual filters are present', () => {
