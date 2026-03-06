@@ -494,7 +494,7 @@ public sealed class PosCatalogService : IPosCatalogService
                               CategoryName = category.Name,
                               product.IsInventoryTracked,
                               OnHandQty = balance != null ? balance.OnHandQty : 0m,
-                              UpdatedAtUtc = balance != null ? balance.UpdatedAtUtc : null
+                              UpdatedAtUtc = balance != null ? balance.UpdatedAtUtc : (DateTimeOffset?)null
                           };
 
         var extraRows = from extra in _db.Extras.AsNoTracking()
@@ -513,7 +513,7 @@ public sealed class PosCatalogService : IPosCatalogService
                             CategoryName = (string?)null,
                             extra.IsInventoryTracked,
                             OnHandQty = balance != null ? balance.OnHandQty : 0m,
-                            UpdatedAtUtc = balance != null ? balance.UpdatedAtUtc : null
+                            UpdatedAtUtc = balance != null ? balance.UpdatedAtUtc : (DateTimeOffset?)null
                         };
 
         var merged = productRows.Concat(extraRows);
@@ -1218,7 +1218,6 @@ public sealed class PosCatalogService : IPosCatalogService
     private async Task<ProductOverrideDto> BuildOverrideDto(ProductGroupOverride o, CancellationToken ct) { var ids = await _db.ProductGroupOverrideAllowedItems.AsNoTracking().Where(x => x.ProductGroupOverrideId == o.Id).Select(x => x.OptionItemId).ToListAsync(ct).ConfigureAwait(false); return new(o.Id, o.ProductId, o.GroupKey, o.IsActive, ids); }
     private async Task AuditAsync(string entity, string action, Guid entityId, object? before, object? after, CancellationToken ct) { await _auditLogger.LogAsync(new AuditEntry(action, null, null, entity, entityId.ToString(), before, after, "Api", null, DateTime.UtcNow), ct).ConfigureAwait(false); PosCatalogLog.AuditWritten(_logger, action, entity, entityId); }
     private Guid RequireTenantId() => _tenantContext.EffectiveTenantId ?? throw new ForbiddenException("Tenant context is required.");
-
 
     private async Task<Guid> GetTenantCatalogTemplateIdAsync(CancellationToken ct)
     {
