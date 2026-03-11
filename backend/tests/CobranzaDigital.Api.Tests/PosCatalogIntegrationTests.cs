@@ -886,7 +886,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token);
         req.Content = JsonContent.Create(new { storeId = Guid.NewGuid(), itemType = "Product", itemId = Guid.NewGuid(), operationType = "Delta", quantityDelta = 1m, reasonCode = "Correction", clientOperationId = Guid.NewGuid().ToString("D") });
         using var resp = await _client.SendAsync(req);
-        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
     private static async Task AssertStatusAsync(HttpResponseMessage response, HttpStatusCode expectedStatus)
