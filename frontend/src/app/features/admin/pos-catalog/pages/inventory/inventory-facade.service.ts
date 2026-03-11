@@ -64,6 +64,16 @@ export class InventoryFacadeService {
     this.filters.update((state) => ({ ...state, page: Math.max(page, 1) }));
   }
 
+
+
+  invalidate() {
+    this.cache.clear();
+  }
+
+  patchRow(itemType: string, itemId: string, onHandQty: number, balanceVersion: string) {
+    this.rows.update((rows) => rows.map((row) => row.itemType === itemType && row.itemId === itemId ? { ...row, onHandQty, balanceVersion } : row));
+  }
+
   async load() {
     const filters = this.filters();
     if (!filters.storeId) {
