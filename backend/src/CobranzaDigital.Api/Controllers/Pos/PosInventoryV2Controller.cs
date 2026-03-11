@@ -35,4 +35,10 @@ public sealed class PosInventoryV2Controller : ControllerBase
         [FromQuery] int pageSize = 25,
         CancellationToken ct = default) =>
         _service.GetInventoryBalancesV2Async(storeId, q, categoryId, tracked, page, pageSize, ct);
+
+    [HttpPost("adjustments")]
+    public Task<InventoryAdjustmentV2ResultDto> CreateAdjustment(
+        [FromBody] CreateInventoryAdjustmentV2Request request,
+        CancellationToken ct = default) =>
+        _service.CreateInventoryAdjustmentV2Async(request, ct);
 }

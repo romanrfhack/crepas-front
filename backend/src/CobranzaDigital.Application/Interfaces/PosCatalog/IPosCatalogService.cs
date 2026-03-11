@@ -54,6 +54,7 @@ public interface IPosCatalogService
     Task<StoreInventoryItemDto> UpsertInventoryAsync(UpsertStoreInventoryRequest request, CancellationToken ct);
     Task<IReadOnlyList<CatalogInventoryItemDto>> GetCatalogInventoryAsync(Guid storeId, string? itemType, Guid? itemId, bool onlyTracked, CancellationToken ct);
     Task<PagedInventoryBalancesDto> GetInventoryBalancesV2Async(Guid storeId, string? query, Guid? categoryId, bool? tracked, int page, int pageSize, CancellationToken ct);
+    Task<InventoryAdjustmentV2ResultDto> CreateInventoryAdjustmentV2Async(CreateInventoryAdjustmentV2Request request, CancellationToken ct);
     Task<CatalogInventoryItemDto> UpsertCatalogInventoryAsync(UpsertCatalogInventoryRequest request, CancellationToken ct);
     Task<CatalogInventoryAdjustmentDto> CreateCatalogInventoryAdjustmentAsync(CreateCatalogInventoryAdjustmentRequest request, CancellationToken ct);
     Task<IReadOnlyList<CatalogInventoryAdjustmentDto>> GetCatalogInventoryAdjustmentsAsync(Guid storeId, string? itemType, Guid? itemId, DateTimeOffset? fromUtc, DateTimeOffset? toUtc, CancellationToken ct);

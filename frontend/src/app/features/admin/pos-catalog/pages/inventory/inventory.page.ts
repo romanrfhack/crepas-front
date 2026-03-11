@@ -7,7 +7,9 @@ import {
   CatalogInventoryItemDto,
   CatalogItemType,
   CreateCatalogInventoryAdjustmentRequest,
+  CreateInventoryAdjustmentV2Request,
   InventoryAdjustmentReason,
+  InventoryBalanceRowDto,
 } from '../../models/pos-catalog.models';
 import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
 import { PosInventoryAdminApiService } from '../../services/pos-inventory-admin-api.service';
@@ -20,6 +22,7 @@ import { AuthService } from '../../../../auth/services/auth.service';
 import { PlatformTenantContextService } from '../../../../platform/services/platform-tenant-context.service';
 import { environment } from '../../../../../../environments/environment';
 import { InventoryFacadeService } from './inventory-facade.service';
+import { InventoryAdjustmentDialogComponent } from './inventory-adjustment-dialog.component';
 
 interface InventoryRow {
   itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
@@ -38,7 +41,7 @@ interface ItemOption {
 
 @Component({
   selector: 'app-pos-inventory-page',
-  imports: [FormsModule, ReactiveFormsModule],
+  imports: [FormsModule, ReactiveFormsModule, InventoryAdjustmentDialogComponent],
   template: `
     <section class="inventory-page" data-testid="inventory-page">
       <h2>Inventory Lite</h2>
@@ -86,12 +89,12 @@ interface ItemOption {
             <button type="button" data-testid="inventory-v2-retry" (click)="loadInventoryV2()">Reintentar</button>
           } @else {
             <table data-testid="inventory-v2-table">
-              <thead><tr><th>SKU</th><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Tracked</th><th>OnHand</th></tr></thead>
+              <thead><tr><th>SKU</th><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Tracked</th><th>OnHand</th><th>Acciones</th></tr></thead>
               <tbody>
                 @for (row of inventoryV2Rows(); track row.itemType + '-' + row.itemId) {
-                  <tr><td>{{ row.sku ?? '—' }}</td><td>{{ row.name }}</td><td>{{ row.itemType }}</td><td>{{ row.categoryName ?? '—' }}</td><td>{{ row.isInventoryTracked ? 'Sí' : 'No' }}</td><td>{{ formatQty(row.onHandQty) }}</td></tr>
+                  <tr><td>{{ row.sku ?? '—' }}</td><td>{{ row.name }}</td><td>{{ row.itemType }}</td><td>{{ row.categoryName ?? '—' }}</td><td>{{ row.isInventoryTracked ? 'Sí' : 'No' }}</td><td>{{ formatQty(row.onHandQty) }}</td><td><button type="button" [disabled]="!row.isInventoryTracked" [attr.data-testid]="'inventory-v2-adjust-' + row.itemType + '-' + row.itemId" (click)="openAdjustmentDialog(row)">Ajustar</button></td></tr>
                 } @empty {
-                  <tr><td colspan="6" data-testid="inventory-v2-empty">Sin resultados.</td></tr>
+                  <tr><td colspan="7" data-testid="inventory-v2-empty">Sin resultados.</td></tr>
                 }
               </tbody>
             </table>
@@ -148,6 +151,19 @@ interface ItemOption {
           </tbody>
         </table>
       </section>
+
+
+      @if (adjustmentDialogOpen() && selectedAdjustmentRow(); as selectedRow) {
+        <app-inventory-adjustment-dialog
+          [row]="selectedRow"
+          [storeId]="storeIdControl.value"
+          (dismissed)="closeAdjustmentDialog()"
+          (confirm)="submitInventoryV2Adjustment($event)"
+        />
+        @if (adjustRetryAvailable()) {
+          <button type="button" data-testid="inventory-v2-adjust-retry" (click)="retryLastInventoryV2Adjustment()">Reintentar último ajuste</button>
+        }
+      }
 
       <form class="card" data-testid="inventory-adjust-form" (ngSubmit)="submitAdjustment()">
         <h3>Nuevo ajuste</h3>
@@ -330,6 +346,10 @@ export class InventoryPage {
   readonly inventoryV2Loading = this.inventoryFacade.loading;
   readonly inventoryV2Error = this.inventoryFacade.error;
   readonly inventoryV2TotalCount = this.inventoryFacade.totalCount;
+  readonly adjustmentDialogOpen = signal(false);
+  readonly selectedAdjustmentRow = signal<InventoryBalanceRowDto | null>(null);
+  readonly lastInventoryV2Payload = signal<CreateInventoryAdjustmentV2Request | null>(null);
+  readonly adjustRetryAvailable = computed(() => this.lastInventoryV2Payload() !== null && !this.adjustBusy());
 
   readonly availableItems = computed(() =>
     this.adjustItemTypeControl.value === 'Extra' ? this.extras() : this.products(),
@@ -436,6 +456,81 @@ export class InventoryPage {
     ];
 
     return chunks.filter((item) => !!item).join(' · ');
+  }
+
+
+  openAdjustmentDialog(row: InventoryBalanceRowDto) {
+    this.adjustErrorReason.set(null);
+    this.adjustSuccess.set(null);
+    this.selectedAdjustmentRow.set(row);
+    this.adjustmentDialogOpen.set(true);
+  }
+
+  closeAdjustmentDialog() {
+    this.adjustmentDialogOpen.set(false);
+    this.selectedAdjustmentRow.set(null);
+  }
+
+  async submitInventoryV2Adjustment(input: { operationType: 'Delta' | 'Set'; quantity: number; reasonCode: InventoryAdjustmentReason; reference: string | null; note: string | null }) {
+    const row = this.selectedAdjustmentRow();
+    const storeId = this.storeIdControl.value.trim();
+    if (!row || !storeId) {
+      return;
+    }
+
+    const clientOperationId = globalThis.crypto?.randomUUID() ?? `${Date.now()}-${Math.random()}`;
+    const payload: CreateInventoryAdjustmentV2Request = {
+      storeId,
+      itemType: row.itemType,
+      itemId: row.itemId,
+      operationType: input.operationType,
+      quantityDelta: input.operationType === 'Delta' ? input.quantity : null,
+      quantitySet: input.operationType === 'Set' ? input.quantity : null,
+      reasonCode: input.reasonCode,
+      reference: input.reference,
+      note: input.note,
+      clientOperationId,
+      expectedVersion: input.operationType === 'Set' ? (row.balanceVersion ?? null) : null,
+    };
+
+    this.lastInventoryV2Payload.set(payload);
+    await this.executeInventoryV2Adjustment(payload, true);
+  }
+
+  async retryLastInventoryV2Adjustment() {
+    const payload = this.lastInventoryV2Payload();
+    if (!payload) {
+      return;
+    }
+
+    await this.executeInventoryV2Adjustment(payload, false);
+  }
+
+  private async executeInventoryV2Adjustment(payload: CreateInventoryAdjustmentV2Request, closeDialogOnSuccess: boolean) {
+    this.adjustBusy.set(true);
+    this.adjustErrorReason.set(null);
+    this.adjustSuccess.set(null);
+
+    try {
+      const result = await this.api.createInventoryAdjustmentV2(payload);
+      this.adjustSuccess.set('AdjustmentCreated');
+      this.inventoryFacade.invalidate();
+      await this.loadInventoryV2();
+      await this.loadHistory();
+      if (closeDialogOnSuccess) {
+        this.closeAdjustmentDialog();
+      }
+      this.inventoryFacade.patchRow(result.itemType, result.itemId, result.qtyAfter, result.balanceVersion);
+    } catch (error) {
+      const reason = this.toUiErrorReason(error);
+      this.adjustErrorReason.set(reason);
+      if (reason === 'CONCURRENCY_CONFLICT') {
+        this.inventoryFacade.invalidate();
+        await this.loadInventoryV2();
+      }
+    } finally {
+      this.adjustBusy.set(false);
+    }
   }
 
   async loadInventory() {
@@ -626,10 +721,10 @@ export class InventoryPage {
   }
 
   private toUiErrorReason(error: unknown) {
-    if (error instanceof HttpErrorResponse && error.status === 409) {
-      return String(error.error?.reason ?? 'Conflict');
+    if (error instanceof HttpErrorResponse && (error.status === 409 || error.status === 400)) {
+      return String(error.error?.reason ?? 'VALIDATION_ERROR');
     }
 
-    return 'RequestFailed';
+    return 'REQUEST_FAILED';
   }
 }

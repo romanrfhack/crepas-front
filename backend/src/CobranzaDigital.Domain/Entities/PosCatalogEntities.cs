@@ -93,6 +93,7 @@ public sealed class CatalogInventoryBalance : Entity
     public Guid ItemId { get; set; }
     public decimal OnHandQty { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
+    public byte[] RowVersion { get; set; } = [];
 }
 
 public sealed class CatalogInventoryAdjustment : Entity

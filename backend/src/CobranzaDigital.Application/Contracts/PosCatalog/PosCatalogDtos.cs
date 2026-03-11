@@ -60,8 +60,32 @@ public sealed record CatalogInventoryItemDto(Guid StoreId, string ItemType, Guid
 public sealed record UpsertCatalogInventoryRequest(Guid StoreId, string ItemType, Guid ItemId, decimal OnHandQty, string? Reason = null, string? Reference = null);
 public sealed record CreateCatalogInventoryAdjustmentRequest(Guid StoreId, string ItemType, Guid ItemId, decimal QuantityDelta, string Reason, string? Reference = null, string? Note = null, string? ClientOperationId = null);
 public sealed record CatalogInventoryAdjustmentDto(Guid Id, Guid StoreId, string ItemType, Guid ItemId, decimal QtyBefore, decimal QtyDelta, decimal QtyAfter, string Reason, string? Reference, string? Note, string? ClientOperationId, DateTimeOffset CreatedAtUtc, Guid? PerformedByUserId, string? ItemName = null, string? ItemSku = null, string? ReferenceType = null, Guid? ReferenceId = null, string? MovementKind = null);
-public sealed record InventoryBalanceRowDto(string ItemType, Guid ItemId, string Name, string? Sku, string? CategoryName, bool IsInventoryTracked, decimal OnHandQty, DateTimeOffset? UpdatedAtUtc);
+public sealed record InventoryBalanceRowDto(string ItemType, Guid ItemId, string Name, string? Sku, string? CategoryName, bool IsInventoryTracked, decimal OnHandQty, DateTimeOffset? UpdatedAtUtc, string? BalanceVersion = null);
 public sealed record PagedInventoryBalancesDto(IReadOnlyList<InventoryBalanceRowDto> Items, int TotalCount, int Page, int PageSize);
+public sealed record CreateInventoryAdjustmentV2Request(
+    Guid StoreId,
+    string ItemType,
+    Guid ItemId,
+    string OperationType,
+    decimal? QuantityDelta,
+    decimal? QuantitySet,
+    string ReasonCode,
+    string? Reference,
+    string? Note,
+    string ClientOperationId,
+    string? ExpectedVersion = null);
+public sealed record InventoryAdjustmentV2ResultDto(
+    Guid AdjustmentId,
+    Guid StoreId,
+    string ItemType,
+    Guid ItemId,
+    decimal QtyBefore,
+    decimal QtyAfter,
+    decimal DeltaApplied,
+    string BalanceVersion,
+    DateTimeOffset CreatedAtUtc,
+    string ReasonCode,
+    string? Reference);
 public sealed record InventoryReportRowDto(string ItemType, Guid ItemId, string ItemName, string? ItemSku, Guid StoreId, decimal StockOnHandQty, bool IsInventoryTracked, string AvailabilityReason, string? StoreOverrideState, DateTimeOffset? UpdatedAtUtc, DateTimeOffset? LastAdjustmentAtUtc);
 public sealed record PosInventorySettingsDto(bool ShowOnlyInStock);
 public sealed record UpdatePosInventorySettingsRequest(bool ShowOnlyInStock);

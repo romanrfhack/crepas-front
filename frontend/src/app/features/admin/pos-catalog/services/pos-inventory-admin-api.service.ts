@@ -4,6 +4,8 @@ import { ApiClient } from '../../../../core/services/api-client';
 import {
   CatalogItemType,
   CatalogInventoryItemDto,
+  CreateInventoryAdjustmentV2Request,
+  InventoryAdjustmentV2ResultDto,
   InventoryBalancesQuery,
   PagedInventoryBalancesDto,
   PosInventorySettingsDto,
@@ -54,6 +56,11 @@ export class PosInventoryAdminApiService {
     query.set('pageSize', `${queryParams.pageSize ?? 25}`);
 
     return firstValueFrom(this.apiClient.get<PagedInventoryBalancesDto>(`/v2/pos/inventory/balances?${query.toString()}`));
+  }
+
+
+  createInventoryAdjustmentV2(payload: CreateInventoryAdjustmentV2Request) {
+    return firstValueFrom(this.apiClient.post<InventoryAdjustmentV2ResultDto>('/v2/pos/inventory/adjustments', payload));
   }
   upsertInventory(payload: UpsertCatalogInventoryRequest) {
     return firstValueFrom(this.apiClient.put<CatalogInventoryItemDto>(this.releaseCPath, payload));

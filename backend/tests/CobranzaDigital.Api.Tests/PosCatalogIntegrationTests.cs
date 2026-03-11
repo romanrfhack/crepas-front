@@ -566,7 +566,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             using var negativeResp = await _client.SendAsync(negativeReq);
             Assert.Equal(HttpStatusCode.Conflict, negativeResp.StatusCode);
             var payload = await negativeResp.Content.ReadFromJsonAsync<JsonElement>();
-            Assert.Equal("NegativeStockNotAllowed", payload.GetProperty("reason").GetString());
+            Assert.Equal("NEGATIVE_STOCK", payload.GetProperty("reason").GetString());
         }
     }
 
@@ -803,6 +803,92 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+
+    [Fact]
+    public async Task InventoryV2_Adjustments_Are_Idempotent_By_ClientOperationId()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-v2-idem-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 Idem Product", externalCode = "IDEM-V2", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+        var opId = Guid.NewGuid().ToString("D");
+
+        using var req1 = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token);
+        req1.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = product.Id, operationType = "Delta", quantityDelta = 2m, reasonCode = "Correction", clientOperationId = opId });
+        using var resp1 = await _client.SendAsync(req1);
+        Assert.Equal(HttpStatusCode.OK, resp1.StatusCode);
+        var first = (await resp1.Content.ReadFromJsonAsync<InventoryAdjustmentV2Response>())!;
+
+        using var req2 = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token);
+        req2.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = product.Id, operationType = "Delta", quantityDelta = 2m, reasonCode = "Correction", clientOperationId = opId });
+        using var resp2 = await _client.SendAsync(req2);
+        Assert.Equal(HttpStatusCode.OK, resp2.StatusCode);
+        var second = (await resp2.Content.ReadFromJsonAsync<InventoryAdjustmentV2Response>())!;
+
+        Assert.Equal(first.AdjustmentId, second.AdjustmentId);
+        Assert.Equal(first.QtyAfter, second.QtyAfter);
+    }
+
+    [Fact]
+    public async Task InventoryV2_Adjustments_Reject_Negative_Stock()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-v2-neg-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 Negative Product", externalCode = "NEG-V2", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token);
+        req.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = product.Id, operationType = "Delta", quantityDelta = -1m, reasonCode = "Waste", clientOperationId = Guid.NewGuid().ToString("D") });
+        using var resp = await _client.SendAsync(req);
+        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+        var payload = (await resp.Content.ReadFromJsonAsync<JsonElement>());
+        Assert.Equal("NEGATIVE_STOCK", payload.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task InventoryV2_Adjustments_Set_Uses_Concurrency_Version()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-v2-con-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 Concurrency Product", externalCode = "CON-V2", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        using (var seedReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token))
+        {
+            seedReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = product.Id, operationType = "Delta", quantityDelta = 3m, reasonCode = "Correction", clientOperationId = Guid.NewGuid().ToString("D") });
+            using var seedResp = await _client.SendAsync(seedReq);
+            Assert.Equal(HttpStatusCode.OK, seedResp.StatusCode);
+        }
+
+        using var balancesReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/balances?storeId={snapshot.StoreId:D}&q=CON-V2", token);
+        using var balancesResp = await _client.SendAsync(balancesReq);
+        var balances = (await balancesResp.Content.ReadFromJsonAsync<PagedInventoryBalancesResponse>())!;
+        var row = Assert.Single(balances.Items);
+        Assert.False(string.IsNullOrWhiteSpace(row.BalanceVersion));
+
+        using var setReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token);
+        setReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = product.Id, operationType = "Set", quantitySet = 2m, expectedVersion = row.BalanceVersion, reasonCode = "ManualCount", clientOperationId = Guid.NewGuid().ToString("D") });
+        using var setResp = await _client.SendAsync(setReq);
+        Assert.Equal(HttpStatusCode.OK, setResp.StatusCode);
+
+        using var staleReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token);
+        staleReq.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = product.Id, operationType = "Set", quantitySet = 1m, expectedVersion = row.BalanceVersion, reasonCode = "ManualCount", clientOperationId = Guid.NewGuid().ToString("D") });
+        using var staleResp = await _client.SendAsync(staleReq);
+        Assert.Equal(HttpStatusCode.Conflict, staleResp.StatusCode);
+        var stalePayload = (await staleResp.Content.ReadFromJsonAsync<JsonElement>());
+        Assert.Equal("CONCURRENCY_CONFLICT", stalePayload.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task InventoryV2_Adjustments_Reject_Store_From_Other_Tenant()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token);
+        req.Content = JsonContent.Create(new { storeId = Guid.NewGuid(), itemType = "Product", itemId = Guid.NewGuid(), operationType = "Delta", quantityDelta = 1m, reasonCode = "Correction", clientOperationId = Guid.NewGuid().ToString("D") });
+        using var resp = await _client.SendAsync(req);
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
     private static async Task AssertStatusAsync(HttpResponseMessage response, HttpStatusCode expectedStatus)
     {
         if (response.StatusCode == expectedStatus)
@@ -934,7 +1020,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record StoreInventoryItemResponse(Guid StoreId, Guid ProductId, string ProductName, string? ProductSku, decimal OnHand, decimal Reserved, DateTimeOffset? UpdatedAtUtc, bool HasInventoryRow);
     private sealed record CatalogInventoryAdjustmentResponse(Guid Id, Guid StoreId, string ItemType, Guid ItemId, decimal QtyBefore, decimal QtyDelta, decimal QtyAfter, string Reason, string? Reference, string? Note, string? ClientOperationId, DateTimeOffset CreatedAtUtc, Guid? PerformedByUserId, string? ItemName = null, string? ItemSku = null, string? ReferenceType = null, Guid? ReferenceId = null, string? MovementKind = null);
     private sealed record InventoryReportRowResponse(string ItemType, Guid ItemId, string ItemName, string? ItemSku, Guid StoreId, decimal StockOnHandQty, bool IsInventoryTracked, string AvailabilityReason, string? StoreOverrideState, DateTimeOffset? UpdatedAtUtc, DateTimeOffset? LastAdjustmentAtUtc);
-    private sealed record InventoryBalanceRowResponse(string ItemType, Guid ItemId, string Name, string? Sku, string? CategoryName, bool IsInventoryTracked, decimal OnHandQty, DateTimeOffset? UpdatedAtUtc);
+    private sealed record InventoryBalanceRowResponse(string ItemType, Guid ItemId, string Name, string? Sku, string? CategoryName, bool IsInventoryTracked, decimal OnHandQty, DateTimeOffset? UpdatedAtUtc, string? BalanceVersion = null);
+    private sealed record InventoryAdjustmentV2Response(Guid AdjustmentId, Guid StoreId, string ItemType, Guid ItemId, decimal QtyBefore, decimal QtyAfter, decimal DeltaApplied, string BalanceVersion, DateTimeOffset CreatedAtUtc, string ReasonCode, string? Reference);
     private sealed record PagedInventoryBalancesResponse(List<InventoryBalanceRowResponse> Items, int TotalCount, int Page, int PageSize);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
     private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<OptionItemResponse> OptionItems, List<ExtraResponse> Extras, List<SnapshotOverride> Overrides, string VersionStamp);

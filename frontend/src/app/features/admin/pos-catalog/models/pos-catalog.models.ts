@@ -247,8 +247,41 @@ export interface InventoryBalanceRowDto {
   isInventoryTracked: boolean;
   onHandQty: number;
   updatedAtUtc?: string | null;
+  balanceVersion?: string | null;
 }
 
+
+
+
+export type InventoryAdjustmentOperationType = 'Delta' | 'Set';
+
+export interface CreateInventoryAdjustmentV2Request {
+  storeId: string;
+  itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
+  itemId: string;
+  operationType: InventoryAdjustmentOperationType;
+  quantityDelta?: number | null;
+  quantitySet?: number | null;
+  reasonCode: InventoryAdjustmentReasonValue;
+  reference?: string | null;
+  note?: string | null;
+  clientOperationId: string;
+  expectedVersion?: string | null;
+}
+
+export interface InventoryAdjustmentV2ResultDto {
+  adjustmentId: string;
+  storeId: string;
+  itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
+  itemId: string;
+  qtyBefore: number;
+  qtyAfter: number;
+  deltaApplied: number;
+  balanceVersion: string;
+  createdAtUtc: string;
+  reasonCode: InventoryAdjustmentReasonValue;
+  reference?: string | null;
+}
 export interface PagedInventoryBalancesDto {
   items: InventoryBalanceRowDto[];
   totalCount: number;

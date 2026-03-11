@@ -68,6 +68,7 @@ public sealed class StoreCatalogOverrideConfiguration : IEntityTypeConfiguration
         builder.Property(x => x.OverrideState).HasConversion<int>();
         builder.Property(x => x.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.Property(x => x.RowVersion).IsRowVersion();
         builder.HasIndex(x => new { x.StoreId, x.ItemType, x.ItemId }).IsUnique();
         builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
@@ -83,6 +84,7 @@ public sealed class CatalogInventoryBalanceConfiguration : IEntityTypeConfigurat
         builder.Property(x => x.ItemType).HasConversion<int>();
         builder.Property(x => x.OnHandQty).HasColumnType("decimal(18,3)");
         builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.Property(x => x.RowVersion).IsRowVersion();
         builder.HasIndex(x => new { x.StoreId, x.ItemType, x.ItemId }).IsUnique();
         builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
@@ -110,7 +112,7 @@ public sealed class CatalogInventoryAdjustmentConfiguration : IEntityTypeConfigu
         builder.HasIndex(x => new { x.StoreId, x.ItemType, x.ItemId });
         builder.HasIndex(x => new { x.StoreId, x.CreatedAtUtc });
         builder.HasIndex(x => new { x.StoreId, x.ReferenceType, x.ReferenceId });
-        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.ClientOperationId });
+        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.ClientOperationId }).IsUnique().HasFilter("[ClientOperationId] IS NOT NULL");
         builder.HasIndex(x => new { x.ReferenceType, x.ReferenceId, x.ItemType, x.ItemId, x.Reason }).IsUnique();
         builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);

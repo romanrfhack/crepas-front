@@ -12,6 +12,7 @@ describe('InventoryPage', () => {
   let fixture: ComponentFixture<InventoryPage>;
   const listAdjustments = vi.fn();
   const createAdjustment = vi.fn();
+  const createInventoryAdjustmentV2 = vi.fn();
 
   beforeEach(async () => {
     listAdjustments.mockResolvedValue([
@@ -115,6 +116,7 @@ describe('InventoryPage', () => {
               page: 1,
               pageSize: 10,
             }),
+            createInventoryAdjustmentV2,
             upsertInventory: vi.fn().mockResolvedValue({
               storeId: 'store-1',
               itemType: 'Product',
@@ -313,6 +315,100 @@ describe('InventoryPage', () => {
 
     const badge = fixture.nativeElement.querySelector('[data-testid="inventory-context-badge"]');
     expect(badge?.textContent).toContain('Store: store-9 · Tipo: Product · Búsqueda: latte');
+  });
+
+
+  it('v2 ajuste set manda expectedVersion y operationType correcto', async () => {
+    createInventoryAdjustmentV2.mockResolvedValue({
+      adjustmentId: 'adj-v2-1',
+      storeId: 'store-1',
+      itemType: 'Product',
+      itemId: 'product-1',
+      qtyBefore: 1.25,
+      qtyAfter: 3,
+      deltaApplied: 1.75,
+      balanceVersion: 'v-new',
+      createdAtUtc: '2026-01-01T00:00:00Z',
+      reasonCode: 'ManualCount',
+    });
+    fixture.componentInstance.openAdjustmentDialog({
+      itemType: 'Product',
+      itemId: 'product-1',
+      name: 'Latte',
+      sku: 'LAT-1',
+      categoryName: 'Bebidas',
+      isInventoryTracked: true,
+      onHandQty: 1.25,
+      balanceVersion: 'v-old',
+    });
+
+    await fixture.componentInstance.submitInventoryV2Adjustment({
+      operationType: 'Set',
+      quantity: 3,
+      reasonCode: 'ManualCount',
+      reference: null,
+      note: null,
+    });
+
+    expect(createInventoryAdjustmentV2).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationType: 'Set',
+        quantitySet: 3,
+        expectedVersion: 'v-old',
+      }),
+    );
+  });
+
+  it('retry reusa mismo clientOperationId', async () => {
+    createInventoryAdjustmentV2.mockRejectedValueOnce(new HttpErrorResponse({ status: 500 }));
+    createInventoryAdjustmentV2.mockResolvedValueOnce({
+      adjustmentId: 'adj-v2-2',
+      storeId: 'store-1',
+      itemType: 'Product',
+      itemId: 'product-1',
+      qtyBefore: 1.25,
+      qtyAfter: 2.25,
+      deltaApplied: 1,
+      balanceVersion: 'v-2',
+      createdAtUtc: '2026-01-01T00:00:00Z',
+      reasonCode: 'Correction',
+    });
+
+    fixture.componentInstance.openAdjustmentDialog({
+      itemType: 'Product',
+      itemId: 'product-1',
+      name: 'Latte',
+      sku: 'LAT-1',
+      categoryName: 'Bebidas',
+      isInventoryTracked: true,
+      onHandQty: 1.25,
+      balanceVersion: 'v-old',
+    });
+
+    await fixture.componentInstance.submitInventoryV2Adjustment({ operationType: 'Delta', quantity: 1, reasonCode: 'Correction', reference: null, note: null });
+    await fixture.componentInstance.retryLastInventoryV2Adjustment();
+
+    const firstPayload = createInventoryAdjustmentV2.mock.calls[0][0];
+    const secondPayload = createInventoryAdjustmentV2.mock.calls[1][0];
+    expect(firstPayload.clientOperationId).toBe(secondPayload.clientOperationId);
+  });
+
+  it('mapea conflicto de concurrencia en ajuste v2', async () => {
+    createInventoryAdjustmentV2.mockRejectedValue(new HttpErrorResponse({ status: 409, error: { reason: 'CONCURRENCY_CONFLICT' } }));
+
+    fixture.componentInstance.openAdjustmentDialog({
+      itemType: 'Product',
+      itemId: 'product-1',
+      name: 'Latte',
+      sku: 'LAT-1',
+      categoryName: 'Bebidas',
+      isInventoryTracked: true,
+      onHandQty: 1.25,
+      balanceVersion: 'v-old',
+    });
+    await fixture.componentInstance.submitInventoryV2Adjustment({ operationType: 'Set', quantity: 2, reasonCode: 'ManualCount', reference: null, note: null });
+
+    expect(fixture.componentInstance.adjustErrorReason()).toBe('CONCURRENCY_CONFLICT');
   });
 
 });
