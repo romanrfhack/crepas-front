@@ -15,6 +15,10 @@ describe('InventoryPage', () => {
   const createInventoryAdjustmentV2 = vi.fn();
 
   beforeEach(async () => {
+    listAdjustments.mockReset();
+    createAdjustment.mockReset();
+    createInventoryAdjustmentV2.mockReset();
+
     listAdjustments.mockResolvedValue([
       {
         id: 'adj-1',
