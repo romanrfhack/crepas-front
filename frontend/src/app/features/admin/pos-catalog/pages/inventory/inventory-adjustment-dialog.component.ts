@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
+import { startWith } from 'rxjs';
 import { InventoryAdjustmentReason, InventoryBalanceRowDto } from '../../models/pos-catalog.models';
 
 @Component({
@@ -55,12 +57,16 @@ export class InventoryAdjustmentDialogComponent {
   readonly referenceControl = new FormControl('', { nonNullable: true });
   readonly noteControl = new FormControl('', { nonNullable: true });
 
+  private readonly operationType = toSignal(this.operationTypeControl.valueChanges.pipe(startWith(this.operationTypeControl.value)), { initialValue: this.operationTypeControl.value });
+  private readonly quantity = toSignal(this.quantityControl.valueChanges.pipe(startWith(this.quantityControl.value)), { initialValue: this.quantityControl.value });
+  private readonly reasonCode = toSignal(this.reasonCodeControl.valueChanges.pipe(startWith(this.reasonCodeControl.value)), { initialValue: this.reasonCodeControl.value });
+
   readonly qtyBefore = computed(() => this.row()?.onHandQty ?? 0);
-  readonly qtyDelta = computed(() => this.operationTypeControl.value === 'Delta' ? this.quantityControl.value : this.quantityControl.value - this.qtyBefore());
-  readonly qtyAfter = computed(() => this.operationTypeControl.value === 'Delta' ? this.qtyBefore() + this.quantityControl.value : this.quantityControl.value);
+  readonly qtyDelta = computed(() => this.operationType() === 'Delta' ? this.quantity() : this.quantity() - this.qtyBefore());
+  readonly qtyAfter = computed(() => this.operationType() === 'Delta' ? this.qtyBefore() + this.quantity() : this.quantity());
   readonly validationError = computed(() => {
-    if (!this.reasonCodeControl.value.trim()) return 'Motivo obligatorio.';
-    if (this.operationTypeControl.value === 'Delta' && this.quantityControl.value === 0) return 'Delta debe ser distinto de cero.';
+    if (!this.reasonCode().trim()) return 'Motivo obligatorio.';
+    if (this.operationType() === 'Delta' && this.quantity() === 0) return 'Delta debe ser distinto de cero.';
     if (this.qtyAfter() < 0) return 'El resultado no puede ser negativo.';
     return '';
   });
@@ -71,9 +77,9 @@ export class InventoryAdjustmentDialogComponent {
     }
 
     this.confirm.emit({
-      operationType: this.operationTypeControl.value,
-      quantity: Number(this.quantityControl.value.toFixed(3)),
-      reasonCode: this.reasonCodeControl.value,
+      operationType: this.operationType(),
+      quantity: Number(this.quantity().toFixed(3)),
+      reasonCode: this.reasonCode(),
       reference: this.referenceControl.value.trim() || null,
       note: this.noteControl.value.trim() || null,
     });
