@@ -83,6 +83,7 @@ public sealed class StoreCatalogOverride : Entity
     public CatalogOverrideState OverrideState { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
+    public byte[] RowVersion { get; set; } = [];
 }
 
 public sealed class CatalogInventoryBalance : Entity
