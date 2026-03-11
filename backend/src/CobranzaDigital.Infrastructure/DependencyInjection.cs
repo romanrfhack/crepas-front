@@ -10,7 +10,6 @@ using CobranzaDigital.Infrastructure.Persistence;
 using CobranzaDigital.Infrastructure.Services;
 
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
