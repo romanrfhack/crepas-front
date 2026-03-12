@@ -6,6 +6,7 @@ import {
   CatalogInventoryAdjustmentDto,
   CatalogInventoryItemDto,
   CatalogItemType,
+  CategoryDto,
   CreateCatalogInventoryAdjustmentRequest,
   CreateInventoryAdjustmentV2Request,
   InventoryAdjustmentReason,
@@ -79,7 +80,18 @@ interface ItemOption {
               <option value="true">Tracked</option>
               <option value="false">No tracked</option>
             </select>
-            <input data-testid="inventory-v2-category" placeholder="category-id" (change)="onInventoryV2CategoryChange($any($event.target).value)" />
+            <select data-testid="inventory-v2-category" (change)="onInventoryV2CategoryChange($any($event.target).value)">
+              <option value="">Todas las categorías</option>
+              @for (category of categories(); track category.id) {
+                <option [value]="category.id">{{ category.name }}</option>
+              }
+            </select>
+            <div>
+              <button type="button" data-testid="inventory-v2-chip-tracked" (click)="toggleTrackedOnly()">Tracked only</button>
+              <button type="button" data-testid="inventory-v2-chip-out" (click)="applyOutOfStockFilter()">Sin stock</button>
+              <button type="button" data-testid="inventory-v2-chip-low" (click)="applyLowStockFilter()">Bajo stock</button>
+              <button type="button" data-testid="inventory-v2-chip-clear" (click)="clearStockFilters()">Limpiar stock</button>
+            </div>
           </div>
           <button type="button" data-testid="inventory-v2-load" (click)="loadInventoryV2()">Cargar grid</button>
           @if (inventoryV2Loading()) {
@@ -99,8 +111,13 @@ interface ItemOption {
               </tbody>
             </table>
             <div>
+              <select data-testid="inventory-v2-page-size" (change)="onInventoryV2PageSizeChange($any($event.target).value)">
+                <option value="25">25</option><option value="50">50</option><option value="100">100</option>
+              </select>
+              <button type="button" data-testid="inventory-v2-first" (click)="inventoryV2FirstPage()">Primera</button>
               <button type="button" data-testid="inventory-v2-prev" (click)="inventoryV2PreviousPage()">Anterior</button>
               <button type="button" data-testid="inventory-v2-next" (click)="inventoryV2NextPage()">Siguiente</button>
+              <button type="button" data-testid="inventory-v2-last" (click)="inventoryV2LastPage()">Última</button>
               <span data-testid="inventory-v2-total">Total: {{ inventoryV2TotalCount() }}</span>
             </div>
           }
@@ -383,6 +400,8 @@ export class InventoryPage {
   readonly historyRows = signal<CatalogInventoryAdjustmentDto[]>([]);
   readonly products = signal<ItemOption[]>([]);
   readonly extras = signal<ItemOption[]>([]);
+  readonly categories = signal<CategoryDto[]>([]);
+  readonly lowStockThreshold = 5;
   readonly globalError = signal<string | null>(null);
   readonly adjustErrorReason = signal<string | null>(null);
   readonly adjustSuccess = signal<string | null>(null);
@@ -488,6 +507,38 @@ export class InventoryPage {
     await this.inventoryFacade.load();
   }
 
+  async onInventoryV2PageSizeChange(value: string) {
+    const parsed = Number.parseInt(value, 10);
+    this.inventoryFacade.updatePageSize(Number.isFinite(parsed) ? parsed : 25);
+    await this.inventoryFacade.load();
+  }
+
+  async toggleTrackedOnly() {
+    const current = this.inventoryFacade.filters().tracked;
+    this.inventoryFacade.updateTracked(current === 'true' ? '' : 'true');
+    await this.inventoryFacade.load();
+  }
+
+  async applyOutOfStockFilter() {
+    this.inventoryFacade.updateOnHandRange(null, 0);
+    await this.inventoryFacade.load();
+  }
+
+  async applyLowStockFilter() {
+    this.inventoryFacade.updateOnHandRange(null, this.lowStockThreshold);
+    await this.inventoryFacade.load();
+  }
+
+  async clearStockFilters() {
+    this.inventoryFacade.updateOnHandRange(null, null);
+    await this.inventoryFacade.load();
+  }
+
+  async inventoryV2FirstPage() {
+    this.inventoryFacade.updatePage(1);
+    await this.inventoryFacade.load();
+  }
+
   async inventoryV2NextPage() {
     const currentPage = this.inventoryFacade.filters().page;
     this.inventoryFacade.updatePage(currentPage + 1);
@@ -497,6 +548,14 @@ export class InventoryPage {
   async inventoryV2PreviousPage() {
     const currentPage = this.inventoryFacade.filters().page;
     this.inventoryFacade.updatePage(Math.max(1, currentPage - 1));
+    await this.inventoryFacade.load();
+  }
+
+  async inventoryV2LastPage() {
+    const filters = this.inventoryFacade.filters();
+    const total = this.inventoryV2TotalCount();
+    const last = Math.max(1, Math.ceil(total / filters.pageSize));
+    this.inventoryFacade.updatePage(last);
     await this.inventoryFacade.load();
   }
 
@@ -768,12 +827,14 @@ export class InventoryPage {
   }
 
   private async loadCatalogItems() {
-    const [products, extras] = await Promise.all([
+    const [products, extras, categories] = await Promise.all([
       this.catalogApi.getProducts(true),
       this.catalogApi.getExtras(true),
+      this.catalogApi.getCategories(true),
     ]);
     this.products.set(products.map((item) => ({ id: item.id, name: item.name, sku: item.externalCode })));
     this.extras.set(extras.map((item) => ({ id: item.id, name: item.name })));
+    this.categories.set(categories.filter((item) => item.isActive));
 
     const firstProductId = this.products()[0]?.id;
     if (firstProductId) {

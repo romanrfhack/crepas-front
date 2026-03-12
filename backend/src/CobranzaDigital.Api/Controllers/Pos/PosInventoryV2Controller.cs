@@ -31,10 +31,12 @@ public sealed class PosInventoryV2Controller : ControllerBase
         [FromQuery] string? q,
         [FromQuery] Guid? categoryId,
         [FromQuery] bool? tracked,
+        [FromQuery] decimal? onHandMin,
+        [FromQuery] decimal? onHandMax,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25,
         CancellationToken ct = default) =>
-        _service.GetInventoryBalancesV2Async(storeId, q, categoryId, tracked, page, pageSize, ct);
+        _service.GetInventoryBalancesV2Async(storeId, q, categoryId, tracked, onHandMin, onHandMax, page, pageSize, ct);
 
 
     [HttpGet("movements")]

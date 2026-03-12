@@ -935,6 +935,55 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     }
 
 
+
+
+    [Fact]
+    public async Task InventoryV2_Balances_Clamps_PageSize_And_Applies_OnHand_Filters()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-v2-f-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var p1 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 F1", externalCode = "V2F1", categoryId = category.Id, basePrice = 30m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var p2 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 F2", externalCode = "V2F2", categoryId = category.Id, basePrice = 31m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        using (var upsert1 = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/inventory", token))
+        {
+            upsert1.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = p1.Id, onHandQty = 0m });
+            using var resp = await _client.SendAsync(upsert1);
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        }
+
+        using (var upsert2 = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/catalog/inventory", token))
+        {
+            upsert2.Content = JsonContent.Create(new { storeId = snapshot.StoreId, itemType = "Product", itemId = p2.Id, onHandQty = 9m });
+            using var resp = await _client.SendAsync(upsert2);
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        }
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/balances?storeId={snapshot.StoreId:D}&page=1&pageSize=500&onHandMax=0", token);
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = (await response.Content.ReadFromJsonAsync<PagedInventoryBalancesResponse>())!;
+        Assert.Equal(200, payload.PageSize);
+        Assert.All(payload.Items, row => Assert.True(row.OnHandQty <= 0m));
+    }
+
+    [Fact]
+    public async Task InventoryV2_Movements_Clamps_PageSize()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-v2-m-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 Clamp Product", externalCode = "V2CLAMP", categoryId = category.Id, basePrice = 40m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+        var now = DateTimeOffset.UtcNow;
+        await SeedInventoryMovementAsync(snapshot.StoreId, product.Id, now.AddDays(-1), "Correction", 2m, 1m, "Manual", "manual-1", "admin-1");
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/movements?storeId={snapshot.StoreId:D}&itemType=Product&itemId={product.Id:D}&page=1&pageSize=500", token);
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = (await response.Content.ReadFromJsonAsync<PagedInventoryMovementsResponse>())!;
+        Assert.Equal(200, payload.PageSize);
+    }
     [Fact]
     public async Task InventoryV2_Movements_Supports_Pagination_And_Filters()
     {

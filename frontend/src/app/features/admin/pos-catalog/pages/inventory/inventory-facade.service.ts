@@ -16,6 +16,8 @@ interface InventoryV2Filters {
   q: string;
   tracked: '' | 'true' | 'false';
   categoryId: string;
+  onHandMin: number | null;
+  onHandMax: number | null;
   page: number;
   pageSize: number;
 }
@@ -53,8 +55,10 @@ export class InventoryFacadeService {
     q: '',
     tracked: '',
     categoryId: '',
+    onHandMin: null,
+    onHandMax: null,
     page: 1,
-    pageSize: 10,
+    pageSize: 25,
   });
 
   readonly movementsOpen = signal(false);
@@ -73,6 +77,7 @@ export class InventoryFacadeService {
   readonly movementsError = signal<string | null>(null);
 
   private readonly cache = new Map<string, PagedInventoryBalancesDto>();
+  private readonly maxCacheEntries = 50;
   private readonly movementsCache = new Map<string, PagedInventoryMovementsDto>();
 
   constructor() {
@@ -106,6 +111,14 @@ export class InventoryFacadeService {
 
   updatePage(page: number) {
     this.filters.update((state) => ({ ...state, page: Math.max(page, 1) }));
+  }
+
+  updateOnHandRange(onHandMin: number | null, onHandMax: number | null) {
+    this.filters.update((state) => ({ ...state, onHandMin, onHandMax, page: 1 }));
+  }
+
+  updatePageSize(pageSize: number) {
+    this.filters.update((state) => ({ ...state, pageSize: Math.max(1, pageSize), page: 1 }));
   }
 
   invalidate() {
@@ -185,6 +198,8 @@ export class InventoryFacadeService {
       q: filters.q || undefined,
       categoryId: filters.categoryId || undefined,
       tracked: filters.tracked === '' ? undefined : filters.tracked === 'true',
+      onHandMin: filters.onHandMin ?? undefined,
+      onHandMax: filters.onHandMax ?? undefined,
       page: filters.page,
       pageSize: filters.pageSize,
     };
@@ -201,6 +216,12 @@ export class InventoryFacadeService {
     try {
       const response = await this.api.listInventoryV2(query);
       this.cache.set(queryKey, response);
+      if (this.cache.size > this.maxCacheEntries) {
+        const first = this.cache.keys().next();
+        if (!first.done) {
+          this.cache.delete(first.value);
+        }
+      }
       this.rows.set(response.items);
       this.totalCount.set(response.totalCount);
     } catch {
