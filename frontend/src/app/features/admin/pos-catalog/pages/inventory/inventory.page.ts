@@ -11,6 +11,7 @@ import {
   CreateInventoryAdjustmentV2Request,
   CreateInventoryBatchAdjustmentV2Request,
   InventoryAdjustmentReason,
+  InventoryBatchAdjustmentV2ResultDto,
   InventoryBalanceRowDto,
 } from '../../models/pos-catalog.models';
 import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
@@ -25,6 +26,15 @@ import { PlatformTenantContextService } from '../../../../platform/services/plat
 import { environment } from '../../../../../../environments/environment';
 import { InventoryFacadeService } from './inventory-facade.service';
 import { InventoryAdjustmentDialogComponent } from './inventory-adjustment-dialog.component';
+import {
+  buildFailedRowsCsv,
+  filterBatchResultRows,
+  groupFailedByErrorCode,
+  hasIdempotencyReplay,
+  InventoryBatchResultDisplayRow,
+  InventoryBatchResultFilter,
+  toInventoryBatchResultDisplayRows,
+} from './inventory-batch-result.util';
 
 interface InventoryRow {
   itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
@@ -86,67 +96,369 @@ interface InventoryImportPreviewRow {
         <section class="card" data-testid="inventory-v2-panel">
           <h3>Inventory V2</h3>
           <div class="filters">
-            <input data-testid="inventory-v2-search" placeholder="Buscar SKU/nombre" (input)="onInventoryV2Search($any($event.target).value)" />
-            <select data-testid="inventory-v2-tracked" (change)="onInventoryV2TrackedChange($any($event.target).value)">
+            <input
+              data-testid="inventory-v2-search"
+              placeholder="Buscar SKU/nombre"
+              (input)="onInventoryV2Search($any($event.target).value)"
+            />
+            <select
+              data-testid="inventory-v2-tracked"
+              (change)="onInventoryV2TrackedChange($any($event.target).value)"
+            >
               <option value="">Todos</option>
               <option value="true">Tracked</option>
               <option value="false">No tracked</option>
             </select>
-            <select data-testid="inventory-v2-category" (change)="onInventoryV2CategoryChange($any($event.target).value)">
+            <select
+              data-testid="inventory-v2-category"
+              (change)="onInventoryV2CategoryChange($any($event.target).value)"
+            >
               <option value="">Todas las categorías</option>
               @for (category of categories(); track category.id) {
                 <option [value]="category.id">{{ category.name }}</option>
               }
             </select>
             <div>
-              <button type="button" data-testid="inventory-v2-chip-tracked" (click)="toggleTrackedOnly()">Tracked only</button>
-              <button type="button" data-testid="inventory-v2-chip-out" (click)="applyOutOfStockFilter()">Sin stock</button>
-              <button type="button" data-testid="inventory-v2-chip-low" (click)="applyLowStockFilter()">Bajo stock</button>
-              <button type="button" data-testid="inventory-v2-chip-clear" (click)="clearStockFilters()">Limpiar stock</button>
+              <button
+                type="button"
+                data-testid="inventory-v2-chip-tracked"
+                (click)="toggleTrackedOnly()"
+              >
+                Tracked only
+              </button>
+              <button
+                type="button"
+                data-testid="inventory-v2-chip-out"
+                (click)="applyOutOfStockFilter()"
+              >
+                Sin stock
+              </button>
+              <button
+                type="button"
+                data-testid="inventory-v2-chip-low"
+                (click)="applyLowStockFilter()"
+              >
+                Bajo stock
+              </button>
+              <button
+                type="button"
+                data-testid="inventory-v2-chip-clear"
+                (click)="clearStockFilters()"
+              >
+                Limpiar stock
+              </button>
             </div>
           </div>
-          <button type="button" data-testid="inventory-v2-load" (click)="loadInventoryV2()">Cargar grid</button>
+          <button type="button" data-testid="inventory-v2-load" (click)="loadInventoryV2()">
+            Cargar grid
+          </button>
           <div>
-            <button type="button" data-testid="inventory-v2-export" (click)="exportInventoryV2Csv()">Descargar CSV de inventario</button>
-            <button type="button" data-testid="inventory-v2-template" (click)="downloadImportTemplateCsv()">Descargar plantilla CSV</button>
-            <input type="file" accept=".csv,text/csv" data-testid="inventory-v2-import-file" (change)="onImportFileSelected($event)" />
+            <button
+              type="button"
+              data-testid="inventory-v2-export"
+              (click)="exportInventoryV2Csv()"
+            >
+              Descargar CSV de inventario
+            </button>
+            <button
+              type="button"
+              data-testid="inventory-v2-template"
+              (click)="downloadImportTemplateCsv()"
+            >
+              Descargar plantilla CSV
+            </button>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              data-testid="inventory-v2-import-file"
+              (change)="onImportFileSelected($event)"
+            />
           </div>
           <div>
-            <label>Delta masivo <input type="number" step="0.001" data-testid="inventory-v2-batch-delta" [formControl]="batchDeltaControl" /></label>
-            <label>Motivo <select data-testid="inventory-v2-batch-reason" [formControl]="batchReasonControl">@for (reason of adjustmentReasons; track reason) {<option [value]="reason">{{ reason }}</option>}</select></label>
-            <button type="button" data-testid="inventory-v2-batch-apply" [disabled]="batchBusy()" (click)="applyBatchAdjustmentFromSelection()">Aplicar ajuste masivo</button>
+            <label
+              >Delta masivo
+              <input
+                type="number"
+                step="0.001"
+                data-testid="inventory-v2-batch-delta"
+                [formControl]="batchDeltaControl"
+            /></label>
+            <label
+              >Motivo
+              <select data-testid="inventory-v2-batch-reason" [formControl]="batchReasonControl">
+                @for (reason of adjustmentReasons; track reason) {
+                  <option [value]="reason">{{ reason }}</option>
+                }
+              </select></label
+            >
+            <button
+              type="button"
+              data-testid="inventory-v2-batch-apply"
+              [disabled]="batchBusy()"
+              (click)="applyBatchAdjustmentFromSelection()"
+            >
+              Aplicar ajuste masivo
+            </button>
           </div>
           @if (batchResultMessage(); as batchMessage) {
             <p data-testid="inventory-v2-batch-result">{{ batchMessage }}</p>
           }
           @if (importPreviewRows().length > 0) {
-            <p data-testid="inventory-v2-import-count">Líneas importadas: {{ importPreviewRows().length }}</p>
-            <button type="button" data-testid="inventory-v2-import-apply" [disabled]="batchBusy()" (click)="applyBatchAdjustmentFromImport()">Aplicar importación</button>
+            <p data-testid="inventory-v2-import-count">
+              Líneas importadas: {{ importPreviewRows().length }}
+            </p>
+            <p data-testid="inventory-v2-import-validity-count">
+              Válidas: {{ previewValidCount() }} · Inválidas: {{ previewInvalidCount() }}
+            </p>
+            <label>
+              <input
+                type="checkbox"
+                data-testid="inventory-v2-import-invalid-only"
+                [checked]="showOnlyInvalidPreviewRows()"
+                (change)="showOnlyInvalidPreviewRows.set($any($event.target).checked)"
+              />
+              Mostrar solo inválidas
+            </label>
+            <button
+              type="button"
+              data-testid="inventory-v2-import-apply"
+              [disabled]="batchBusy()"
+              (click)="applyBatchAdjustmentFromImport()"
+            >
+              Aplicar importación
+            </button>
+            <table data-testid="inventory-v2-import-preview-table">
+              <thead>
+                <tr>
+                  <th>Línea</th>
+                  <th>Tipo</th>
+                  <th>externalCode</th>
+                  <th>deltaQty</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of previewRowsToRender(); track row.lineNo) {
+                  <tr [attr.data-testid]="'inventory-v2-import-preview-row-' + row.lineNo">
+                    <td>{{ row.lineNo }}</td>
+                    <td>{{ row.itemType }}</td>
+                    <td>{{ row.externalCode || '—' }}</td>
+                    <td>{{ row.deltaQty }}</td>
+                    <td>{{ row.validationError || 'Válida' }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="5" data-testid="inventory-v2-import-preview-empty">
+                      Sin líneas para este filtro.
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+          @if (batchExecutionResult(); as executionResult) {
+            <section class="card" data-testid="inventory-v2-import-result-panel">
+              <h4>Resultado de importación</h4>
+              <p data-testid="inventory-v2-result-total">
+                Total líneas procesadas:
+                {{ executionResult.totals.appliedCount + executionResult.totals.failedCount }}
+              </p>
+              <p data-testid="inventory-v2-result-applied">
+                Aplicadas: {{ executionResult.totals.appliedCount }}
+              </p>
+              <p data-testid="inventory-v2-result-failed">
+                Fallidas: {{ executionResult.totals.failedCount }}
+              </p>
+              @if (batchHasIdempotencyReplay()) {
+                <p class="context-badge" data-testid="inventory-v2-result-idempotency">
+                  Este batch ya fue aplicado (idempotencia).
+                </p>
+              }
+              @if (batchResultErrorGroups().length > 0) {
+                <ul data-testid="inventory-v2-result-error-groups">
+                  @for (group of batchResultErrorGroups(); track group[0]) {
+                    <li [attr.data-testid]="'inventory-v2-result-error-group-' + group[0]">
+                      {{ group[0] }}: {{ group[1] }}
+                    </li>
+                  }
+                </ul>
+              }
+              <div>
+                <button
+                  type="button"
+                  data-testid="inventory-v2-result-filter-all"
+                  (click)="batchResultFilter.set('All')"
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  data-testid="inventory-v2-result-filter-applied"
+                  (click)="batchResultFilter.set('Applied')"
+                >
+                  Applied
+                </button>
+                <button
+                  type="button"
+                  data-testid="inventory-v2-result-filter-failed"
+                  (click)="batchResultFilter.set('Failed')"
+                >
+                  Failed
+                </button>
+                @if (executionResult.totals.failedCount > 0) {
+                  <button
+                    type="button"
+                    data-testid="inventory-v2-result-download-errors"
+                    (click)="downloadFailedRowsCsv()"
+                  >
+                    Descargar errores.csv
+                  </button>
+                }
+              </div>
+              <table data-testid="inventory-v2-result-table">
+                <thead>
+                  <tr>
+                    <th>lineNo</th>
+                    <th>itemType</th>
+                    <th>externalCode</th>
+                    <th>itemId</th>
+                    <th>deltaQty</th>
+                    <th>status</th>
+                    <th>errorCode</th>
+                    <th>message</th>
+                    <th>qtyBefore</th>
+                    <th>qtyAfter</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of filteredBatchResultRows(); track row.lineNo + '-' + row.status) {
+                    <tr [attr.data-testid]="'inventory-v2-result-row-' + row.lineNo">
+                      <td>{{ row.lineNo }}</td>
+                      <td>{{ row.itemType }}</td>
+                      <td>{{ row.externalCode || '—' }}</td>
+                      <td>{{ row.itemId || '—' }}</td>
+                      <td>{{ row.deltaQty }}</td>
+                      <td>{{ row.status }}</td>
+                      <td>{{ row.errorCode || '—' }}</td>
+                      <td>{{ row.message || '—' }}</td>
+                      <td>{{ row.qtyBefore ?? '—' }}</td>
+                      <td>{{ row.qtyAfter ?? '—' }}</td>
+                    </tr>
+                  } @empty {
+                    <tr>
+                      <td colspan="10" data-testid="inventory-v2-result-empty">
+                        Sin resultados para este filtro.
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </section>
           }
           @if (inventoryV2Loading()) {
             <p data-testid="inventory-v2-loading">Cargando inventario...</p>
           } @else if (inventoryV2Error(); as inventoryV2Error) {
             <p class="error" data-testid="inventory-v2-error">{{ inventoryV2Error }}</p>
-            <button type="button" data-testid="inventory-v2-retry" (click)="loadInventoryV2()">Reintentar</button>
+            <button type="button" data-testid="inventory-v2-retry" (click)="loadInventoryV2()">
+              Reintentar
+            </button>
           } @else {
             <table data-testid="inventory-v2-table">
-              <thead><tr><th><input type="checkbox" data-testid="inventory-v2-select-page" (change)="toggleSelectCurrentPage($any($event.target).checked)" /></th><th>SKU</th><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Tracked</th><th>OnHand</th><th>Acciones</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      data-testid="inventory-v2-select-page"
+                      (change)="toggleSelectCurrentPage($any($event.target).checked)"
+                    />
+                  </th>
+                  <th>SKU</th>
+                  <th>Nombre</th>
+                  <th>Tipo</th>
+                  <th>Categoría</th>
+                  <th>Tracked</th>
+                  <th>OnHand</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
               <tbody>
                 @for (row of inventoryV2Rows(); track row.itemType + '-' + row.itemId) {
-                  <tr><td><input type="checkbox" [disabled]="!row.isInventoryTracked" [checked]="isRowSelected(row)" [attr.data-testid]="'inventory-v2-select-' + row.itemType + '-' + row.itemId" (change)="toggleRowSelection(row, $any($event.target).checked)" /></td><td>{{ row.sku ?? '—' }}</td><td>{{ row.name }}</td><td>{{ row.itemType }}</td><td>{{ row.categoryName ?? '—' }}</td><td>{{ row.isInventoryTracked ? 'Sí' : 'No' }}</td><td>{{ formatQty(row.onHandQty) }}</td><td><button type="button" [disabled]="!row.isInventoryTracked" [attr.data-testid]="'inventory-v2-adjust-' + row.itemType + '-' + row.itemId" (click)="openAdjustmentDialog(row)">Ajustar</button><button type="button" [attr.data-testid]="'inventory-v2-kardex-' + row.itemType + '-' + row.itemId" (click)="openMovementsDrawer(row)">Ver Kardex</button></td></tr>
+                  <tr>
+                    <td>
+                      <input
+                        type="checkbox"
+                        [disabled]="!row.isInventoryTracked"
+                        [checked]="isRowSelected(row)"
+                        [attr.data-testid]="
+                          'inventory-v2-select-' + row.itemType + '-' + row.itemId
+                        "
+                        (change)="toggleRowSelection(row, $any($event.target).checked)"
+                      />
+                    </td>
+                    <td>{{ row.sku ?? '—' }}</td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.itemType }}</td>
+                    <td>{{ row.categoryName ?? '—' }}</td>
+                    <td>{{ row.isInventoryTracked ? 'Sí' : 'No' }}</td>
+                    <td>{{ formatQty(row.onHandQty) }}</td>
+                    <td>
+                      <button
+                        type="button"
+                        [disabled]="!row.isInventoryTracked"
+                        [attr.data-testid]="
+                          'inventory-v2-adjust-' + row.itemType + '-' + row.itemId
+                        "
+                        (click)="openAdjustmentDialog(row)"
+                      >
+                        Ajustar</button
+                      ><button
+                        type="button"
+                        [attr.data-testid]="
+                          'inventory-v2-kardex-' + row.itemType + '-' + row.itemId
+                        "
+                        (click)="openMovementsDrawer(row)"
+                      >
+                        Ver Kardex
+                      </button>
+                    </td>
+                  </tr>
                 } @empty {
-                  <tr><td colspan="8" data-testid="inventory-v2-empty">Sin resultados.</td></tr>
+                  <tr>
+                    <td colspan="8" data-testid="inventory-v2-empty">Sin resultados.</td>
+                  </tr>
                 }
               </tbody>
             </table>
             <div>
-              <select data-testid="inventory-v2-page-size" (change)="onInventoryV2PageSizeChange($any($event.target).value)">
-                <option value="25">25</option><option value="50">50</option><option value="100">100</option>
+              <select
+                data-testid="inventory-v2-page-size"
+                (change)="onInventoryV2PageSizeChange($any($event.target).value)"
+              >
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
               </select>
-              <button type="button" data-testid="inventory-v2-first" (click)="inventoryV2FirstPage()">Primera</button>
-              <button type="button" data-testid="inventory-v2-prev" (click)="inventoryV2PreviousPage()">Anterior</button>
-              <button type="button" data-testid="inventory-v2-next" (click)="inventoryV2NextPage()">Siguiente</button>
-              <button type="button" data-testid="inventory-v2-last" (click)="inventoryV2LastPage()">Última</button>
+              <button
+                type="button"
+                data-testid="inventory-v2-first"
+                (click)="inventoryV2FirstPage()"
+              >
+                Primera
+              </button>
+              <button
+                type="button"
+                data-testid="inventory-v2-prev"
+                (click)="inventoryV2PreviousPage()"
+              >
+                Anterior
+              </button>
+              <button type="button" data-testid="inventory-v2-next" (click)="inventoryV2NextPage()">
+                Siguiente
+              </button>
+              <button type="button" data-testid="inventory-v2-last" (click)="inventoryV2LastPage()">
+                Última
+              </button>
               <span data-testid="inventory-v2-total">Total: {{ inventoryV2TotalCount() }}</span>
             </div>
           }
@@ -198,7 +510,6 @@ interface InventoryImportPreviewRow {
         </table>
       </section>
 
-
       @if (adjustmentDialogOpen() && selectedAdjustmentRow(); as selectedRow) {
         <app-inventory-adjustment-dialog
           [row]="selectedRow"
@@ -207,7 +518,13 @@ interface InventoryImportPreviewRow {
           (confirm)="submitInventoryV2Adjustment($event)"
         />
         @if (adjustRetryAvailable()) {
-          <button type="button" data-testid="inventory-v2-adjust-retry" (click)="retryLastInventoryV2Adjustment()">Reintentar último ajuste</button>
+          <button
+            type="button"
+            data-testid="inventory-v2-adjust-retry"
+            (click)="retryLastInventoryV2Adjustment()"
+          >
+            Reintentar último ajuste
+          </button>
         }
       }
 
@@ -234,7 +551,11 @@ interface InventoryImportPreviewRow {
         </label>
         <label>
           Delta
-          <input type="number" data-testid="inventory-adjust-delta" [formControl]="adjustDeltaControl" />
+          <input
+            type="number"
+            data-testid="inventory-adjust-delta"
+            [formControl]="adjustDeltaControl"
+          />
         </label>
         <label>
           Reason
@@ -259,31 +580,69 @@ interface InventoryImportPreviewRow {
         }
       </form>
 
-
       @if (movementsDrawerOpen() && movementContext(); as context) {
         <section class="card" data-testid="inventory-movements-drawer">
           <h3>Kardex · {{ context.itemSku ?? '—' }} {{ context.itemName }}</h3>
-          <p data-testid="inventory-movements-header">Store: {{ context.storeId }} · OnHand: {{ formatQty(context.onHandQty) }}</p>
+          <p data-testid="inventory-movements-header">
+            Store: {{ context.storeId }} · OnHand: {{ formatQty(context.onHandQty) }}
+          </p>
           <div class="filters">
-            <input type="datetime-local" data-testid="inventory-movements-from" (change)="onMovementFromChange($any($event.target).value)" />
-            <input type="datetime-local" data-testid="inventory-movements-to" (change)="onMovementToChange($any($event.target).value)" />
-            <select data-testid="inventory-movements-reason" (change)="onMovementReasonChange($any($event.target).value)">
+            <input
+              type="datetime-local"
+              data-testid="inventory-movements-from"
+              (change)="onMovementFromChange($any($event.target).value)"
+            />
+            <input
+              type="datetime-local"
+              data-testid="inventory-movements-to"
+              (change)="onMovementToChange($any($event.target).value)"
+            />
+            <select
+              data-testid="inventory-movements-reason"
+              (change)="onMovementReasonChange($any($event.target).value)"
+            >
               <option value="">Todos motivos</option>
               @for (reason of adjustmentReasons; track reason) {
                 <option [value]="reason">{{ toReasonUi(reason).label }}</option>
               }
             </select>
-            <input placeholder="referenceId" data-testid="inventory-movements-reference" (input)="onMovementReferenceChange($any($event.target).value)" />
-            <button type="button" data-testid="inventory-movements-close" (click)="closeMovementsDrawer()">Cerrar</button>
+            <input
+              placeholder="referenceId"
+              data-testid="inventory-movements-reference"
+              (input)="onMovementReferenceChange($any($event.target).value)"
+            />
+            <button
+              type="button"
+              data-testid="inventory-movements-close"
+              (click)="closeMovementsDrawer()"
+            >
+              Cerrar
+            </button>
           </div>
           @if (movementLoading()) {
             <p data-testid="inventory-movements-loading">Cargando kardex...</p>
           } @else if (movementError(); as movementError) {
             <p class="error" data-testid="inventory-movements-error">{{ movementError }}</p>
-            <button type="button" data-testid="inventory-movements-retry" (click)="reloadMovementsDrawer()">Reintentar</button>
+            <button
+              type="button"
+              data-testid="inventory-movements-retry"
+              (click)="reloadMovementsDrawer()"
+            >
+              Reintentar
+            </button>
           } @else {
             <table data-testid="inventory-movements-table">
-              <thead><tr><th>Fecha/hora</th><th>Razón</th><th>Delta</th><th>Stock</th><th>Referencia</th><th>Usuario</th><th>Nota</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Fecha/hora</th>
+                  <th>Razón</th>
+                  <th>Delta</th>
+                  <th>Stock</th>
+                  <th>Referencia</th>
+                  <th>Usuario</th>
+                  <th>Nota</th>
+                </tr>
+              </thead>
               <tbody>
                 @for (row of movementRows(); track row.movementId) {
                   <tr>
@@ -296,13 +655,27 @@ interface InventoryImportPreviewRow {
                     <td [title]="row.note ?? ''">{{ row.note ?? '—' }}</td>
                   </tr>
                 } @empty {
-                  <tr><td colspan="7">Sin movimientos.</td></tr>
+                  <tr>
+                    <td colspan="7">Sin movimientos.</td>
+                  </tr>
                 }
               </tbody>
             </table>
             <div>
-              <button type="button" data-testid="inventory-movements-prev" (click)="movementPreviousPage()">Anterior</button>
-              <button type="button" data-testid="inventory-movements-next" (click)="movementNextPage()">Siguiente</button>
+              <button
+                type="button"
+                data-testid="inventory-movements-prev"
+                (click)="movementPreviousPage()"
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                data-testid="inventory-movements-next"
+                (click)="movementNextPage()"
+              >
+                Siguiente
+              </button>
               <span data-testid="inventory-movements-total">Total: {{ movementTotalCount() }}</span>
             </div>
           }
@@ -317,7 +690,10 @@ interface InventoryImportPreviewRow {
             [formControl]="historyStoreIdControl"
             data-testid="inventory-history-filter-store"
           />
-          <select [formControl]="historyItemTypeControl" data-testid="inventory-history-filter-itemType">
+          <select
+            [formControl]="historyItemTypeControl"
+            data-testid="inventory-history-filter-itemType"
+          >
             <option value="">Todos</option>
             <option value="Product">Product</option>
             <option value="Extra">Extra</option>
@@ -327,15 +703,32 @@ interface InventoryImportPreviewRow {
             [formControl]="historyItemIdControl"
             data-testid="inventory-history-filter-itemId"
           />
-          <select [formControl]="historyReasonControl" data-testid="inventory-history-filter-reason">
+          <select
+            [formControl]="historyReasonControl"
+            data-testid="inventory-history-filter-reason"
+          >
             <option value="">Todos motivos</option>
             @for (reason of adjustmentReasons; track reason) {
               <option [value]="reason">{{ toReasonUi(reason).label }}</option>
             }
           </select>
-          <input type="datetime-local" [formControl]="historyFromUtcControl" data-testid="inventory-history-filter-fromUtc" />
-          <input type="datetime-local" [formControl]="historyToUtcControl" data-testid="inventory-history-filter-toUtc" />
-          <button type="button" (click)="loadHistory()" data-testid="inventory-history-filter-submit">Filtrar</button>
+          <input
+            type="datetime-local"
+            [formControl]="historyFromUtcControl"
+            data-testid="inventory-history-filter-fromUtc"
+          />
+          <input
+            type="datetime-local"
+            [formControl]="historyToUtcControl"
+            data-testid="inventory-history-filter-toUtc"
+          />
+          <button
+            type="button"
+            (click)="loadHistory()"
+            data-testid="inventory-history-filter-submit"
+          >
+            Filtrar
+          </button>
         </div>
 
         <table data-testid="inventory-history-table">
@@ -361,16 +754,32 @@ interface InventoryImportPreviewRow {
                 <td>{{ row.qtyDelta }}</td>
                 <td>{{ row.qtyAfter }}</td>
                 <td>
-                  <span [attr.data-testid]="'inventory-history-movement-kind-' + row.id">{{ toReasonUi(row.reason, row.movementKind).label }}</span>
+                  <span [attr.data-testid]="'inventory-history-movement-kind-' + row.id">{{
+                    toReasonUi(row.reason, row.movementKind).label
+                  }}</span>
                   @if (toReasonUi(row.reason, row.movementKind).badgeKind === 'sale-consumption') {
-                    <span data-testid="inventory-history-badge-sale-consumption" class="reason-badge sale">Venta</span>
-                  } @else if (toReasonUi(row.reason, row.movementKind).badgeKind === 'void-reversal') {
-                    <span data-testid="inventory-history-badge-void-reversal" class="reason-badge void">Void</span>
+                    <span
+                      data-testid="inventory-history-badge-sale-consumption"
+                      class="reason-badge sale"
+                      >Venta</span
+                    >
+                  } @else if (
+                    toReasonUi(row.reason, row.movementKind).badgeKind === 'void-reversal'
+                  ) {
+                    <span
+                      data-testid="inventory-history-badge-void-reversal"
+                      class="reason-badge void"
+                      >Void</span
+                    >
                   } @else if (toReasonUi(row.reason, row.movementKind).badgeKind === 'unknown') {
-                    <span data-testid="inventory-history-badge-unknown" class="reason-badge unknown">Otro</span>
+                    <span data-testid="inventory-history-badge-unknown" class="reason-badge unknown"
+                      >Otro</span
+                    >
                   }
                 </td>
-                <td [attr.data-testid]="'inventory-history-reference-' + row.id">{{ getReferenceText(row) }}</td>
+                <td [attr.data-testid]="'inventory-history-reference-' + row.id">
+                  {{ getReferenceText(row) }}
+                </td>
                 <td>{{ row.note ?? '—' }}</td>
                 <td>{{ row.performedByUserId }}</td>
               </tr>
@@ -385,18 +794,65 @@ interface InventoryImportPreviewRow {
     </section>
   `,
   styles: `
-    .inventory-page { display: flex; flex-direction: column; gap: 1rem; }
-    .card { border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem; display: grid; gap: 0.5rem; }
-    .context-badge { width: fit-content; border-radius: 999px; background: #dbeafe; color: #1e3a8a; padding: 0.2rem 0.6rem; font-weight: 600; }
-    .error { color: #b91c1c; }
-    .success { color: #15803d; }
-    .filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
-    .reason-badge { margin-left: 0.5rem; border-radius: 999px; padding: 0.1rem 0.4rem; font-size: 0.75rem; }
-    .reason-badge.sale { background: #e0f2fe; color: #075985; }
-    .reason-badge.void { background: #dcfce7; color: #166534; }
-    .reason-badge.unknown { background: #f1f5f9; color: #334155; }
-    table { width: 100%; border-collapse: collapse; }
-    td, th { border-bottom: 1px solid #e2e8f0; padding: 0.5rem; text-align: left; }
+    .inventory-page {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .card {
+      border: 1px solid #e2e8f0;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      display: grid;
+      gap: 0.5rem;
+    }
+    .context-badge {
+      width: fit-content;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1e3a8a;
+      padding: 0.2rem 0.6rem;
+      font-weight: 600;
+    }
+    .error {
+      color: #b91c1c;
+    }
+    .success {
+      color: #15803d;
+    }
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+    .reason-badge {
+      margin-left: 0.5rem;
+      border-radius: 999px;
+      padding: 0.1rem 0.4rem;
+      font-size: 0.75rem;
+    }
+    .reason-badge.sale {
+      background: #e0f2fe;
+      color: #075985;
+    }
+    .reason-badge.void {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .reason-badge.unknown {
+      background: #f1f5f9;
+      color: #334155;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    td,
+    th {
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0.5rem;
+      text-align: left;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -453,30 +909,86 @@ export class InventoryPage {
   readonly movementError = this.inventoryFacade.movementsError;
   readonly selectedAdjustmentRow = signal<InventoryBalanceRowDto | null>(null);
   readonly lastInventoryV2Payload = signal<CreateInventoryAdjustmentV2Request | null>(null);
-  readonly adjustRetryAvailable = computed(() => this.lastInventoryV2Payload() !== null && !this.adjustBusy());
+  readonly adjustRetryAvailable = computed(
+    () => this.lastInventoryV2Payload() !== null && !this.adjustBusy(),
+  );
 
   readonly selectedInventoryV2Keys = signal<Record<string, boolean>>({});
   readonly batchBusy = signal(false);
   readonly batchResultMessage = signal<string | null>(null);
+  readonly batchExecutionResult = signal<InventoryBatchAdjustmentV2ResultDto | null>(null);
+  readonly batchResultRows = signal<InventoryBatchResultDisplayRow[]>([]);
+  readonly batchResultFilter = signal<InventoryBatchResultFilter>('All');
   readonly importPreviewRows = signal<InventoryImportPreviewRow[]>([]);
+  readonly showOnlyInvalidPreviewRows = signal(false);
   readonly importRawCsv = signal('');
+
+  readonly previewInvalidCount = computed(
+    () => this.importPreviewRows().filter((row) => !!row.validationError).length,
+  );
+  readonly previewValidCount = computed(
+    () => this.importPreviewRows().length - this.previewInvalidCount(),
+  );
+  readonly previewRowsToRender = computed(() => {
+    if (!this.showOnlyInvalidPreviewRows()) {
+      return this.importPreviewRows();
+    }
+
+    return this.importPreviewRows().filter((row) => !!row.validationError);
+  });
+  readonly filteredBatchResultRows = computed(() =>
+    filterBatchResultRows(this.batchResultRows(), this.batchResultFilter()),
+  );
+  readonly failedBatchResultRows = computed(() =>
+    this.batchResultRows().filter((row) => row.status === 'Failed'),
+  );
+  readonly batchResultErrorGroups = computed(() =>
+    Object.entries(groupFailedByErrorCode(this.batchResultRows())),
+  );
+  readonly batchHasIdempotencyReplay = computed(() => hasIdempotencyReplay(this.batchResultRows()));
 
   readonly availableItems = computed(() =>
     this.adjustItemTypeControl.value === 'Extra' ? this.extras() : this.products(),
   );
 
-  readonly storeIdControl = new FormControl('', { nonNullable: true, validators: [Validators.required] });
-  readonly adjustStoreIdControl = new FormControl('', { nonNullable: true, validators: [Validators.required] });
-  readonly adjustItemTypeControl = new FormControl<'Product' | 'Extra'>('Product', { nonNullable: true });
-  readonly adjustItemIdControl = new FormControl('', { nonNullable: true, validators: [Validators.required] });
-  readonly adjustDeltaControl = new FormControl(0, { nonNullable: true, validators: [Validators.required] });
-  readonly adjustReasonControl = new FormControl<InventoryAdjustmentReason>('Correction', { nonNullable: true });
+  readonly storeIdControl = new FormControl('', {
+    nonNullable: true,
+    validators: [Validators.required],
+  });
+  readonly adjustStoreIdControl = new FormControl('', {
+    nonNullable: true,
+    validators: [Validators.required],
+  });
+  readonly adjustItemTypeControl = new FormControl<'Product' | 'Extra'>('Product', {
+    nonNullable: true,
+  });
+  readonly adjustItemIdControl = new FormControl('', {
+    nonNullable: true,
+    validators: [Validators.required],
+  });
+  readonly adjustDeltaControl = new FormControl(0, {
+    nonNullable: true,
+    validators: [Validators.required],
+  });
+  readonly adjustReasonControl = new FormControl<InventoryAdjustmentReason>('Correction', {
+    nonNullable: true,
+  });
   readonly adjustNoteControl = new FormControl('', { nonNullable: true });
-  readonly batchDeltaControl = new FormControl(0, { nonNullable: true, validators: [Validators.required] });
-  readonly batchReasonControl = new FormControl<InventoryAdjustmentReason>('Correction', { nonNullable: true });
+  readonly batchDeltaControl = new FormControl(0, {
+    nonNullable: true,
+    validators: [Validators.required],
+  });
+  readonly batchReasonControl = new FormControl<InventoryAdjustmentReason>('Correction', {
+    nonNullable: true,
+  });
 
-  readonly historyStoreIdControl = new FormControl('', { nonNullable: true, validators: [Validators.required] });
-  readonly historyItemTypeControl = new FormControl<'Product' | 'Extra' | ''>('', { nonNullable: true });
+  readonly historyStoreIdControl = new FormControl('', {
+    nonNullable: true,
+    validators: [Validators.required],
+  });
+  readonly historyItemTypeControl = new FormControl<'Product' | 'Extra' | ''>('', {
+    nonNullable: true,
+  });
   readonly historyItemIdControl = new FormControl('', { nonNullable: true });
   readonly historyFromUtcControl = new FormControl('', { nonNullable: true });
   readonly historyToUtcControl = new FormControl('', { nonNullable: true });
@@ -487,7 +999,9 @@ export class InventoryPage {
       return '';
     }
 
-    return this.tenantContext.getSelectedTenantId() ? '' : 'Selecciona Tenant en Plataforma para operar POS Admin.';
+    return this.tenantContext.getSelectedTenantId()
+      ? ''
+      : 'Selecciona Tenant en Plataforma para operar POS Admin.';
   });
 
   constructor() {
@@ -596,7 +1110,6 @@ export class InventoryPage {
     await this.inventoryFacade.load();
   }
 
-
   getInventoryRowKey(row: InventoryBalanceRowDto) {
     return `${row.itemType}-${row.itemId}`;
   }
@@ -636,7 +1149,10 @@ export class InventoryPage {
 
   downloadImportTemplateCsv() {
     const csv = 'storeId,itemType,externalCode,deltaQty,reasonCode,referenceId,note\n';
-    this.downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'inventory-adjustments-template.csv');
+    this.downloadBlob(
+      new Blob([csv], { type: 'text/csv;charset=utf-8' }),
+      'inventory-adjustments-template.csv',
+    );
   }
 
   async onImportFileSelected(event: Event) {
@@ -649,6 +1165,7 @@ export class InventoryPage {
     const text = await file.text();
     this.importRawCsv.set(text);
     this.importPreviewRows.set(this.parseImportCsv(text));
+    this.showOnlyInvalidPreviewRows.set(false);
   }
 
   async applyBatchAdjustmentFromSelection() {
@@ -703,14 +1220,26 @@ export class InventoryPage {
     this.batchResultMessage.set(null);
     try {
       const result = await this.api.createInventoryBatchAdjustmentV2(payload);
-      this.batchResultMessage.set(`Applied: ${result.totals.appliedCount} · Failed: ${result.totals.failedCount}`);
+      this.batchResultMessage.set(
+        `Applied: ${result.totals.appliedCount} · Failed: ${result.totals.failedCount}`,
+      );
+      this.batchExecutionResult.set(result);
+      this.batchResultRows.set(toInventoryBatchResultDisplayRows(result, payload.items));
+      this.batchResultFilter.set('All');
       await this.loadInventoryV2();
       await this.loadHistory();
     } catch (error) {
       this.batchResultMessage.set(this.mapErrorCode(this.toUiErrorReason(error)));
+      this.batchExecutionResult.set(null);
+      this.batchResultRows.set([]);
     } finally {
       this.batchBusy.set(false);
     }
+  }
+
+  downloadFailedRowsCsv() {
+    const csv = buildFailedRowsCsv(this.failedBatchResultRows());
+    this.downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'errores.csv');
   }
 
   private parseImportCsv(csv: string): InventoryImportPreviewRow[] {
@@ -720,11 +1249,16 @@ export class InventoryPage {
     }
 
     return lines.slice(1).map((line, index) => {
-      const [, itemTypeRaw, externalCodeRaw, deltaQtyRaw, reasonCodeRaw, referenceIdRaw, noteRaw] = line.split(',');
+      const [, itemTypeRaw, externalCodeRaw, deltaQtyRaw, reasonCodeRaw, referenceIdRaw, noteRaw] =
+        line.split(',');
       const itemType = itemTypeRaw?.trim() === 'Extra' ? 'Extra' : 'Product';
       const externalCode = externalCodeRaw?.trim() ?? '';
       const deltaQty = Number.parseFloat(deltaQtyRaw ?? '0');
-      const validationError = !externalCode ? 'UNKNOWN_ITEM' : (!Number.isFinite(deltaQty) || deltaQty === 0 ? 'VALIDATION_ERROR' : null);
+      const validationError = !externalCode
+        ? 'UNKNOWN_ITEM'
+        : !Number.isFinite(deltaQty) || deltaQty === 0
+          ? 'VALIDATION_ERROR'
+          : null;
 
       return {
         lineNo: index + 1,
@@ -771,8 +1305,6 @@ export class InventoryPage {
 
     return chunks.filter((item) => !!item).join(' · ');
   }
-
-
 
   openMovementsDrawer(row: InventoryBalanceRowDto) {
     const storeId = this.storeIdControl.value.trim();
@@ -838,7 +1370,13 @@ export class InventoryPage {
     this.selectedAdjustmentRow.set(null);
   }
 
-  async submitInventoryV2Adjustment(input: { operationType: 'Delta' | 'Set'; quantity: number; reasonCode: InventoryAdjustmentReason; reference: string | null; note: string | null }) {
+  async submitInventoryV2Adjustment(input: {
+    operationType: 'Delta' | 'Set';
+    quantity: number;
+    reasonCode: InventoryAdjustmentReason;
+    reference: string | null;
+    note: string | null;
+  }) {
     const row = this.selectedAdjustmentRow();
     const storeId = this.storeIdControl.value.trim();
     if (!row || !storeId) {
@@ -873,7 +1411,10 @@ export class InventoryPage {
     await this.executeInventoryV2Adjustment(payload, false);
   }
 
-  private async executeInventoryV2Adjustment(payload: CreateInventoryAdjustmentV2Request, closeDialogOnSuccess: boolean) {
+  private async executeInventoryV2Adjustment(
+    payload: CreateInventoryAdjustmentV2Request,
+    closeDialogOnSuccess: boolean,
+  ) {
     this.adjustBusy.set(true);
     this.adjustErrorReason.set(null);
     this.adjustSuccess.set(null);
@@ -887,7 +1428,12 @@ export class InventoryPage {
       if (closeDialogOnSuccess) {
         this.closeAdjustmentDialog();
       }
-      this.inventoryFacade.patchRow(result.itemType, result.itemId, result.qtyAfter, result.balanceVersion);
+      this.inventoryFacade.patchRow(
+        result.itemType,
+        result.itemId,
+        result.qtyAfter,
+        result.balanceVersion,
+      );
     } catch (error) {
       const reason = this.toUiErrorReason(error);
       this.adjustErrorReason.set(reason);
@@ -922,7 +1468,6 @@ export class InventoryPage {
       this.globalError.set(this.toUiError(error));
     }
   }
-
 
   getDraftStock(row: InventoryRow) {
     const key = this.getRowKey(row);
@@ -1031,7 +1576,9 @@ export class InventoryPage {
       this.catalogApi.getExtras(true),
       this.catalogApi.getCategories(true),
     ]);
-    this.products.set(products.map((item) => ({ id: item.id, name: item.name, sku: item.externalCode })));
+    this.products.set(
+      products.map((item) => ({ id: item.id, name: item.name, sku: item.externalCode })),
+    );
     this.extras.set(extras.map((item) => ({ id: item.id, name: item.name })));
     this.categories.set(categories.filter((item) => item.isActive));
 
