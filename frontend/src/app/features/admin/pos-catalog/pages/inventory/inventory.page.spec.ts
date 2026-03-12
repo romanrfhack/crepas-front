@@ -15,6 +15,8 @@ describe('InventoryPage', () => {
   const createInventoryAdjustmentV2 = vi.fn();
   const listInventoryMovementsV2 = vi.fn();
   const listInventoryV2 = vi.fn();
+  const createInventoryBatchAdjustmentV2 = vi.fn();
+  const exportInventoryBalancesV2 = vi.fn();
   const getCategories = vi.fn();
 
   beforeEach(async () => {
@@ -23,6 +25,8 @@ describe('InventoryPage', () => {
     createInventoryAdjustmentV2.mockReset();
     listInventoryMovementsV2.mockReset();
     listInventoryV2.mockReset();
+    createInventoryBatchAdjustmentV2.mockReset();
+    exportInventoryBalancesV2.mockReset();
     getCategories.mockReset();
 
     listInventoryV2.mockResolvedValue({
@@ -34,6 +38,8 @@ describe('InventoryPage', () => {
       pageSize: 25,
     });
     getCategories.mockResolvedValue([{ id: 'cat-1', name: 'Bebidas', sortOrder: 1, isActive: true }]);
+    createInventoryBatchAdjustmentV2.mockResolvedValue({ batchClientOperationId: 'batch-1', totals: { appliedCount: 1, failedCount: 0 }, lines: [] });
+    exportInventoryBalancesV2.mockResolvedValue(new Blob(['csv']));
 
     listAdjustments.mockResolvedValue([
       {
@@ -131,6 +137,8 @@ describe('InventoryPage', () => {
             listInventoryV2,
             createInventoryAdjustmentV2,
             listInventoryMovementsV2,
+            createInventoryBatchAdjustmentV2,
+            exportInventoryBalancesV2,
             upsertInventory: vi.fn().mockResolvedValue({
               storeId: 'store-1',
               itemType: 'Product',
@@ -216,7 +224,7 @@ describe('InventoryPage', () => {
     fixture.detectChanges();
 
     const error = fixture.nativeElement.querySelector('[data-testid="inventory-adjust-error"]');
-    expect(error?.textContent).toContain('NegativeStockNotAllowed');
+    expect(error?.textContent).toContain('NEGATIVE_STOCK');
   });
 
   it('historial renderiza movementKind/referencias y fallback seguro', async () => {
@@ -498,6 +506,63 @@ describe('InventoryPage', () => {
   it('carga categorías para filtro de negocio', async () => {
     await fixture.componentInstance['loadCatalogItems']();
     expect(getCategories).toHaveBeenCalled();
+  });
+
+
+  it('batch submit arma payload correcto desde selección', async () => {
+    const page = fixture.componentInstance;
+    page['inventoryFacade'].rows.set([{ itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 }]);
+    page.batchDeltaControl.setValue(-1);
+    page.batchReasonControl.setValue('Correction');
+    page.toggleRowSelection(page.inventoryV2Rows()[0], true);
+
+    await page.applyBatchAdjustmentFromSelection();
+
+    expect(createInventoryBatchAdjustmentV2).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storeId: 'store-1',
+        reasonCode: 'Correction',
+        items: [expect.objectContaining({ itemType: 'Product', itemId: 'product-1', operationType: 'Delta', quantityDelta: -1 })],
+      }),
+    );
+  });
+
+  it('export dispara descarga con filtros actuales', async () => {
+    const page = fixture.componentInstance;
+    page['inventoryFacade'].updateStore('store-1');
+    page['inventoryFacade'].updateSearch('latte');
+    page['inventoryFacade'].updateTracked('true');
+    await page.loadInventoryV2();
+
+    await page.exportInventoryV2Csv();
+
+    expect(exportInventoryBalancesV2).toHaveBeenCalledWith(expect.objectContaining({ storeId: 'store-1', tracked: true }));
+  });
+
+  it('import parsea CSV y permite preview', async () => {
+    const page = fixture.componentInstance;
+    const csv = 'storeId,itemType,externalCode,deltaQty,reasonCode,referenceId,note\nstore-1,Product,LAT-1,-2,Correction,ref-1,nota';
+    const file = { text: () => Promise.resolve(csv) };
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: { item: () => file } });
+
+    await page.onImportFileSelected({ target: input } as unknown as Event);
+
+    expect(page.importPreviewRows().length).toBe(1);
+    expect(page.importPreviewRows()[0].externalCode).toBe('LAT-1');
+    expect(page.importPreviewRows()[0].validationError).toBeNull();
+  });
+
+  it('mapea NEGATIVE_STOCK en errores de batch', async () => {
+    const page = fixture.componentInstance;
+    createInventoryBatchAdjustmentV2.mockRejectedValueOnce(new HttpErrorResponse({ status: 409, error: { reason: 'NegativeStockNotAllowed' } }));
+    page['inventoryFacade'].rows.set([{ itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 }]);
+    page.batchDeltaControl.setValue(-3);
+    page.toggleRowSelection(page.inventoryV2Rows()[0], true);
+
+    await page.applyBatchAdjustmentFromSelection();
+
+    expect(page.batchResultMessage()).toContain('stock negativo');
   });
 
 });

@@ -282,6 +282,46 @@ export interface InventoryAdjustmentV2ResultDto {
   reasonCode: InventoryAdjustmentReasonValue;
   reference?: string | null;
 }
+
+export interface CreateInventoryBatchAdjustmentV2LineRequest {
+  itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
+  itemExternalCode?: string | null;
+  itemId?: string | null;
+  operationType: 'Delta';
+  quantityDelta: number;
+  lineClientOperationId?: string | null;
+}
+
+export interface CreateInventoryBatchAdjustmentV2Request {
+  storeId: string;
+  reasonCode: InventoryAdjustmentReasonValue;
+  referenceId?: string | null;
+  referenceType?: string | null;
+  note?: string | null;
+  clientOperationId: string;
+  items: CreateInventoryBatchAdjustmentV2LineRequest[];
+}
+
+export interface InventoryBatchAdjustmentV2LineResultDto {
+  lineNo: number;
+  itemKey: string;
+  status: 'Applied' | 'Failed';
+  errorCode?: string | null;
+  message?: string | null;
+  qtyBefore?: number | null;
+  qtyAfter?: number | null;
+  deltaApplied?: number | null;
+  adjustmentId?: string | null;
+}
+
+export interface InventoryBatchAdjustmentV2ResultDto {
+  batchClientOperationId: string;
+  totals: {
+    appliedCount: number;
+    failedCount: number;
+  };
+  lines: InventoryBatchAdjustmentV2LineResultDto[];
+}
 export interface PagedInventoryBalancesDto {
   items: InventoryBalanceRowDto[];
   totalCount: number;
