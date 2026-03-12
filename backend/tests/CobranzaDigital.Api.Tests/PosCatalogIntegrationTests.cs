@@ -880,7 +880,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var balancesResp = await _client.SendAsync(balancesReq);
         Assert.Equal(HttpStatusCode.OK, balancesResp.StatusCode);
         var balances = (await balancesResp.Content.ReadFromJsonAsync<PagedInventoryBalancesResponse>())!;
-        var row = Assert.Single(balances.Items.Where(x => x.ItemId == product.Id));
+        var row = Assert.Single(balances.Items, x => x.ItemId == product.Id);
         Assert.Equal(2m, row.OnHandQty);
     }
 
@@ -902,7 +902,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var balancesReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/balances?storeId={snapshot.StoreId:D}&q=CON-V2", token);
         using var balancesResp = await _client.SendAsync(balancesReq);
         var balances = (await balancesResp.Content.ReadFromJsonAsync<PagedInventoryBalancesResponse>())!;
-        var row = Assert.Single(balances.Items.Where(x => x.ItemId == product.Id));
+        var row = Assert.Single(balances.Items, x => x.ItemId == product.Id);
         Assert.False(string.IsNullOrWhiteSpace(row.BalanceVersion));
 
         using var setReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token);
