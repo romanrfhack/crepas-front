@@ -9,6 +9,7 @@ import {
   CategoryDto,
   CreateCatalogInventoryAdjustmentRequest,
   CreateInventoryAdjustmentV2Request,
+  CreateInventoryBatchAdjustmentV2Request,
   InventoryAdjustmentReason,
   InventoryBalanceRowDto,
 } from '../../models/pos-catalog.models';
@@ -38,6 +39,17 @@ interface ItemOption {
   id: string;
   name: string;
   sku?: string | null;
+}
+
+interface InventoryImportPreviewRow {
+  lineNo: number;
+  itemType: 'Product' | 'Extra';
+  externalCode: string;
+  deltaQty: number;
+  reasonCode: InventoryAdjustmentReason;
+  referenceId: string | null;
+  note: string | null;
+  validationError: string | null;
 }
 
 @Component({
@@ -94,6 +106,23 @@ interface ItemOption {
             </div>
           </div>
           <button type="button" data-testid="inventory-v2-load" (click)="loadInventoryV2()">Cargar grid</button>
+          <div>
+            <button type="button" data-testid="inventory-v2-export" (click)="exportInventoryV2Csv()">Descargar CSV de inventario</button>
+            <button type="button" data-testid="inventory-v2-template" (click)="downloadImportTemplateCsv()">Descargar plantilla CSV</button>
+            <input type="file" accept=".csv,text/csv" data-testid="inventory-v2-import-file" (change)="onImportFileSelected($event)" />
+          </div>
+          <div>
+            <label>Delta masivo <input type="number" step="0.001" data-testid="inventory-v2-batch-delta" [formControl]="batchDeltaControl" /></label>
+            <label>Motivo <select data-testid="inventory-v2-batch-reason" [formControl]="batchReasonControl">@for (reason of adjustmentReasons; track reason) {<option [value]="reason">{{ reason }}</option>}</select></label>
+            <button type="button" data-testid="inventory-v2-batch-apply" [disabled]="batchBusy()" (click)="applyBatchAdjustmentFromSelection()">Aplicar ajuste masivo</button>
+          </div>
+          @if (batchResultMessage(); as batchMessage) {
+            <p data-testid="inventory-v2-batch-result">{{ batchMessage }}</p>
+          }
+          @if (importPreviewRows().length > 0) {
+            <p data-testid="inventory-v2-import-count">Líneas importadas: {{ importPreviewRows().length }}</p>
+            <button type="button" data-testid="inventory-v2-import-apply" [disabled]="batchBusy()" (click)="applyBatchAdjustmentFromImport()">Aplicar importación</button>
+          }
           @if (inventoryV2Loading()) {
             <p data-testid="inventory-v2-loading">Cargando inventario...</p>
           } @else if (inventoryV2Error(); as inventoryV2Error) {
@@ -101,12 +130,12 @@ interface ItemOption {
             <button type="button" data-testid="inventory-v2-retry" (click)="loadInventoryV2()">Reintentar</button>
           } @else {
             <table data-testid="inventory-v2-table">
-              <thead><tr><th>SKU</th><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Tracked</th><th>OnHand</th><th>Acciones</th></tr></thead>
+              <thead><tr><th><input type="checkbox" data-testid="inventory-v2-select-page" (change)="toggleSelectCurrentPage($any($event.target).checked)" /></th><th>SKU</th><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Tracked</th><th>OnHand</th><th>Acciones</th></tr></thead>
               <tbody>
                 @for (row of inventoryV2Rows(); track row.itemType + '-' + row.itemId) {
-                  <tr><td>{{ row.sku ?? '—' }}</td><td>{{ row.name }}</td><td>{{ row.itemType }}</td><td>{{ row.categoryName ?? '—' }}</td><td>{{ row.isInventoryTracked ? 'Sí' : 'No' }}</td><td>{{ formatQty(row.onHandQty) }}</td><td><button type="button" [disabled]="!row.isInventoryTracked" [attr.data-testid]="'inventory-v2-adjust-' + row.itemType + '-' + row.itemId" (click)="openAdjustmentDialog(row)">Ajustar</button><button type="button" [attr.data-testid]="'inventory-v2-kardex-' + row.itemType + '-' + row.itemId" (click)="openMovementsDrawer(row)">Ver Kardex</button></td></tr>
+                  <tr><td><input type="checkbox" [disabled]="!row.isInventoryTracked" [checked]="isRowSelected(row)" [attr.data-testid]="'inventory-v2-select-' + row.itemType + '-' + row.itemId" (change)="toggleRowSelection(row, $any($event.target).checked)" /></td><td>{{ row.sku ?? '—' }}</td><td>{{ row.name }}</td><td>{{ row.itemType }}</td><td>{{ row.categoryName ?? '—' }}</td><td>{{ row.isInventoryTracked ? 'Sí' : 'No' }}</td><td>{{ formatQty(row.onHandQty) }}</td><td><button type="button" [disabled]="!row.isInventoryTracked" [attr.data-testid]="'inventory-v2-adjust-' + row.itemType + '-' + row.itemId" (click)="openAdjustmentDialog(row)">Ajustar</button><button type="button" [attr.data-testid]="'inventory-v2-kardex-' + row.itemType + '-' + row.itemId" (click)="openMovementsDrawer(row)">Ver Kardex</button></td></tr>
                 } @empty {
-                  <tr><td colspan="7" data-testid="inventory-v2-empty">Sin resultados.</td></tr>
+                  <tr><td colspan="8" data-testid="inventory-v2-empty">Sin resultados.</td></tr>
                 }
               </tbody>
             </table>
@@ -426,6 +455,12 @@ export class InventoryPage {
   readonly lastInventoryV2Payload = signal<CreateInventoryAdjustmentV2Request | null>(null);
   readonly adjustRetryAvailable = computed(() => this.lastInventoryV2Payload() !== null && !this.adjustBusy());
 
+  readonly selectedInventoryV2Keys = signal<Record<string, boolean>>({});
+  readonly batchBusy = signal(false);
+  readonly batchResultMessage = signal<string | null>(null);
+  readonly importPreviewRows = signal<InventoryImportPreviewRow[]>([]);
+  readonly importRawCsv = signal('');
+
   readonly availableItems = computed(() =>
     this.adjustItemTypeControl.value === 'Extra' ? this.extras() : this.products(),
   );
@@ -437,6 +472,8 @@ export class InventoryPage {
   readonly adjustDeltaControl = new FormControl(0, { nonNullable: true, validators: [Validators.required] });
   readonly adjustReasonControl = new FormControl<InventoryAdjustmentReason>('Correction', { nonNullable: true });
   readonly adjustNoteControl = new FormControl('', { nonNullable: true });
+  readonly batchDeltaControl = new FormControl(0, { nonNullable: true, validators: [Validators.required] });
+  readonly batchReasonControl = new FormControl<InventoryAdjustmentReason>('Correction', { nonNullable: true });
 
   readonly historyStoreIdControl = new FormControl('', { nonNullable: true, validators: [Validators.required] });
   readonly historyItemTypeControl = new FormControl<'Product' | 'Extra' | ''>('', { nonNullable: true });
@@ -557,6 +594,168 @@ export class InventoryPage {
     const last = Math.max(1, Math.ceil(total / filters.pageSize));
     this.inventoryFacade.updatePage(last);
     await this.inventoryFacade.load();
+  }
+
+
+  getInventoryRowKey(row: InventoryBalanceRowDto) {
+    return `${row.itemType}-${row.itemId}`;
+  }
+
+  isRowSelected(row: InventoryBalanceRowDto) {
+    return this.selectedInventoryV2Keys()[this.getInventoryRowKey(row)] ?? false;
+  }
+
+  toggleRowSelection(row: InventoryBalanceRowDto, selected: boolean) {
+    const key = this.getInventoryRowKey(row);
+    this.selectedInventoryV2Keys.update((state) => ({ ...state, [key]: selected }));
+  }
+
+  toggleSelectCurrentPage(selected: boolean) {
+    const next = { ...this.selectedInventoryV2Keys() };
+    for (const row of this.inventoryV2Rows()) {
+      if (!row.isInventoryTracked) {
+        continue;
+      }
+      next[this.getInventoryRowKey(row)] = selected;
+    }
+    this.selectedInventoryV2Keys.set(next);
+  }
+
+  async exportInventoryV2Csv() {
+    const filters = this.inventoryFacade.filters();
+    const blob = await this.api.exportInventoryBalancesV2({
+      storeId: filters.storeId,
+      q: filters.q || undefined,
+      categoryId: filters.categoryId || undefined,
+      tracked: filters.tracked === '' ? undefined : filters.tracked === 'true',
+      onHandMin: filters.onHandMin ?? undefined,
+      onHandMax: filters.onHandMax ?? undefined,
+    });
+    this.downloadBlob(blob, `inventory-balances-${filters.storeId || 'store'}.csv`);
+  }
+
+  downloadImportTemplateCsv() {
+    const csv = 'storeId,itemType,externalCode,deltaQty,reasonCode,referenceId,note\n';
+    this.downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'inventory-adjustments-template.csv');
+  }
+
+  async onImportFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.item(0);
+    if (!file) {
+      return;
+    }
+
+    const text = await file.text();
+    this.importRawCsv.set(text);
+    this.importPreviewRows.set(this.parseImportCsv(text));
+  }
+
+  async applyBatchAdjustmentFromSelection() {
+    const selectedRows = this.inventoryV2Rows().filter((row) => this.isRowSelected(row));
+    const delta = this.batchDeltaControl.value;
+    if (!selectedRows.length || delta === 0) {
+      this.batchResultMessage.set('VALIDATION_ERROR');
+      return;
+    }
+
+    const payload: CreateInventoryBatchAdjustmentV2Request = {
+      storeId: this.storeIdControl.value.trim(),
+      reasonCode: this.batchReasonControl.value,
+      clientOperationId: globalThis.crypto?.randomUUID() ?? `${Date.now()}-${Math.random()}`,
+      items: selectedRows.map((row, index) => ({
+        itemType: row.itemType,
+        itemId: row.itemId,
+        operationType: 'Delta',
+        quantityDelta: delta,
+        lineClientOperationId: `line-${index + 1}`,
+      })),
+    };
+
+    await this.executeBatchAdjustment(payload);
+  }
+
+  async applyBatchAdjustmentFromImport() {
+    const validRows = this.importPreviewRows().filter((row) => !row.validationError);
+    if (!validRows.length) {
+      this.batchResultMessage.set('VALIDATION_ERROR');
+      return;
+    }
+
+    const payload: CreateInventoryBatchAdjustmentV2Request = {
+      storeId: this.storeIdControl.value.trim(),
+      reasonCode: this.batchReasonControl.value,
+      clientOperationId: globalThis.crypto?.randomUUID() ?? `${Date.now()}-${Math.random()}`,
+      items: validRows.map((row) => ({
+        itemType: row.itemType,
+        itemExternalCode: row.externalCode,
+        operationType: 'Delta',
+        quantityDelta: row.deltaQty,
+        lineClientOperationId: `import-line-${row.lineNo}`,
+      })),
+    };
+
+    await this.executeBatchAdjustment(payload);
+  }
+
+  private async executeBatchAdjustment(payload: CreateInventoryBatchAdjustmentV2Request) {
+    this.batchBusy.set(true);
+    this.batchResultMessage.set(null);
+    try {
+      const result = await this.api.createInventoryBatchAdjustmentV2(payload);
+      this.batchResultMessage.set(`Applied: ${result.totals.appliedCount} · Failed: ${result.totals.failedCount}`);
+      await this.loadInventoryV2();
+      await this.loadHistory();
+    } catch (error) {
+      this.batchResultMessage.set(this.mapErrorCode(this.toUiErrorReason(error)));
+    } finally {
+      this.batchBusy.set(false);
+    }
+  }
+
+  private parseImportCsv(csv: string): InventoryImportPreviewRow[] {
+    const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    if (lines.length <= 1) {
+      return [];
+    }
+
+    return lines.slice(1).map((line, index) => {
+      const [, itemTypeRaw, externalCodeRaw, deltaQtyRaw, reasonCodeRaw, referenceIdRaw, noteRaw] = line.split(',');
+      const itemType = itemTypeRaw?.trim() === 'Extra' ? 'Extra' : 'Product';
+      const externalCode = externalCodeRaw?.trim() ?? '';
+      const deltaQty = Number.parseFloat(deltaQtyRaw ?? '0');
+      const validationError = !externalCode ? 'UNKNOWN_ITEM' : (!Number.isFinite(deltaQty) || deltaQty === 0 ? 'VALIDATION_ERROR' : null);
+
+      return {
+        lineNo: index + 1,
+        itemType,
+        externalCode,
+        deltaQty,
+        reasonCode: (reasonCodeRaw?.trim() as InventoryAdjustmentReason) || 'Correction',
+        referenceId: referenceIdRaw?.trim() || null,
+        note: noteRaw?.trim() || null,
+        validationError,
+      };
+    });
+  }
+
+  private mapErrorCode(code: string) {
+    const map: Record<string, string> = {
+      NEGATIVE_STOCK: 'No se puede aplicar porque dejaría stock negativo.',
+      UNKNOWN_ITEM: 'Hay ítems que no existen en el catálogo.',
+      VALIDATION_ERROR: 'Revisa el archivo o los campos requeridos.',
+    };
+
+    return map[code] ?? code;
+  }
+
+  private downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   hasContextBadge(): boolean {
@@ -892,7 +1091,11 @@ export class InventoryPage {
 
   private toUiErrorReason(error: unknown) {
     if (error instanceof HttpErrorResponse && (error.status === 409 || error.status === 400)) {
-      return String(error.error?.reason ?? 'VALIDATION_ERROR');
+      const reason = String(error.error?.reason ?? 'VALIDATION_ERROR');
+      if (reason === 'NegativeStockNotAllowed') {
+        return 'NEGATIVE_STOCK';
+      }
+      return reason;
     }
 
     return 'REQUEST_FAILED';
