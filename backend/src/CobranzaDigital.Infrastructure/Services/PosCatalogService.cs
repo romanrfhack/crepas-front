@@ -660,8 +660,8 @@ public sealed class PosCatalogService : IPosCatalogService
             var hasAnomaly = x.ResultingOnHandQty < 0m || x.QtyBefore < 0m || x.QtyBefore + x.DeltaQty != x.ResultingOnHandQty;
             if (hasAnomaly)
             {
-                _logger.LogWarning(
-                    "Inventory movement anomaly detected. Tenant={TenantId} Store={StoreId} ItemType={ItemType} ItemId={ItemId} MovementId={MovementId} QtyBefore={QtyBefore} Delta={DeltaQty} QtyAfter={QtyAfter}",
+                PosCatalogLog.InventoryMovementAnomalyDetected(
+                    _logger,
                     tenantId,
                     storeId,
                     parsedItemType,
@@ -1587,8 +1587,28 @@ internal static class PosCatalogLog
             new EventId(1, nameof(AuditWritten)),
             "audit_log_written action={Action} entity={Entity} entityId={EntityId}");
 
+    private static readonly Action<ILogger, Guid, Guid, InventoryTrackableItemType, Guid, Guid, decimal, decimal, decimal, Exception?> InventoryMovementAnomalyDetectedMessage =
+        LoggerMessage.Define<Guid, Guid, InventoryTrackableItemType, Guid, Guid, decimal, decimal, decimal>(
+            LogLevel.Warning,
+            new EventId(2, nameof(InventoryMovementAnomalyDetected)),
+            "Inventory movement anomaly detected. Tenant={TenantId} Store={StoreId} ItemType={ItemType} ItemId={ItemId} MovementId={MovementId} QtyBefore={QtyBefore} Delta={DeltaQty} QtyAfter={QtyAfter}");
+
     public static void AuditWritten(ILogger logger, string action, string entity, Guid entityId)
     {
         AuditWrittenMessage(logger, action, entity, entityId, null);
+    }
+
+    public static void InventoryMovementAnomalyDetected(
+        ILogger logger,
+        Guid tenantId,
+        Guid storeId,
+        InventoryTrackableItemType itemType,
+        Guid itemId,
+        Guid movementId,
+        decimal qtyBefore,
+        decimal deltaQty,
+        decimal qtyAfter)
+    {
+        InventoryMovementAnomalyDetectedMessage(logger, tenantId, storeId, itemType, itemId, movementId, qtyBefore, deltaQty, qtyAfter, null);
     }
 }
