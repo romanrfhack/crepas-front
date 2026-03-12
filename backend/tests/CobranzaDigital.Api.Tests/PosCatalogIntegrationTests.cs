@@ -934,12 +934,12 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     }
 
     [Fact]
-    public async Task InventoryV2_Movements_Validates_Tenant_Store_Isolation()
+    public async Task InventoryV2_Movements_Reject_Store_From_Other_Tenant()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/movements?storeId={Guid.NewGuid():D}&itemType=Product&itemId={Guid.NewGuid():D}&page=1&pageSize=20", token);
         using var response = await _client.SendAsync(request);
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     private static async Task AssertStatusAsync(HttpResponseMessage response, HttpStatusCode expectedStatus)
