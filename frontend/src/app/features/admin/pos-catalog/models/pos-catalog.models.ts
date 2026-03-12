@@ -332,6 +332,8 @@ export interface InventoryBalancesQuery {
   q?: string;
   categoryId?: string;
   tracked?: boolean;
+  onHandMin?: number;
+  onHandMax?: number;
   page?: number;
   pageSize?: number;
 }

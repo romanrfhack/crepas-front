@@ -70,6 +70,8 @@ public sealed class StoreCatalogOverrideConfiguration : IEntityTypeConfiguration
         builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.HasIndex(x => new { x.StoreId, x.ItemType, x.ItemId }).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.ItemType, x.OnHandQty });
+        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.ItemType, x.UpdatedAtUtc });
         builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
     }
@@ -86,6 +88,8 @@ public sealed class CatalogInventoryBalanceConfiguration : IEntityTypeConfigurat
         builder.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.HasIndex(x => new { x.StoreId, x.ItemType, x.ItemId }).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.ItemType, x.OnHandQty });
+        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.ItemType, x.UpdatedAtUtc });
         builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
     }
@@ -111,6 +115,7 @@ public sealed class CatalogInventoryAdjustmentConfiguration : IEntityTypeConfigu
         builder.Property(x => x.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.HasIndex(x => new { x.StoreId, x.ItemType, x.ItemId });
         builder.HasIndex(x => new { x.StoreId, x.CreatedAtUtc });
+        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.ItemType, x.ItemId, x.CreatedAtUtc });
         builder.HasIndex(x => new { x.StoreId, x.ReferenceType, x.ReferenceId });
         builder.HasIndex(x => new { x.TenantId, x.StoreId, x.ClientOperationId }).IsUnique().HasFilter("[ClientOperationId] IS NOT NULL");
         builder.HasIndex(x => new { x.ReferenceType, x.ReferenceId, x.ItemType, x.ItemId, x.Reason }).IsUnique();

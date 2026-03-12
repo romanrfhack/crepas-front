@@ -14,12 +14,26 @@ describe('InventoryPage', () => {
   const createAdjustment = vi.fn();
   const createInventoryAdjustmentV2 = vi.fn();
   const listInventoryMovementsV2 = vi.fn();
+  const listInventoryV2 = vi.fn();
+  const getCategories = vi.fn();
 
   beforeEach(async () => {
     listAdjustments.mockReset();
     createAdjustment.mockReset();
     createInventoryAdjustmentV2.mockReset();
     listInventoryMovementsV2.mockReset();
+    listInventoryV2.mockReset();
+    getCategories.mockReset();
+
+    listInventoryV2.mockResolvedValue({
+      items: [
+        { itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 },
+      ],
+      totalCount: 1,
+      page: 1,
+      pageSize: 25,
+    });
+    getCategories.mockResolvedValue([{ id: 'cat-1', name: 'Bebidas', sortOrder: 1, isActive: true }]);
 
     listAdjustments.mockResolvedValue([
       {
@@ -114,14 +128,7 @@ describe('InventoryPage', () => {
                 isInventoryTracked: true,
               },
             ]),
-            listInventoryV2: vi.fn().mockResolvedValue({
-              items: [
-                { itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 },
-              ],
-              totalCount: 1,
-              page: 1,
-              pageSize: 10,
-            }),
+            listInventoryV2,
             createInventoryAdjustmentV2,
             listInventoryMovementsV2,
             upsertInventory: vi.fn().mockResolvedValue({
@@ -139,6 +146,7 @@ describe('InventoryPage', () => {
           useValue: {
             getProducts: vi.fn().mockResolvedValue([{ id: 'product-1', name: 'Latte', externalCode: 'LAT-1' }]),
             getExtras: vi.fn().mockResolvedValue([{ id: 'extra-1', name: 'Shot' }]),
+            getCategories,
           },
         },
         {
@@ -484,6 +492,12 @@ describe('InventoryPage', () => {
     await fixture.componentInstance.submitInventoryV2Adjustment({ operationType: 'Set', quantity: 2, reasonCode: 'ManualCount', reference: null, note: null });
 
     expect(fixture.componentInstance.adjustErrorReason()).toBe('CONCURRENCY_CONFLICT');
+  });
+
+
+  it('carga categorías para filtro de negocio', async () => {
+    await fixture.componentInstance['loadCatalogItems']();
+    expect(getCategories).toHaveBeenCalled();
   });
 
 });

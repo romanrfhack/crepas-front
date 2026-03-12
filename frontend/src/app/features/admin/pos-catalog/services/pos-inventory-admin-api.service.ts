@@ -54,6 +54,14 @@ export class PosInventoryAdminApiService {
       query.set('tracked', queryParams.tracked ? 'true' : 'false');
     }
 
+    if (typeof queryParams.onHandMin === 'number') {
+      query.set('onHandMin', `${queryParams.onHandMin}`);
+    }
+
+    if (typeof queryParams.onHandMax === 'number') {
+      query.set('onHandMax', `${queryParams.onHandMax}`);
+    }
+
     query.set('page', `${queryParams.page ?? 1}`);
     query.set('pageSize', `${queryParams.pageSize ?? 25}`);
 

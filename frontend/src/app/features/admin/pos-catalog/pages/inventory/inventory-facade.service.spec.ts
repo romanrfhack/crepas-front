@@ -5,7 +5,7 @@ import { InventoryFacadeService } from './inventory-facade.service';
 describe('InventoryFacadeService', () => {
   it('builds query with filters and handles debounce search', async () => {
     vi.useFakeTimers();
-    const listInventoryV2 = vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 10 });
+    const listInventoryV2 = vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 });
     TestBed.configureTestingModule({
       providers: [InventoryFacadeService, { provide: PosInventoryAdminApiService, useValue: { listInventoryV2, listInventoryMovementsV2: vi.fn() } }],
     });
@@ -23,16 +23,18 @@ describe('InventoryFacadeService', () => {
       q: 'latte',
       categoryId: 'cat-1',
       tracked: true,
+      onHandMin: undefined,
+      onHandMax: undefined,
       page: 1,
-      pageSize: 10,
+      pageSize: 25,
     });
     vi.useRealTimers();
   });
 
   it('loads movements with expected query and supports paging', async () => {
-    const listInventoryMovementsV2 = vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 10 });
+    const listInventoryMovementsV2 = vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 });
     TestBed.configureTestingModule({
-      providers: [InventoryFacadeService, { provide: PosInventoryAdminApiService, useValue: { listInventoryV2: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 10 }), listInventoryMovementsV2 } }],
+      providers: [InventoryFacadeService, { provide: PosInventoryAdminApiService, useValue: { listInventoryV2: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 }), listInventoryMovementsV2 } }],
     });
 
     const service = TestBed.inject(InventoryFacadeService);
@@ -68,4 +70,20 @@ describe('InventoryFacadeService', () => {
 
     expect(service.error()).toContain('No fue posible cargar inventario');
   });
+
+
+  it('applies stock quick filters to onHand query params', async () => {
+    const listInventoryV2 = vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 });
+    TestBed.configureTestingModule({
+      providers: [InventoryFacadeService, { provide: PosInventoryAdminApiService, useValue: { listInventoryV2, listInventoryMovementsV2: vi.fn() } }],
+    });
+
+    const service = TestBed.inject(InventoryFacadeService);
+    service.updateStore('store-1');
+    service.updateOnHandRange(null, 0);
+    await service.load();
+
+    expect(listInventoryV2).toHaveBeenLastCalledWith(expect.objectContaining({ onHandMax: 0 }));
+  });
+
 });

@@ -457,7 +457,7 @@ public sealed class PosCatalogService : IPosCatalogService
             .ToListAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<PagedInventoryBalancesDto> GetInventoryBalancesV2Async(Guid storeId, string? query, Guid? categoryId, bool? tracked, int page, int pageSize, CancellationToken ct)
+    public async Task<PagedInventoryBalancesDto> GetInventoryBalancesV2Async(Guid storeId, string? query, Guid? categoryId, bool? tracked, decimal? onHandMin, decimal? onHandMax, int page, int pageSize, CancellationToken ct)
     {
         var tenantId = RequireTenantId();
         var storeBelongs = await _db.Stores.AsNoTracking().AnyAsync(x => x.Id == storeId && x.TenantId == tenantId, ct).ConfigureAwait(false);
@@ -473,6 +473,14 @@ public sealed class PosCatalogService : IPosCatalogService
         var safePageSize = Math.Clamp(pageSize, 1, 200);
         var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
         var term = query?.Trim();
+
+        if (onHandMin.HasValue && onHandMax.HasValue && onHandMin.Value > onHandMax.Value)
+        {
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["onHandMin"] = ["onHandMin must be less than or equal to onHandMax."]
+            });
+        }
 
         var productRows = from product in _db.Products.AsNoTracking()
                           where product.CatalogTemplateId == catalogTemplateId && product.IsActive
@@ -519,6 +527,16 @@ public sealed class PosCatalogService : IPosCatalogService
                         };
 
         var merged = productRows.Concat(extraRows);
+
+        if (onHandMin.HasValue)
+        {
+            merged = merged.Where(x => x.OnHandQty >= onHandMin.Value);
+        }
+
+        if (onHandMax.HasValue)
+        {
+            merged = merged.Where(x => x.OnHandQty <= onHandMax.Value);
+        }
 
         var totalCount = await merged.CountAsync(ct).ConfigureAwait(false);
         var pageRows = await merged

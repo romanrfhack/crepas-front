@@ -161,6 +161,8 @@ namespace CobranzaDigital.Infrastructure.Migrations
 
                     b.HasIndex("StoreId", "ReferenceType", "ReferenceId");
 
+                    b.HasIndex("TenantId", "StoreId", "ItemType", "ItemId", "CreatedAtUtc");
+
                     b.HasIndex("TenantId", "StoreId", "ClientOperationId")
                         .IsUnique()
                         .HasFilter("[ClientOperationId] IS NOT NULL");
@@ -207,6 +209,10 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "StoreId", "ItemType", "OnHandQty");
+
+                    b.HasIndex("TenantId", "StoreId", "ItemType", "UpdatedAtUtc");
 
                     b.HasIndex("StoreId", "ItemType", "ItemId")
                         .IsUnique();
@@ -1098,6 +1104,10 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "StoreId", "ItemType", "OnHandQty");
+
+                    b.HasIndex("TenantId", "StoreId", "ItemType", "UpdatedAtUtc");
 
                     b.HasIndex("StoreId", "ItemType", "ItemId")
                         .IsUnique();
