@@ -1160,7 +1160,7 @@ public sealed class PosCatalogService : IPosCatalogService
         }
 
         var result = new InventoryAdjustmentV2BatchResultDto(request.BatchClientOperationId, appliedCount, failedCount, lineResults);
-        _logger.LogInformation("Inventory batch adjustment processed. Tenant={TenantId} Store={StoreId} BatchClientOperationId={BatchClientOperationId} Applied={AppliedCount} Failed={FailedCount}", tenantId, request.StoreId, request.BatchClientOperationId, appliedCount, failedCount);
+        PosCatalogLog.InventoryBatchAdjustmentProcessed(_logger, tenantId, request.StoreId, request.BatchClientOperationId, appliedCount, failedCount);
 
         var json = JsonSerializer.Serialize(result);
         _db.CatalogInventoryBatchOperations.Add(new CatalogInventoryBatchOperation
@@ -1979,4 +1979,16 @@ internal static partial class PosCatalogLog
         decimal qtyBefore,
         decimal deltaQty,
         decimal qtyAfter);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Information,
+        Message = "Inventory batch adjustment processed. Tenant={TenantId} Store={StoreId} BatchClientOperationId={BatchClientOperationId} Applied={AppliedCount} Failed={FailedCount}")]
+    public static partial void InventoryBatchAdjustmentProcessed(
+        ILogger logger,
+        Guid tenantId,
+        Guid storeId,
+        Guid batchClientOperationId,
+        int appliedCount,
+        int failedCount);
 }
