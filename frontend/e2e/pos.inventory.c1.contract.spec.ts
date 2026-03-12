@@ -197,7 +197,7 @@ test('crear ajuste 409 muestra reason code estable', async ({ page }) => {
   await page.getByTestId('inventory-adjust-delta').blur();
   await expect(page.getByTestId('inventory-adjust-submit')).toBeEnabled();
   await page.getByTestId('inventory-adjust-submit').click({ force: true });
-  await expect(page.getByTestId('inventory-adjust-error')).toHaveText('NegativeStockNotAllowed');
+  await expect(page.getByTestId('inventory-adjust-error')).toHaveText('NEGATIVE_STOCK');
   await expect(page.getByTestId('inventory-adjust-success')).toHaveCount(0);
 });
 
