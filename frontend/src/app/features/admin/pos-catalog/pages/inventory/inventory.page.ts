@@ -92,7 +92,7 @@ interface ItemOption {
               <thead><tr><th>SKU</th><th>Nombre</th><th>Tipo</th><th>Categoría</th><th>Tracked</th><th>OnHand</th><th>Acciones</th></tr></thead>
               <tbody>
                 @for (row of inventoryV2Rows(); track row.itemType + '-' + row.itemId) {
-                  <tr><td>{{ row.sku ?? '—' }}</td><td>{{ row.name }}</td><td>{{ row.itemType }}</td><td>{{ row.categoryName ?? '—' }}</td><td>{{ row.isInventoryTracked ? 'Sí' : 'No' }}</td><td>{{ formatQty(row.onHandQty) }}</td><td><button type="button" [disabled]="!row.isInventoryTracked" [attr.data-testid]="'inventory-v2-adjust-' + row.itemType + '-' + row.itemId" (click)="openAdjustmentDialog(row)">Ajustar</button></td></tr>
+                  <tr><td>{{ row.sku ?? '—' }}</td><td>{{ row.name }}</td><td>{{ row.itemType }}</td><td>{{ row.categoryName ?? '—' }}</td><td>{{ row.isInventoryTracked ? 'Sí' : 'No' }}</td><td>{{ formatQty(row.onHandQty) }}</td><td><button type="button" [disabled]="!row.isInventoryTracked" [attr.data-testid]="'inventory-v2-adjust-' + row.itemType + '-' + row.itemId" (click)="openAdjustmentDialog(row)">Ajustar</button><button type="button" [attr.data-testid]="'inventory-v2-kardex-' + row.itemType + '-' + row.itemId" (click)="openMovementsDrawer(row)">Ver Kardex</button></td></tr>
                 } @empty {
                   <tr><td colspan="7" data-testid="inventory-v2-empty">Sin resultados.</td></tr>
                 }
@@ -212,6 +212,56 @@ interface ItemOption {
           <p class="success" data-testid="inventory-adjust-success">{{ success }}</p>
         }
       </form>
+
+
+      @if (movementsDrawerOpen() && movementContext(); as context) {
+        <section class="card" data-testid="inventory-movements-drawer">
+          <h3>Kardex · {{ context.itemSku ?? '—' }} {{ context.itemName }}</h3>
+          <p data-testid="inventory-movements-header">Store: {{ context.storeId }} · OnHand: {{ formatQty(context.onHandQty) }}</p>
+          <div class="filters">
+            <input type="datetime-local" data-testid="inventory-movements-from" (change)="onMovementFromChange($any($event.target).value)" />
+            <input type="datetime-local" data-testid="inventory-movements-to" (change)="onMovementToChange($any($event.target).value)" />
+            <select data-testid="inventory-movements-reason" (change)="onMovementReasonChange($any($event.target).value)">
+              <option value="">Todos motivos</option>
+              @for (reason of adjustmentReasons; track reason) {
+                <option [value]="reason">{{ toReasonUi(reason).label }}</option>
+              }
+            </select>
+            <input placeholder="referenceId" data-testid="inventory-movements-reference" (input)="onMovementReferenceChange($any($event.target).value)" />
+            <button type="button" data-testid="inventory-movements-close" (click)="closeMovementsDrawer()">Cerrar</button>
+          </div>
+          @if (movementLoading()) {
+            <p data-testid="inventory-movements-loading">Cargando kardex...</p>
+          } @else if (movementError(); as movementError) {
+            <p class="error" data-testid="inventory-movements-error">{{ movementError }}</p>
+            <button type="button" data-testid="inventory-movements-retry" (click)="reloadMovementsDrawer()">Reintentar</button>
+          } @else {
+            <table data-testid="inventory-movements-table">
+              <thead><tr><th>Fecha/hora</th><th>Razón</th><th>Delta</th><th>Stock</th><th>Referencia</th><th>Usuario</th><th>Nota</th></tr></thead>
+              <tbody>
+                @for (row of movementRows(); track row.movementId) {
+                  <tr>
+                    <td>{{ row.occurredAtUtc }}</td>
+                    <td>{{ toReasonUi(row.reasonCode).label }}</td>
+                    <td>{{ formatQty(row.deltaQty) }}</td>
+                    <td>{{ formatQty(row.qtyBefore) }} → {{ formatQty(row.qtyAfter) }}</td>
+                    <td>{{ row.referenceType ?? '—' }} {{ row.referenceId ?? '—' }}</td>
+                    <td>{{ row.createdByDisplayName ?? row.createdByUserId ?? '—' }}</td>
+                    <td [title]="row.note ?? ''">{{ row.note ?? '—' }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="7">Sin movimientos.</td></tr>
+                }
+              </tbody>
+            </table>
+            <div>
+              <button type="button" data-testid="inventory-movements-prev" (click)="movementPreviousPage()">Anterior</button>
+              <button type="button" data-testid="inventory-movements-next" (click)="movementNextPage()">Siguiente</button>
+              <span data-testid="inventory-movements-total">Total: {{ movementTotalCount() }}</span>
+            </div>
+          }
+        </section>
+      }
 
       <section class="card">
         <h3>Historial de movimientos</h3>
@@ -347,6 +397,12 @@ export class InventoryPage {
   readonly inventoryV2Error = this.inventoryFacade.error;
   readonly inventoryV2TotalCount = this.inventoryFacade.totalCount;
   readonly adjustmentDialogOpen = signal(false);
+  readonly movementsDrawerOpen = this.inventoryFacade.movementsOpen;
+  readonly movementContext = this.inventoryFacade.movementsContext;
+  readonly movementRows = this.inventoryFacade.movementsRows;
+  readonly movementTotalCount = this.inventoryFacade.movementsTotalCount;
+  readonly movementLoading = this.inventoryFacade.movementsLoading;
+  readonly movementError = this.inventoryFacade.movementsError;
   readonly selectedAdjustmentRow = signal<InventoryBalanceRowDto | null>(null);
   readonly lastInventoryV2Payload = signal<CreateInventoryAdjustmentV2Request | null>(null);
   readonly adjustRetryAvailable = computed(() => this.lastInventoryV2Payload() !== null && !this.adjustBusy());
@@ -458,6 +514,59 @@ export class InventoryPage {
     return chunks.filter((item) => !!item).join(' · ');
   }
 
+
+
+  openMovementsDrawer(row: InventoryBalanceRowDto) {
+    const storeId = this.storeIdControl.value.trim();
+    if (!storeId) {
+      return;
+    }
+
+    this.inventoryFacade.openMovementsDrawer({
+      storeId,
+      itemType: row.itemType,
+      itemId: row.itemId,
+      itemName: row.name,
+      itemSku: row.sku,
+      onHandQty: row.onHandQty,
+    });
+  }
+
+  closeMovementsDrawer() {
+    this.inventoryFacade.closeMovementsDrawer();
+  }
+
+  reloadMovementsDrawer() {
+    void this.inventoryFacade.loadMovements();
+  }
+
+  onMovementFromChange(value: string) {
+    this.inventoryFacade.updateMovementsFrom(value);
+  }
+
+  onMovementToChange(value: string) {
+    this.inventoryFacade.updateMovementsTo(value);
+  }
+
+  onMovementReasonChange(value: string) {
+    this.inventoryFacade.updateMovementsReason((value || '') as '' | InventoryAdjustmentReason);
+  }
+
+  onMovementReferenceChange(value: string) {
+    this.inventoryFacade.updateMovementsReference(value);
+  }
+
+  async movementPreviousPage() {
+    const current = this.inventoryFacade.movementsFilters().page;
+    this.inventoryFacade.updateMovementsPage(Math.max(1, current - 1));
+    await this.inventoryFacade.loadMovements();
+  }
+
+  async movementNextPage() {
+    const current = this.inventoryFacade.movementsFilters().page;
+    this.inventoryFacade.updateMovementsPage(current + 1);
+    await this.inventoryFacade.loadMovements();
+  }
 
   openAdjustmentDialog(row: InventoryBalanceRowDto) {
     this.adjustErrorReason.set(null);

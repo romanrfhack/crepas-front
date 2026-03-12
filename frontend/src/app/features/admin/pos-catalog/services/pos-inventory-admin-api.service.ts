@@ -7,7 +7,9 @@ import {
   CreateInventoryAdjustmentV2Request,
   InventoryAdjustmentV2ResultDto,
   InventoryBalancesQuery,
+  InventoryMovementsQuery,
   PagedInventoryBalancesDto,
+  PagedInventoryMovementsDto,
   PosInventorySettingsDto,
   StoreInventoryItemDto,
   UpsertCatalogInventoryRequest,
@@ -58,6 +60,43 @@ export class PosInventoryAdminApiService {
     return firstValueFrom(this.apiClient.get<PagedInventoryBalancesDto>(`/v2/pos/inventory/balances?${query.toString()}`));
   }
 
+
+
+  listInventoryMovementsV2(queryParams: InventoryMovementsQuery) {
+    const query = new URLSearchParams({
+      storeId: queryParams.storeId,
+      itemType: queryParams.itemType,
+      itemId: queryParams.itemId,
+      page: `${queryParams.page ?? 1}`,
+      pageSize: `${queryParams.pageSize ?? 25}`,
+    });
+
+    if (queryParams.from?.trim()) {
+      query.set('from', queryParams.from.trim());
+    }
+
+    if (queryParams.to?.trim()) {
+      query.set('to', queryParams.to.trim());
+    }
+
+    if (queryParams.reason?.trim()) {
+      query.set('reason', queryParams.reason.trim());
+    }
+
+    if (queryParams.referenceType?.trim()) {
+      query.set('referenceType', queryParams.referenceType.trim());
+    }
+
+    if (queryParams.referenceId?.trim()) {
+      query.set('referenceId', queryParams.referenceId.trim());
+    }
+
+    if (queryParams.createdByUserId?.trim()) {
+      query.set('createdByUserId', queryParams.createdByUserId.trim());
+    }
+
+    return firstValueFrom(this.apiClient.get<PagedInventoryMovementsDto>(`/v2/pos/inventory/movements?${query.toString()}`));
+  }
 
   createInventoryAdjustmentV2(payload: CreateInventoryAdjustmentV2Request) {
     return firstValueFrom(this.apiClient.post<InventoryAdjustmentV2ResultDto>('/v2/pos/inventory/adjustments', payload));

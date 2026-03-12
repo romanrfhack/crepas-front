@@ -889,6 +889,59 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
+
+    [Fact]
+    public async Task InventoryV2_Movements_Supports_Pagination_And_Filters()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-v2-movements-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 Movement Latte", externalCode = "MOV-V2", categoryId = category.Id, basePrice = 30m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        var now = DateTimeOffset.UtcNow;
+        await SeedInventoryMovementAsync(snapshot.StoreId, product.Id, now.AddDays(-3), "Correction", 4m, 2m, "Sale", "sale-1", "admin-1");
+        await SeedInventoryMovementAsync(snapshot.StoreId, product.Id, now.AddDays(-2), "SaleConsumption", 6m, -1m, "Sale", "sale-2", "admin-1");
+        await SeedInventoryMovementAsync(snapshot.StoreId, product.Id, now.AddDays(-1), "VoidReversal", 5m, 1m, "SaleVoid", "void-1", "admin-2");
+
+        using var pageReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/movements?storeId={snapshot.StoreId:D}&itemType=Product&itemId={product.Id:D}&page=1&pageSize=2", token);
+        using var pageResp = await _client.SendAsync(pageReq);
+        Assert.Equal(HttpStatusCode.OK, pageResp.StatusCode);
+        var page = (await pageResp.Content.ReadFromJsonAsync<PagedInventoryMovementsResponse>())!;
+        Assert.Equal(2, page.Items.Count);
+        Assert.True(page.TotalCount >= 3);
+        Assert.Equal(2, page.PageSize);
+        Assert.True(page.Items[0].OccurredAtUtc >= page.Items[1].OccurredAtUtc);
+
+        using var reasonReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/movements?storeId={snapshot.StoreId:D}&itemType=Product&itemId={product.Id:D}&reason=SaleConsumption&page=1&pageSize=20", token);
+        using var reasonResp = await _client.SendAsync(reasonReq);
+        var reasonRows = (await reasonResp.Content.ReadFromJsonAsync<PagedInventoryMovementsResponse>())!;
+        Assert.Single(reasonRows.Items);
+        Assert.Equal("SaleConsumption", reasonRows.Items[0].ReasonCode);
+
+        var from = Uri.EscapeDataString(now.AddDays(-2).ToString("O"));
+        var to = Uri.EscapeDataString(now.AddHours(-12).ToString("O"));
+        using var rangeReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/movements?storeId={snapshot.StoreId:D}&itemType=Product&itemId={product.Id:D}&from={from}&to={to}&page=1&pageSize=20", token);
+        using var rangeResp = await _client.SendAsync(rangeReq);
+        var rangeRows = (await rangeResp.Content.ReadFromJsonAsync<PagedInventoryMovementsResponse>())!;
+        Assert.All(rangeRows.Items, row => Assert.InRange(row.OccurredAtUtc, now.AddDays(-2), now));
+
+        using var referenceReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/movements?storeId={snapshot.StoreId:D}&itemType=Product&itemId={product.Id:D}&referenceType=Sale&referenceId=sale-2&page=1&pageSize=20", token);
+        using var referenceResp = await _client.SendAsync(referenceReq);
+        var referenceRows = (await referenceResp.Content.ReadFromJsonAsync<PagedInventoryMovementsResponse>())!;
+        Assert.Single(referenceRows.Items);
+        Assert.Equal("sale-2", referenceRows.Items[0].ReferenceId);
+        Assert.Equal("Sale", referenceRows.Items[0].ReferenceType);
+    }
+
+    [Fact]
+    public async Task InventoryV2_Movements_Validates_Tenant_Store_Isolation()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/movements?storeId={Guid.NewGuid():D}&itemType=Product&itemId={Guid.NewGuid():D}&page=1&pageSize=20", token);
+        using var response = await _client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     private static async Task AssertStatusAsync(HttpResponseMessage response, HttpStatusCode expectedStatus)
     {
         if (response.StatusCode == expectedStatus)
@@ -1008,6 +1061,31 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         return request;
     }
 
+
+    private async Task SeedInventoryMovementAsync(Guid storeId, Guid itemId, DateTimeOffset createdAtUtc, string reason, decimal qtyBefore, decimal deltaQty, string? referenceType, string? referenceId, string? createdByUserId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var tenantId = Guid.Parse(_tenantHeaderValue);
+        db.CatalogInventoryAdjustments.Add(new CobranzaDigital.Domain.Entities.CatalogInventoryAdjustment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            StoreId = storeId,
+            ItemType = CobranzaDigital.Domain.Entities.CatalogItemType.Product,
+            ItemId = itemId,
+            QtyBefore = qtyBefore,
+            DeltaQty = deltaQty,
+            ResultingOnHandQty = qtyBefore + deltaQty,
+            Reason = reason,
+            ReferenceType = referenceType,
+            ReferenceId = referenceId,
+            CreatedAtUtc = createdAtUtc,
+            CreatedByUserId = Guid.TryParse(createdByUserId, out var userId) ? userId : null,
+        });
+        await db.SaveChangesAsync();
+    }
+
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken, DateTime AccessTokenExpiresAt, string TokenType);
     private sealed record CategoryResponse(Guid Id, string Name, int SortOrder, bool IsActive);
     private sealed record ProductResponse(Guid Id, string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive, bool IsAvailable, Guid? CustomizationSchemaId, bool? IsInventoryTracked = null, decimal? StockOnHandQty = null, string? AvailabilityReason = null, string? StoreOverrideState = null);
@@ -1023,6 +1101,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record InventoryBalanceRowResponse(string ItemType, Guid ItemId, string Name, string? Sku, string? CategoryName, bool IsInventoryTracked, decimal OnHandQty, DateTimeOffset? UpdatedAtUtc, string? BalanceVersion = null);
     private sealed record InventoryAdjustmentV2Response(Guid AdjustmentId, Guid StoreId, string ItemType, Guid ItemId, decimal QtyBefore, decimal QtyAfter, decimal DeltaApplied, string BalanceVersion, DateTimeOffset CreatedAtUtc, string ReasonCode, string? Reference);
     private sealed record PagedInventoryBalancesResponse(List<InventoryBalanceRowResponse> Items, int TotalCount, int Page, int PageSize);
+    private sealed record InventoryMovementRowResponse(Guid MovementId, DateTimeOffset OccurredAtUtc, string ReasonCode, string? ReferenceType, string? ReferenceId, string? Note, Guid? CreatedByUserId, string? CreatedByDisplayName, decimal DeltaQty, decimal QtyBefore, decimal QtyAfter, string? ClientOperationId, bool HasAnomaly);
+    private sealed record PagedInventoryMovementsResponse(List<InventoryMovementRowResponse> Items, int TotalCount, int Page, int PageSize);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);
     private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<OptionItemResponse> OptionItems, List<ExtraResponse> Extras, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record PagedResponse(List<UserListItem> Items);

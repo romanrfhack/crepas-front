@@ -26,6 +26,7 @@ describe('PosInventoryAdminApiService', () => {
     await service.listInventory('store-1', 'Extra', 'extra-1', true);
     await service.upsertInventory({ storeId: 'store-1', itemType: 'Product', itemId: 'product-1', onHandQty: 9 });
     await service.listInventoryV2({ storeId: 'store-1', q: 'latte', categoryId: 'cat-1', tracked: true, page: 2, pageSize: 10 });
+    await service.listInventoryMovementsV2({ storeId: 'store-1', itemType: 'Product', itemId: 'product-1', from: '2026-01-01T00:00:00Z', to: '2026-01-31T23:59:59Z', reason: 'Correction', page: 3, pageSize: 50 });
     await service.listLegacyInventory('store-1', 'latte', true);
     await service.upsertLegacyInventory({ storeId: 'store-1', productId: 'product-1', onHand: 9 });
     await service.updateInventorySettings({ showOnlyInStock: true });
@@ -38,6 +39,7 @@ describe('PosInventoryAdminApiService', () => {
       body: { storeId: 'store-1', itemType: 'Product', itemId: 'product-1', onHandQty: 9 },
     });
     expect(calls).toContainEqual({ method: 'get', path: '/v2/pos/inventory/balances?storeId=store-1&q=latte&categoryId=cat-1&tracked=true&page=2&pageSize=10' });
+    expect(calls).toContainEqual({ method: 'get', path: '/v2/pos/inventory/movements?storeId=store-1&itemType=Product&itemId=product-1&page=3&pageSize=50&from=2026-01-01T00%3A00%3A00Z&to=2026-01-31T23%3A59%3A59Z&reason=Correction' });
     expect(calls).toContainEqual({ method: 'get', path: '/v1/pos/admin/inventory?storeId=store-1&search=latte&onlyWithStock=true' });
     expect(calls).toContainEqual({ method: 'put', path: '/v1/pos/admin/inventory', body: { storeId: 'store-1', productId: 'product-1', onHand: 9 } });
     expect(calls).toContainEqual({

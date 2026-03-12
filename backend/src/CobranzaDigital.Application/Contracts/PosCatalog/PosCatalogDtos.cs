@@ -62,6 +62,21 @@ public sealed record CreateCatalogInventoryAdjustmentRequest(Guid StoreId, strin
 public sealed record CatalogInventoryAdjustmentDto(Guid Id, Guid StoreId, string ItemType, Guid ItemId, decimal QtyBefore, decimal QtyDelta, decimal QtyAfter, string Reason, string? Reference, string? Note, string? ClientOperationId, DateTimeOffset CreatedAtUtc, Guid? PerformedByUserId, string? ItemName = null, string? ItemSku = null, string? ReferenceType = null, Guid? ReferenceId = null, string? MovementKind = null);
 public sealed record InventoryBalanceRowDto(string ItemType, Guid ItemId, string Name, string? Sku, string? CategoryName, bool IsInventoryTracked, decimal OnHandQty, DateTimeOffset? UpdatedAtUtc, string? BalanceVersion = null);
 public sealed record PagedInventoryBalancesDto(IReadOnlyList<InventoryBalanceRowDto> Items, int TotalCount, int Page, int PageSize);
+public sealed record InventoryMovementRowDto(
+    Guid MovementId,
+    DateTimeOffset OccurredAtUtc,
+    string ReasonCode,
+    string? ReferenceType,
+    string? ReferenceId,
+    string? Note,
+    Guid? CreatedByUserId,
+    string? CreatedByDisplayName,
+    decimal DeltaQty,
+    decimal QtyBefore,
+    decimal QtyAfter,
+    string? ClientOperationId,
+    bool HasAnomaly);
+public sealed record PagedInventoryMovementsDto(IReadOnlyList<InventoryMovementRowDto> Items, int TotalCount, int Page, int PageSize);
 public sealed record CreateInventoryAdjustmentV2Request(
     Guid StoreId,
     string ItemType,
