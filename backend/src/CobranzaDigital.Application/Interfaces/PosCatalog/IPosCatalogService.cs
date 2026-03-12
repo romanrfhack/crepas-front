@@ -54,8 +54,10 @@ public interface IPosCatalogService
     Task<StoreInventoryItemDto> UpsertInventoryAsync(UpsertStoreInventoryRequest request, CancellationToken ct);
     Task<IReadOnlyList<CatalogInventoryItemDto>> GetCatalogInventoryAsync(Guid storeId, string? itemType, Guid? itemId, bool onlyTracked, CancellationToken ct);
     Task<PagedInventoryBalancesDto> GetInventoryBalancesV2Async(Guid storeId, string? query, Guid? categoryId, bool? tracked, decimal? onHandMin, decimal? onHandMax, int page, int pageSize, CancellationToken ct);
+    Task<IReadOnlyList<InventoryBalanceRowDto>> GetInventoryBalancesV2ExportAsync(Guid storeId, string? query, Guid? categoryId, bool? tracked, decimal? onHandMin, decimal? onHandMax, int maxRows, CancellationToken ct);
     Task<PagedInventoryMovementsDto> GetInventoryMovementsV2Async(Guid storeId, string itemType, Guid itemId, DateTimeOffset? fromUtc, DateTimeOffset? toUtc, string? reason, string? referenceType, string? referenceId, Guid? createdByUserId, int page, int pageSize, CancellationToken ct);
     Task<InventoryAdjustmentV2ResultDto> CreateInventoryAdjustmentV2Async(CreateInventoryAdjustmentV2Request request, CancellationToken ct);
+    Task<InventoryAdjustmentV2BatchResultDto> CreateInventoryAdjustmentBatchV2Async(CreateInventoryAdjustmentV2BatchRequest request, CancellationToken ct);
     Task<CatalogInventoryItemDto> UpsertCatalogInventoryAsync(UpsertCatalogInventoryRequest request, CancellationToken ct);
     Task<CatalogInventoryAdjustmentDto> CreateCatalogInventoryAdjustmentAsync(CreateCatalogInventoryAdjustmentRequest request, CancellationToken ct);
     Task<IReadOnlyList<CatalogInventoryAdjustmentDto>> GetCatalogInventoryAdjustmentsAsync(Guid storeId, string? itemType, Guid? itemId, DateTimeOffset? fromUtc, DateTimeOffset? toUtc, CancellationToken ct);

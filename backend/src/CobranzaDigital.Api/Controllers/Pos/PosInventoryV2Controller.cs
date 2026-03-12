@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+
 using Asp.Versioning;
 
 using CobranzaDigital.Api.FeatureManagement;
@@ -38,6 +41,45 @@ public sealed class PosInventoryV2Controller : ControllerBase
         CancellationToken ct = default) =>
         _service.GetInventoryBalancesV2Async(storeId, q, categoryId, tracked, onHandMin, onHandMax, page, pageSize, ct);
 
+    [HttpGet("balances/export")]
+    public async Task<IActionResult> ExportBalancesCsv(
+        [FromQuery] Guid storeId,
+        [FromQuery] string? q,
+        [FromQuery] Guid? categoryId,
+        [FromQuery] bool? tracked,
+        [FromQuery] decimal? onHandMin,
+        [FromQuery] decimal? onHandMax,
+        CancellationToken ct = default)
+    {
+        const int maxRows = 50000;
+        var rows = await _service.GetInventoryBalancesV2ExportAsync(storeId, q, categoryId, tracked, onHandMin, onHandMax, maxRows + 1, ct);
+        if (rows.Count > maxRows)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge, new ProblemDetails
+            {
+                Status = StatusCodes.Status413PayloadTooLarge,
+                Title = "Payload too large",
+                Detail = "Refina filtros"
+            });
+        }
+
+        var csv = new StringBuilder();
+        csv.AppendLine("ItemType,ExternalCode,Name,CategoryName,IsInventoryTracked,OnHandQty,UpdatedAtUtc");
+        foreach (var row in rows)
+        {
+            var externalCode = row.ItemType == "Product" ? row.Sku : row.ItemId.ToString("D");
+            csv.Append(EscapeCsv(row.ItemType)).Append(',')
+                .Append(EscapeCsv(externalCode)).Append(',')
+                .Append(EscapeCsv(row.Name)).Append(',')
+                .Append(EscapeCsv(row.CategoryName)).Append(',')
+                .Append(row.IsInventoryTracked ? "true" : "false").Append(',')
+                .Append(row.OnHandQty.ToString("0.000", CultureInfo.InvariantCulture)).Append(',')
+                .Append(EscapeCsv(row.UpdatedAtUtc?.ToString("O", CultureInfo.InvariantCulture)))
+                .AppendLine();
+        }
+
+        return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"inventory-balances-{storeId:D}.csv");
+    }
 
     [HttpGet("movements")]
     public Task<PagedInventoryMovementsDto> GetMovements(
@@ -55,9 +97,22 @@ public sealed class PosInventoryV2Controller : ControllerBase
         CancellationToken ct = default) =>
         _service.GetInventoryMovementsV2Async(storeId, itemType, itemId, from, to, reason, referenceType, referenceId, createdByUserId, page, pageSize, ct);
 
+    [HttpPost("adjustments/batch")]
+    public Task<InventoryAdjustmentV2BatchResultDto> CreateAdjustmentBatch(
+        [FromBody] CreateInventoryAdjustmentV2BatchRequest request,
+        CancellationToken ct = default) =>
+        _service.CreateInventoryAdjustmentBatchV2Async(request, ct);
+
     [HttpPost("adjustments")]
     public Task<InventoryAdjustmentV2ResultDto> CreateAdjustment(
         [FromBody] CreateInventoryAdjustmentV2Request request,
         CancellationToken ct = default) =>
         _service.CreateInventoryAdjustmentV2Async(request, ct);
+
+    private static string EscapeCsv(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        if (!value.Contains(',') && !value.Contains('"') && !value.Contains('\n') && !value.Contains('\r')) return value;
+        return $"\"{value.Replace("\"", "\"\"")}\"";
+    }
 }

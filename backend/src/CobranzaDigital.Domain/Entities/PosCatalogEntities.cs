@@ -117,6 +117,17 @@ public sealed class CatalogInventoryAdjustment : Entity
     public Guid? CreatedByUserId { get; set; }
 }
 
+
+public sealed class CatalogInventoryBatchOperation : Entity
+{
+    public Guid TenantId { get; set; }
+    public Guid StoreId { get; set; }
+    public Guid BatchClientOperationId { get; set; }
+    public string RequestHash { get; set; } = string.Empty;
+    public string ResultJson { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAtUtc { get; set; }
+}
+
 public sealed class Category : Entity
 {
     public Guid? CatalogTemplateId { get; set; }
