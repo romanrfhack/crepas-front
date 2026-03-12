@@ -351,6 +351,48 @@ describe('InventoryPage', () => {
     expect(listInventoryMovementsV2).toHaveBeenCalledTimes(2);
   });
 
+  it('v2 ajuste delta envia quantity como number redondeado', async () => {
+    createInventoryAdjustmentV2.mockResolvedValue({
+      adjustmentId: 'adj-v2-1',
+      storeId: 'store-1',
+      itemType: 'Product',
+      itemId: 'product-1',
+      qtyBefore: 1.25,
+      qtyAfter: 2.5,
+      deltaApplied: 1.25,
+      balanceVersion: 'v-new',
+      createdAtUtc: '2026-01-01T00:00:00Z',
+      reasonCode: 'Correction',
+    });
+
+    fixture.componentInstance.openAdjustmentDialog({
+      itemType: 'Product',
+      itemId: 'product-1',
+      name: 'Latte',
+      sku: 'LAT-1',
+      categoryName: 'Bebidas',
+      isInventoryTracked: true,
+      onHandQty: 1.25,
+      balanceVersion: 'v-old',
+    });
+
+    await fixture.componentInstance.submitInventoryV2Adjustment({
+      operationType: 'Delta',
+      quantity: 1.25,
+      reasonCode: 'Correction',
+      reference: null,
+      note: null,
+    });
+
+    expect(createInventoryAdjustmentV2).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationType: 'Delta',
+        quantityDelta: 1.25,
+      }),
+    );
+    expect(typeof createInventoryAdjustmentV2.mock.calls.at(-1)?.[0]?.quantityDelta).toBe('number');
+  });
+
   it('v2 ajuste set manda expectedVersion y operationType correcto', async () => {
     createInventoryAdjustmentV2.mockResolvedValue({
       adjustmentId: 'adj-v2-1',

@@ -846,6 +846,45 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     }
 
     [Fact]
+    public async Task InventoryV2_Adjustments_Delta_Concurrent_Requests_Eventually_Succeed()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"inventory-v2-delta-con-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 Delta Concurrency Product", externalCode = "DELTA-CON-V2", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        async Task<HttpStatusCode> SendDeltaAsync(string clientOperationId)
+        {
+            using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token);
+            req.Content = JsonContent.Create(new
+            {
+                storeId = snapshot.StoreId,
+                itemType = "Product",
+                itemId = product.Id,
+                operationType = "Delta",
+                quantityDelta = 1m,
+                reasonCode = "Correction",
+                clientOperationId
+            });
+            using var resp = await _client.SendAsync(req);
+            return resp.StatusCode;
+        }
+
+        var responses = await Task.WhenAll(
+            SendDeltaAsync(Guid.NewGuid().ToString("D")),
+            SendDeltaAsync(Guid.NewGuid().ToString("D")));
+
+        Assert.All(responses, code => Assert.Equal(HttpStatusCode.OK, code));
+
+        using var balancesReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/balances?storeId={snapshot.StoreId:D}&q=DELTA-CON-V2", token);
+        using var balancesResp = await _client.SendAsync(balancesReq);
+        Assert.Equal(HttpStatusCode.OK, balancesResp.StatusCode);
+        var balances = (await balancesResp.Content.ReadFromJsonAsync<PagedInventoryBalancesResponse>())!;
+        var row = Assert.Single(balances.Items);
+        Assert.Equal(2m, row.OnHandQty);
+    }
+
+    [Fact]
     public async Task InventoryV2_Adjustments_Set_Uses_Concurrency_Version()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
@@ -877,6 +916,12 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Equal(HttpStatusCode.Conflict, staleResp.StatusCode);
         var stalePayload = (await staleResp.Content.ReadFromJsonAsync<JsonElement>());
         Assert.Equal("CONCURRENCY_CONFLICT", stalePayload.GetProperty("reason").GetString());
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var adjustmentCount = await db.CatalogInventoryAdjustments.AsNoTracking()
+            .CountAsync(x => x.StoreId == snapshot.StoreId && x.ItemType.ToString() == "Product" && x.ItemId == product.Id);
+        Assert.Equal(2, adjustmentCount);
     }
 
     [Fact]

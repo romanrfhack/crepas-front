@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { InventoryAdjustmentDialogComponent } from './inventory-adjustment-dialog.component';
 
@@ -28,6 +29,23 @@ describe('InventoryAdjustmentDialogComponent', () => {
     expect(fixture.componentInstance.qtyBefore()).toBe(5);
     expect(fixture.componentInstance.qtyDelta()).toBe(-2);
     expect(fixture.componentInstance.qtyAfter()).toBe(3);
+  });
+
+
+
+  it('emite cantidad redondeada como number', () => {
+    const emitSpy = vi.spyOn(fixture.componentInstance.confirm, 'emit');
+    fixture.componentInstance.operationTypeControl.setValue('Set');
+    fixture.componentInstance.quantityControl.setValue(1.25);
+
+    fixture.componentInstance.onConfirm();
+
+    expect(emitSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quantity: 1.25,
+      }),
+    );
+    expect(typeof emitSpy.mock.calls[0][0].quantity).toBe('number');
   });
 
   it('valida delta no cero y no negativo', () => {

@@ -694,6 +694,8 @@ public sealed class PosCatalogService : IPosCatalogService
 
     public async Task<InventoryAdjustmentV2ResultDto> CreateInventoryAdjustmentV2Async(CreateInventoryAdjustmentV2Request request, CancellationToken ct)
     {
+        const int deltaMaxAttempts = 3;
+
         var tenantId = RequireTenantId();
         await EnsureStoreBelongsToTenantAsync(request.StoreId, tenantId, ct).ConfigureAwait(false);
 
@@ -733,21 +735,10 @@ public sealed class PosCatalogService : IPosCatalogService
                 throw new InventoryAdjustmentConflictException("IDEMPOTENCY_CONFLICT", "clientOperationId was already used with a different payload.");
             }
 
-            var existingBalance = await _db.CatalogInventoryBalances.AsNoTracking()
-                .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.StoreId == request.StoreId && x.ItemType == itemType && x.ItemId == request.ItemId, ct)
-                .ConfigureAwait(false);
-            return new InventoryAdjustmentV2ResultDto(
-                duplicated.Id, duplicated.StoreId, duplicated.ItemType.ToString(), duplicated.ItemId, duplicated.QtyBefore, duplicated.ResultingOnHandQty, duplicated.DeltaQty,
-                existingBalance is null ? string.Empty : Convert.ToBase64String(existingBalance.RowVersion), duplicated.CreatedAtUtc, duplicated.Reason, duplicated.Reference);
+            return await GetExistingByClientOperationAsync().ConfigureAwait(false);
         }
 
-        var now = DateTimeOffset.UtcNow;
         var userId = GetCurrentUserId();
-        var row = await _db.CatalogInventoryBalances.SingleOrDefaultAsync(x => x.StoreId == request.StoreId && x.TenantId == tenantId && x.ItemType == itemType && x.ItemId == request.ItemId, ct).ConfigureAwait(false);
-        var qtyBefore = row?.OnHandQty ?? 0m;
-        decimal qtyAfter;
-        decimal delta;
-
         if (string.Equals(operationType, "Delta", StringComparison.OrdinalIgnoreCase))
         {
             if (!request.QuantityDelta.HasValue || request.QuantityDelta.Value == 0m)
@@ -755,81 +746,156 @@ public sealed class PosCatalogService : IPosCatalogService
                 throw new ValidationException(new Dictionary<string, string[]> { ["quantityDelta"] = ["quantityDelta must be different from zero."] });
             }
 
-            delta = request.QuantityDelta.Value;
-            qtyAfter = qtyBefore + delta;
-        }
-        else
-        {
-            if (!request.QuantitySet.HasValue)
+            var delta = request.QuantityDelta.Value;
+            for (var attempt = 1; attempt <= deltaMaxAttempts; attempt++)
             {
-                throw new ValidationException(new Dictionary<string, string[]> { ["quantitySet"] = ["quantitySet is required for Set."] });
-            }
+                _db.ChangeTracker.Clear();
 
-            if (string.IsNullOrWhiteSpace(request.ExpectedVersion))
-            {
-                throw new ValidationException(new Dictionary<string, string[]> { ["expectedVersion"] = ["expectedVersion is required for Set."] });
-            }
+                var now = DateTimeOffset.UtcNow;
+                var row = await _db.CatalogInventoryBalances.SingleOrDefaultAsync(
+                        x => x.StoreId == request.StoreId && x.TenantId == tenantId && x.ItemType == itemType && x.ItemId == request.ItemId,
+                        ct)
+                    .ConfigureAwait(false);
+                var qtyBefore = row?.OnHandQty ?? 0m;
+                var qtyAfter = qtyBefore + delta;
+                if (qtyAfter < 0m)
+                {
+                    throw new InventoryAdjustmentConflictException("NEGATIVE_STOCK", "Resulting stock cannot be negative.");
+                }
 
-            if (row is not null)
-            {
-                var currentVersion = Convert.ToBase64String(row.RowVersion);
-                if (!string.Equals(currentVersion, request.ExpectedVersion, StringComparison.Ordinal))
+                if (row is null)
+                {
+                    row = new CatalogInventoryBalance
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        StoreId = request.StoreId,
+                        ItemType = itemType,
+                        ItemId = request.ItemId,
+                        OnHandQty = qtyAfter,
+                        UpdatedAtUtc = now
+                    };
+                    _db.CatalogInventoryBalances.Add(row);
+                }
+                else
+                {
+                    row.OnHandQty = qtyAfter;
+                    row.UpdatedAtUtc = now;
+                }
+
+                var adjustment = new CatalogInventoryAdjustment
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    StoreId = request.StoreId,
+                    ItemType = itemType,
+                    ItemId = request.ItemId,
+                    QtyBefore = qtyBefore,
+                    DeltaQty = delta,
+                    ResultingOnHandQty = qtyAfter,
+                    Reason = parsedReason.ToString(),
+                    Reference = request.Reference,
+                    Note = request.Note,
+                    ClientOperationId = request.ClientOperationId,
+                    CreatedAtUtc = now,
+                    CreatedByUserId = userId
+                };
+                _db.CatalogInventoryAdjustments.Add(adjustment);
+
+                try
+                {
+                    await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+                    return new InventoryAdjustmentV2ResultDto(adjustment.Id, adjustment.StoreId, adjustment.ItemType.ToString(), adjustment.ItemId, qtyBefore, qtyAfter, delta, Convert.ToBase64String(row.RowVersion), adjustment.CreatedAtUtc, adjustment.Reason, adjustment.Reference);
+                }
+                catch (DbUpdateConcurrencyException) when (attempt < deltaMaxAttempts)
+                {
+                    continue;
+                }
+                catch (DbUpdateConcurrencyException)
                 {
                     throw new InventoryAdjustmentConflictException("CONCURRENCY_CONFLICT", "Balance version mismatch.");
                 }
+                catch (DbUpdateException dbEx) when (dbEx.InnerException?.Message.Contains("ClientOperationId", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    return await GetExistingByClientOperationAsync().ConfigureAwait(false);
+                }
             }
 
-            qtyAfter = request.QuantitySet.Value;
-            delta = qtyAfter - qtyBefore;
-            if (delta == 0m)
+            throw new InventoryAdjustmentConflictException("CONCURRENCY_CONFLICT", "Balance version mismatch.");
+        }
+
+        if (!request.QuantitySet.HasValue)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["quantitySet"] = ["quantitySet is required for Set."] });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ExpectedVersion))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["expectedVersion"] = ["expectedVersion is required for Set."] });
+        }
+
+        var setNow = DateTimeOffset.UtcNow;
+        var setRow = await _db.CatalogInventoryBalances.SingleOrDefaultAsync(x => x.StoreId == request.StoreId && x.TenantId == tenantId && x.ItemType == itemType && x.ItemId == request.ItemId, ct).ConfigureAwait(false);
+        var setQtyBefore = setRow?.OnHandQty ?? 0m;
+        if (setRow is not null)
+        {
+            var currentVersion = Convert.ToBase64String(setRow.RowVersion);
+            if (!string.Equals(currentVersion, request.ExpectedVersion, StringComparison.Ordinal))
             {
-                throw new ValidationException(new Dictionary<string, string[]> { ["quantitySet"] = ["quantitySet must produce a change."] });
+                throw new InventoryAdjustmentConflictException("CONCURRENCY_CONFLICT", "Balance version mismatch.");
             }
         }
 
-        if (qtyAfter < 0m)
+        var setQtyAfter = request.QuantitySet.Value;
+        var setDelta = setQtyAfter - setQtyBefore;
+        if (setDelta == 0m)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["quantitySet"] = ["quantitySet must produce a change."] });
+        }
+
+        if (setQtyAfter < 0m)
         {
             throw new InventoryAdjustmentConflictException("NEGATIVE_STOCK", "Resulting stock cannot be negative.");
         }
 
-        if (row is null)
+        if (setRow is null)
         {
-            row = new CatalogInventoryBalance
+            setRow = new CatalogInventoryBalance
             {
                 Id = Guid.NewGuid(),
                 TenantId = tenantId,
                 StoreId = request.StoreId,
                 ItemType = itemType,
                 ItemId = request.ItemId,
-                OnHandQty = qtyAfter,
-                UpdatedAtUtc = now
+                OnHandQty = setQtyAfter,
+                UpdatedAtUtc = setNow
             };
-            _db.CatalogInventoryBalances.Add(row);
+            _db.CatalogInventoryBalances.Add(setRow);
         }
         else
         {
-            row.OnHandQty = qtyAfter;
-            row.UpdatedAtUtc = now;
+            setRow.OnHandQty = setQtyAfter;
+            setRow.UpdatedAtUtc = setNow;
         }
 
-        var adjustment = new CatalogInventoryAdjustment
+        var setAdjustment = new CatalogInventoryAdjustment
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             StoreId = request.StoreId,
             ItemType = itemType,
             ItemId = request.ItemId,
-            QtyBefore = qtyBefore,
-            DeltaQty = delta,
-            ResultingOnHandQty = qtyAfter,
+            QtyBefore = setQtyBefore,
+            DeltaQty = setDelta,
+            ResultingOnHandQty = setQtyAfter,
             Reason = parsedReason.ToString(),
             Reference = request.Reference,
             Note = request.Note,
             ClientOperationId = request.ClientOperationId,
-            CreatedAtUtc = now,
+            CreatedAtUtc = setNow,
             CreatedByUserId = userId
         };
-        _db.CatalogInventoryAdjustments.Add(adjustment);
+        _db.CatalogInventoryAdjustments.Add(setAdjustment);
 
         try
         {
@@ -841,6 +907,13 @@ public sealed class PosCatalogService : IPosCatalogService
         }
         catch (DbUpdateException dbEx) when (dbEx.InnerException?.Message.Contains("ClientOperationId", StringComparison.OrdinalIgnoreCase) == true)
         {
+            return await GetExistingByClientOperationAsync().ConfigureAwait(false);
+        }
+
+        return new InventoryAdjustmentV2ResultDto(setAdjustment.Id, setAdjustment.StoreId, setAdjustment.ItemType.ToString(), setAdjustment.ItemId, setQtyBefore, setQtyAfter, setDelta, Convert.ToBase64String(setRow.RowVersion), setAdjustment.CreatedAtUtc, setAdjustment.Reason, setAdjustment.Reference);
+
+        async Task<InventoryAdjustmentV2ResultDto> GetExistingByClientOperationAsync()
+        {
             var existing = await _db.CatalogInventoryAdjustments.AsNoTracking()
                 .Where(x => x.TenantId == tenantId && x.StoreId == request.StoreId && x.ClientOperationId == request.ClientOperationId)
                 .OrderByDescending(x => x.CreatedAtUtc)
@@ -851,8 +924,6 @@ public sealed class PosCatalogService : IPosCatalogService
                 .ConfigureAwait(false);
             return new InventoryAdjustmentV2ResultDto(existing.Id, existing.StoreId, existing.ItemType.ToString(), existing.ItemId, existing.QtyBefore, existing.ResultingOnHandQty, existing.DeltaQty, Convert.ToBase64String(savedBalance.RowVersion), existing.CreatedAtUtc, existing.Reason, existing.Reference);
         }
-
-        return new InventoryAdjustmentV2ResultDto(adjustment.Id, adjustment.StoreId, adjustment.ItemType.ToString(), adjustment.ItemId, qtyBefore, qtyAfter, delta, Convert.ToBase64String(row.RowVersion), adjustment.CreatedAtUtc, adjustment.Reason, adjustment.Reference);
     }
 
     public async Task<CatalogInventoryItemDto> UpsertCatalogInventoryAsync(UpsertCatalogInventoryRequest request, CancellationToken ct)
