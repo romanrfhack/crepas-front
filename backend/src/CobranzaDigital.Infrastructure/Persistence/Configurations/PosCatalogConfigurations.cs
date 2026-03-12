@@ -124,6 +124,22 @@ public sealed class CatalogInventoryAdjustmentConfiguration : IEntityTypeConfigu
     }
 }
 
+
+public sealed class CatalogInventoryBatchOperationConfiguration : IEntityTypeConfiguration<CatalogInventoryBatchOperation>
+{
+    public void Configure(EntityTypeBuilder<CatalogInventoryBatchOperation> builder)
+    {
+        builder.ToTable("CatalogInventoryBatchOperations");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.RequestHash).HasMaxLength(128).IsRequired();
+        builder.Property(x => x.ResultJson).IsRequired();
+        builder.Property(x => x.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.BatchClientOperationId }).IsUnique();
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
 {
     public void Configure(EntityTypeBuilder<Category> builder)

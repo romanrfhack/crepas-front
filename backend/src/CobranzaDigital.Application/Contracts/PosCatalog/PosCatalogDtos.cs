@@ -101,6 +101,38 @@ public sealed record InventoryAdjustmentV2ResultDto(
     DateTimeOffset CreatedAtUtc,
     string ReasonCode,
     string? Reference);
+public sealed record CreateInventoryAdjustmentV2BatchRequest(
+    Guid StoreId,
+    string ReasonCode,
+    string? ReferenceType,
+    string? ReferenceId,
+    string? Note,
+    Guid BatchClientOperationId,
+    IReadOnlyList<CreateInventoryAdjustmentV2BatchLineRequest> Lines);
+public sealed record CreateInventoryAdjustmentV2BatchLineRequest(
+    int LineNo,
+    string ItemType,
+    string? ExternalCode,
+    Guid? ItemId,
+    decimal DeltaQty,
+    Guid? LineClientOperationId);
+public sealed record InventoryAdjustmentV2BatchResultDto(
+    Guid BatchClientOperationId,
+    int AppliedCount,
+    int FailedCount,
+    IReadOnlyList<InventoryAdjustmentV2BatchLineResultDto> Lines);
+public sealed record InventoryAdjustmentV2BatchLineResultDto(
+    int LineNo,
+    string ItemType,
+    string? ExternalCode,
+    Guid? ItemId,
+    string Status,
+    string? ErrorCode,
+    string? Message,
+    decimal? QtyBefore,
+    decimal? QtyAfter,
+    decimal? DeltaApplied,
+    Guid? AdjustmentId);
 public sealed record InventoryReportRowDto(string ItemType, Guid ItemId, string ItemName, string? ItemSku, Guid StoreId, decimal StockOnHandQty, bool IsInventoryTracked, string AvailabilityReason, string? StoreOverrideState, DateTimeOffset? UpdatedAtUtc, DateTimeOffset? LastAdjustmentAtUtc);
 public sealed record PosInventorySettingsDto(bool ShowOnlyInStock);
 public sealed record UpdatePosInventorySettingsRequest(bool ShowOnlyInStock);

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Common.Exceptions;
@@ -563,6 +564,107 @@ public sealed class PosCatalogService : IPosCatalogService
         return new PagedInventoryBalancesDto(items, totalCount, safePage, safePageSize);
     }
 
+    public async Task<IReadOnlyList<InventoryBalanceRowDto>> GetInventoryBalancesV2ExportAsync(Guid storeId, string? query, Guid? categoryId, bool? tracked, decimal? onHandMin, decimal? onHandMax, int maxRows, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        var storeBelongs = await _db.Stores.AsNoTracking().AnyAsync(x => x.Id == storeId && x.TenantId == tenantId, ct).ConfigureAwait(false);
+        if (!storeBelongs)
+        {
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["storeId"] = ["Store does not belong to tenant."]
+            });
+        }
+
+        if (onHandMin.HasValue && onHandMax.HasValue && onHandMin.Value > onHandMax.Value)
+        {
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["onHandMin"] = ["onHandMin must be less than or equal to onHandMax."]
+            });
+        }
+
+        var safeTake = Math.Clamp(maxRows, 1, 100000);
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var term = query?.Trim();
+
+        var productRows = from product in _db.Products.AsNoTracking()
+                          where product.CatalogTemplateId == catalogTemplateId && product.IsActive
+                          join category in _db.Categories.AsNoTracking() on product.CategoryId equals category.Id
+                          join balance in _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.TenantId == tenantId && x.StoreId == storeId && x.ItemType == CatalogItemType.Product)
+                              on product.Id equals balance.ItemId into productBalances
+                          from balance in productBalances.DefaultIfEmpty()
+                          where !tracked.HasValue || product.IsInventoryTracked == tracked.Value
+                          where !categoryId.HasValue || product.CategoryId == categoryId.Value
+                          where string.IsNullOrWhiteSpace(term)
+                                || product.Name.Contains(term!)
+                                || (product.ExternalCode != null && product.ExternalCode.Contains(term!))
+                          select new
+                          {
+                              ItemType = "Product",
+                              ItemId = product.Id,
+                              product.Name,
+                              Sku = product.ExternalCode,
+                              CategoryName = category.Name,
+                              product.IsInventoryTracked,
+                              OnHandQty = balance != null ? balance.OnHandQty : 0m,
+                              UpdatedAtUtc = balance != null ? balance.UpdatedAtUtc : (DateTimeOffset?)null,
+                              BalanceVersion = balance != null ? balance.RowVersion : null
+                          };
+
+        var extraRows = from extra in _db.Extras.AsNoTracking()
+                        where extra.CatalogTemplateId == catalogTemplateId && extra.IsActive
+                        join balance in _db.CatalogInventoryBalances.AsNoTracking().Where(x => x.TenantId == tenantId && x.StoreId == storeId && x.ItemType == CatalogItemType.Extra)
+                            on extra.Id equals balance.ItemId into extraBalances
+                        from balance in extraBalances.DefaultIfEmpty()
+                        where !tracked.HasValue || extra.IsInventoryTracked == tracked.Value
+                        where string.IsNullOrWhiteSpace(term) || extra.Name.Contains(term!)
+                        select new
+                        {
+                            ItemType = "Extra",
+                            ItemId = extra.Id,
+                            extra.Name,
+                            Sku = (string?)null,
+                            CategoryName = (string?)null,
+                            extra.IsInventoryTracked,
+                            OnHandQty = balance != null ? balance.OnHandQty : 0m,
+                            UpdatedAtUtc = balance != null ? balance.UpdatedAtUtc : (DateTimeOffset?)null,
+                            BalanceVersion = balance != null ? balance.RowVersion : null
+                        };
+
+        var merged = productRows.Concat(extraRows);
+
+        if (onHandMin.HasValue)
+        {
+            merged = merged.Where(x => x.OnHandQty >= onHandMin.Value);
+        }
+
+        if (onHandMax.HasValue)
+        {
+            merged = merged.Where(x => x.OnHandQty <= onHandMax.Value);
+        }
+
+        var rows = await merged
+            .OrderBy(x => x.Name)
+            .ThenBy(x => x.ItemType)
+            .Take(safeTake)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows
+            .Select(x => new InventoryBalanceRowDto(
+                x.ItemType,
+                x.ItemId,
+                x.Name,
+                x.Sku,
+                x.CategoryName,
+                x.IsInventoryTracked,
+                x.OnHandQty,
+                x.UpdatedAtUtc,
+                x.BalanceVersion is null ? null : Convert.ToBase64String(x.BalanceVersion)))
+            .ToList();
+    }
+
     public async Task<PagedInventoryMovementsDto> GetInventoryMovementsV2Async(Guid storeId, string itemType, Guid itemId, DateTimeOffset? fromUtc, DateTimeOffset? toUtc, string? reason, string? referenceType, string? referenceId, Guid? createdByUserId, int page, int pageSize, CancellationToken ct)
     {
         var tenantId = RequireTenantId();
@@ -942,6 +1044,154 @@ public sealed class PosCatalogService : IPosCatalogService
                 .ConfigureAwait(false);
             return new InventoryAdjustmentV2ResultDto(existing.Id, existing.StoreId, existing.ItemType.ToString(), existing.ItemId, existing.QtyBefore, existing.ResultingOnHandQty, existing.DeltaQty, Convert.ToBase64String(savedBalance.RowVersion), existing.CreatedAtUtc, existing.Reason, existing.Reference);
         }
+    }
+
+    public async Task<InventoryAdjustmentV2BatchResultDto> CreateInventoryAdjustmentBatchV2Async(CreateInventoryAdjustmentV2BatchRequest request, CancellationToken ct)
+    {
+        const int maxLines = 2000;
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(request.StoreId, tenantId, ct).ConfigureAwait(false);
+
+        if (request.BatchClientOperationId == Guid.Empty)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["batchClientOperationId"] = ["batchClientOperationId is required and must be a GUID."] });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ReasonCode) || !Enum.TryParse<InventoryAdjustmentReason>(request.ReasonCode, true, out _))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["reasonCode"] = ["reasonCode is required and must be valid."] });
+        }
+
+        if (request.Lines is null || request.Lines.Count == 0 || request.Lines.Count > maxLines)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["lines"] = [$"lines is required and must be between 1 and {maxLines}."] });
+        }
+
+        var requestHash = ComputeBatchRequestHash(request);
+        var existingBatch = await _db.CatalogInventoryBatchOperations.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.StoreId == request.StoreId && x.BatchClientOperationId == request.BatchClientOperationId, ct)
+            .ConfigureAwait(false);
+        if (existingBatch is not null)
+        {
+            if (!string.Equals(existingBatch.RequestHash, requestHash, StringComparison.Ordinal))
+            {
+                throw new InventoryAdjustmentConflictException("IDEMPOTENCY_CONFLICT", "batchClientOperationId was already used with a different payload.");
+            }
+
+            return JsonSerializer.Deserialize<InventoryAdjustmentV2BatchResultDto>(existingBatch.ResultJson)!;
+        }
+
+        var lineResults = new List<InventoryAdjustmentV2BatchLineResultDto>(request.Lines.Count);
+        var appliedCount = 0;
+        var failedCount = 0;
+
+        foreach (var line in request.Lines.OrderBy(x => x.LineNo))
+        {
+            var clampedDelta = decimal.Round(line.DeltaQty, 3, MidpointRounding.AwayFromZero);
+            var lineOperationId = (line.LineClientOperationId ?? DeriveLineClientOperationId(request.BatchClientOperationId, line.LineNo)).ToString("D");
+            var normalizedItemType = line.ItemType?.Trim() ?? string.Empty;
+
+            if (line.LineNo <= 0 || clampedDelta == 0m)
+            {
+                failedCount++;
+                lineResults.Add(new InventoryAdjustmentV2BatchLineResultDto(line.LineNo, normalizedItemType, line.ExternalCode, line.ItemId, "Failed", "VALIDATION_ERROR", "lineNo must be > 0 and deltaQty cannot be zero.", null, null, null, null));
+                continue;
+            }
+
+            Guid resolvedItemId;
+            if (line.ItemId.HasValue)
+            {
+                resolvedItemId = line.ItemId.Value;
+            }
+            else if (string.Equals(normalizedItemType, CatalogItemType.Product.ToString(), StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(line.ExternalCode))
+            {
+                var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+                var productId = await _db.Products.AsNoTracking()
+                    .Where(x => x.CatalogTemplateId == catalogTemplateId && x.ExternalCode == line.ExternalCode)
+                    .Select(x => (Guid?)x.Id)
+                    .SingleOrDefaultAsync(ct)
+                    .ConfigureAwait(false);
+                if (!productId.HasValue)
+                {
+                    failedCount++;
+                    lineResults.Add(new InventoryAdjustmentV2BatchLineResultDto(line.LineNo, normalizedItemType, line.ExternalCode, null, "Failed", "UNKNOWN_ITEM", "Unable to resolve item.", null, null, null, null));
+                    continue;
+                }
+
+                resolvedItemId = productId.Value;
+            }
+            else
+            {
+                failedCount++;
+                lineResults.Add(new InventoryAdjustmentV2BatchLineResultDto(line.LineNo, normalizedItemType, line.ExternalCode, line.ItemId, "Failed", "UNKNOWN_ITEM", "Unable to resolve item.", null, null, null, null));
+                continue;
+            }
+
+            try
+            {
+                var response = await CreateInventoryAdjustmentV2Async(new CreateInventoryAdjustmentV2Request(
+                    request.StoreId,
+                    normalizedItemType,
+                    resolvedItemId,
+                    "Delta",
+                    clampedDelta,
+                    null,
+                    request.ReasonCode,
+                    request.ReferenceId,
+                    request.Note,
+                    lineOperationId), ct).ConfigureAwait(false);
+                appliedCount++;
+                lineResults.Add(new InventoryAdjustmentV2BatchLineResultDto(line.LineNo, response.ItemType, line.ExternalCode, response.ItemId, "Applied", null, null, response.QtyBefore, response.QtyAfter, response.DeltaApplied, response.AdjustmentId));
+            }
+            catch (InventoryAdjustmentConflictException ex)
+            {
+                failedCount++;
+                var errorCode = ex.Reason is "NEGATIVE_STOCK" or "CONCURRENCY_CONFLICT" or "IDEMPOTENCY_CONFLICT"
+                    ? ex.Reason
+                    : "VALIDATION_ERROR";
+                lineResults.Add(new InventoryAdjustmentV2BatchLineResultDto(line.LineNo, normalizedItemType, line.ExternalCode, resolvedItemId, "Failed", errorCode, ex.Message, null, null, null, null));
+            }
+            catch (ValidationException ex)
+            {
+                failedCount++;
+                var code = ex.Errors.ContainsKey("itemId") || ex.Errors.ContainsKey("itemType") ? "UNKNOWN_ITEM" : "VALIDATION_ERROR";
+                lineResults.Add(new InventoryAdjustmentV2BatchLineResultDto(line.LineNo, normalizedItemType, line.ExternalCode, resolvedItemId, "Failed", code, ex.Message, null, null, null, null));
+            }
+        }
+
+        var result = new InventoryAdjustmentV2BatchResultDto(request.BatchClientOperationId, appliedCount, failedCount, lineResults);
+        _logger.LogInformation("Inventory batch adjustment processed. Tenant={TenantId} Store={StoreId} BatchClientOperationId={BatchClientOperationId} Applied={AppliedCount} Failed={FailedCount}", tenantId, request.StoreId, request.BatchClientOperationId, appliedCount, failedCount);
+
+        var json = JsonSerializer.Serialize(result);
+        _db.CatalogInventoryBatchOperations.Add(new CatalogInventoryBatchOperation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            StoreId = request.StoreId,
+            BatchClientOperationId = request.BatchClientOperationId,
+            RequestHash = requestHash,
+            ResultJson = json,
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        });
+
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            var replay = await _db.CatalogInventoryBatchOperations.AsNoTracking()
+                .SingleAsync(x => x.TenantId == tenantId && x.StoreId == request.StoreId && x.BatchClientOperationId == request.BatchClientOperationId, ct)
+                .ConfigureAwait(false);
+            if (!string.Equals(replay.RequestHash, requestHash, StringComparison.Ordinal))
+            {
+                throw new InventoryAdjustmentConflictException("IDEMPOTENCY_CONFLICT", "batchClientOperationId was already used with a different payload.");
+            }
+
+            return JsonSerializer.Deserialize<InventoryAdjustmentV2BatchResultDto>(replay.ResultJson)!;
+        }
+
+        return result;
     }
 
     public async Task<CatalogInventoryItemDto> UpsertCatalogInventoryAsync(UpsertCatalogInventoryRequest request, CancellationToken ct)
@@ -1607,6 +1857,40 @@ public sealed class PosCatalogService : IPosCatalogService
         }
 
         throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["itemType must be Product or Extra."] });
+    }
+
+    private static Guid DeriveLineClientOperationId(Guid batchClientOperationId, int lineNo)
+    {
+        var input = Encoding.UTF8.GetBytes($"{batchClientOperationId:D}:{lineNo}");
+        var hash = SHA256.HashData(input);
+        Span<byte> bytes = stackalloc byte[16];
+        hash[..16].CopyTo(bytes);
+        return new Guid(bytes);
+    }
+
+    private static string ComputeBatchRequestHash(CreateInventoryAdjustmentV2BatchRequest request)
+    {
+        var normalized = new
+        {
+            request.StoreId,
+            ReasonCode = request.ReasonCode.Trim(),
+            request.ReferenceType,
+            request.ReferenceId,
+            request.Note,
+            request.BatchClientOperationId,
+            Lines = request.Lines.OrderBy(x => x.LineNo).Select(x => new
+            {
+                x.LineNo,
+                ItemType = x.ItemType?.Trim(),
+                x.ExternalCode,
+                x.ItemId,
+                DeltaQty = decimal.Round(x.DeltaQty, 3, MidpointRounding.AwayFromZero),
+                x.LineClientOperationId
+            }).ToArray()
+        };
+        var json = JsonSerializer.Serialize(normalized);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        return Convert.ToHexString(hash);
     }
 
     private Guid? GetCurrentUserId()
