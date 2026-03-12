@@ -802,7 +802,7 @@ export class InventoryPage {
       return Number.NaN;
     }
 
-    return Number(parsed.toFixed(3));
+    return Math.round(parsed * 1000) / 1000;
   }
 
   formatQty(value: number) {

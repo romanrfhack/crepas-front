@@ -78,7 +78,7 @@ export class InventoryAdjustmentDialogComponent {
 
     this.confirm.emit({
       operationType: this.operationType(),
-      quantity: Number(this.quantity().toFixed(3)),
+      quantity: Math.round(this.quantity() * 1000) / 1000,
       reasonCode: this.reasonCode(),
       reference: this.referenceControl.value.trim() || null,
       note: this.noteControl.value.trim() || null,
