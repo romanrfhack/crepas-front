@@ -44,7 +44,7 @@ interface ItemOption {
   imports: [FormsModule, ReactiveFormsModule, InventoryAdjustmentDialogComponent],
   template: `
     <section class="inventory-page" data-testid="inventory-page">
-      <h2>Inventory Lite</h2>
+      <h2>Inventario Lite</h2>
 
       @if (hasContextBadge()) {
         <p data-testid="inventory-context-badge" class="context-badge">

@@ -72,7 +72,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
           routerLinkActive="catalog-nav__link--active"
           class="catalog-nav__link"
         >
-          Inventory
+          Inventario
         </a>
       </nav>
 
