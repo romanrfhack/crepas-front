@@ -31,14 +31,28 @@ describe('InventoryPage', () => {
 
     listInventoryV2.mockResolvedValue({
       items: [
-        { itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 },
+        {
+          itemType: 'Product',
+          itemId: 'product-1',
+          name: 'Latte',
+          sku: 'LAT-1',
+          categoryName: 'Bebidas',
+          isInventoryTracked: true,
+          onHandQty: 1.25,
+        },
       ],
       totalCount: 1,
       page: 1,
       pageSize: 25,
     });
-    getCategories.mockResolvedValue([{ id: 'cat-1', name: 'Bebidas', sortOrder: 1, isActive: true }]);
-    createInventoryBatchAdjustmentV2.mockResolvedValue({ batchClientOperationId: 'batch-1', totals: { appliedCount: 1, failedCount: 0 }, lines: [] });
+    getCategories.mockResolvedValue([
+      { id: 'cat-1', name: 'Bebidas', sortOrder: 1, isActive: true },
+    ]);
+    createInventoryBatchAdjustmentV2.mockResolvedValue({
+      batchClientOperationId: 'batch-1',
+      totals: { appliedCount: 1, failedCount: 0 },
+      lines: [],
+    });
     exportInventoryBalancesV2.mockResolvedValue(new Blob(['csv']));
 
     listAdjustments.mockResolvedValue([
@@ -152,7 +166,9 @@ describe('InventoryPage', () => {
         {
           provide: PosCatalogApiService,
           useValue: {
-            getProducts: vi.fn().mockResolvedValue([{ id: 'product-1', name: 'Latte', externalCode: 'LAT-1' }]),
+            getProducts: vi
+              .fn()
+              .mockResolvedValue([{ id: 'product-1', name: 'Latte', externalCode: 'LAT-1' }]),
             getExtras: vi.fn().mockResolvedValue([{ id: 'extra-1', name: 'Shot' }]),
             getCategories,
           },
@@ -197,7 +213,9 @@ describe('InventoryPage', () => {
     fixture.componentInstance.adjustDeltaControl.setValue(2);
     fixture.detectChanges();
 
-    const form = fixture.nativeElement.querySelector('[data-testid="inventory-adjust-form"]') as HTMLFormElement;
+    const form = fixture.nativeElement.querySelector(
+      '[data-testid="inventory-adjust-form"]',
+    ) as HTMLFormElement;
     form.dispatchEvent(new Event('submit'));
     await fixture.whenStable();
     fixture.detectChanges();
@@ -232,27 +250,41 @@ describe('InventoryPage', () => {
     fixture.detectChanges();
 
     expect(
-      fixture.nativeElement.querySelector('[data-testid="inventory-history-movement-kind-adj-1"]')?.textContent,
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-movement-kind-adj-1"]')
+        ?.textContent,
     ).toContain('Consumo por venta');
     expect(
-      fixture.nativeElement.querySelector('[data-testid="inventory-history-movement-kind-adj-2"]')?.textContent,
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-movement-kind-adj-2"]')
+        ?.textContent,
     ).toContain('Reversa por cancelación');
     expect(
-      fixture.nativeElement.querySelector('[data-testid="inventory-history-movement-kind-adj-3"]')?.textContent,
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-movement-kind-adj-3"]')
+        ?.textContent,
     ).toContain('Otro (FutureMovement)');
 
-    expect(fixture.nativeElement.querySelector('[data-testid="inventory-history-badge-sale-consumption"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="inventory-history-badge-void-reversal"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="inventory-history-badge-unknown"]')).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector(
+        '[data-testid="inventory-history-badge-sale-consumption"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-badge-void-reversal"]'),
+    ).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-badge-unknown"]'),
+    ).not.toBeNull();
 
     expect(
-      fixture.nativeElement.querySelector('[data-testid="inventory-history-reference-adj-1"]')?.textContent,
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-reference-adj-1"]')
+        ?.textContent,
     ).toContain('Sale: sale-1');
     expect(
-      fixture.nativeElement.querySelector('[data-testid="inventory-history-reference-adj-4"]')?.textContent,
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-reference-adj-4"]')
+        ?.textContent,
     ).toContain('Legacy:manual-1');
     expect(
-      fixture.nativeElement.querySelector('[data-testid="inventory-history-reference-adj-5"]')?.textContent,
+      fixture.nativeElement.querySelector('[data-testid="inventory-history-reference-adj-5"]')
+        ?.textContent,
     ).toContain('—');
   });
 
@@ -302,7 +334,6 @@ describe('InventoryPage', () => {
     expect(fixture.componentInstance.formatQty(1.25)).toBe('1.250');
   });
 
-
   it('inventory v2 renderiza tabla y permite retry en error', async () => {
     const component = fixture.componentInstance as InventoryPage & { inventoryV2Enabled: boolean };
     component.inventoryV2Enabled = true;
@@ -313,11 +344,21 @@ describe('InventoryPage', () => {
     await fixture.componentInstance.loadInventoryV2();
     fixture.detectChanges();
     expect(listInventoryV2Spy).toHaveBeenCalledTimes(1);
-    expect(fixture.componentInstance.inventoryV2Error()).toContain('No fue posible cargar inventario');
+    expect(fixture.componentInstance.inventoryV2Error()).toContain(
+      'No fue posible cargar inventario',
+    );
 
     listInventoryV2Spy.mockResolvedValueOnce({
       items: [
-        { itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 },
+        {
+          itemType: 'Product',
+          itemId: 'product-1',
+          name: 'Latte',
+          sku: 'LAT-1',
+          categoryName: 'Bebidas',
+          isInventoryTracked: true,
+          onHandQty: 1.25,
+        },
       ],
       totalCount: 1,
       page: 1,
@@ -340,8 +381,6 @@ describe('InventoryPage', () => {
     expect(badge?.textContent).toContain('Store: store-9 · Tipo: Product · Búsqueda: latte');
   });
 
-
-
   it('abre Kardex con item correcto y permite retry', async () => {
     listInventoryMovementsV2.mockRejectedValueOnce(new Error('boom'));
 
@@ -358,10 +397,22 @@ describe('InventoryPage', () => {
     await fixture.whenStable();
 
     expect(fixture.componentInstance.movementsDrawerOpen()).toBe(true);
-    expect(listInventoryMovementsV2).toHaveBeenCalledWith(expect.objectContaining({ storeId: 'store-1', itemType: 'Product', itemId: 'product-1', page: 1 }));
+    expect(listInventoryMovementsV2).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storeId: 'store-1',
+        itemType: 'Product',
+        itemId: 'product-1',
+        page: 1,
+      }),
+    );
     expect(fixture.componentInstance.movementError()).toContain('No fue posible cargar el kardex');
 
-    listInventoryMovementsV2.mockResolvedValueOnce({ items: [], totalCount: 0, page: 1, pageSize: 10 });
+    listInventoryMovementsV2.mockResolvedValueOnce({
+      items: [],
+      totalCount: 0,
+      page: 1,
+      pageSize: 10,
+    });
     await fixture.componentInstance.reloadMovementsDrawer();
 
     expect(listInventoryMovementsV2).toHaveBeenCalledTimes(2);
@@ -476,7 +527,13 @@ describe('InventoryPage', () => {
       balanceVersion: 'v-old',
     });
 
-    await fixture.componentInstance.submitInventoryV2Adjustment({ operationType: 'Delta', quantity: 1, reasonCode: 'Correction', reference: null, note: null });
+    await fixture.componentInstance.submitInventoryV2Adjustment({
+      operationType: 'Delta',
+      quantity: 1,
+      reasonCode: 'Correction',
+      reference: null,
+      note: null,
+    });
     await fixture.componentInstance.retryLastInventoryV2Adjustment();
 
     const firstPayload = createInventoryAdjustmentV2.mock.calls[0][0];
@@ -485,7 +542,9 @@ describe('InventoryPage', () => {
   });
 
   it('mapea conflicto de concurrencia en ajuste v2', async () => {
-    createInventoryAdjustmentV2.mockRejectedValue(new HttpErrorResponse({ status: 409, error: { reason: 'CONCURRENCY_CONFLICT' } }));
+    createInventoryAdjustmentV2.mockRejectedValue(
+      new HttpErrorResponse({ status: 409, error: { reason: 'CONCURRENCY_CONFLICT' } }),
+    );
 
     fixture.componentInstance.openAdjustmentDialog({
       itemType: 'Product',
@@ -497,21 +556,35 @@ describe('InventoryPage', () => {
       onHandQty: 1.25,
       balanceVersion: 'v-old',
     });
-    await fixture.componentInstance.submitInventoryV2Adjustment({ operationType: 'Set', quantity: 2, reasonCode: 'ManualCount', reference: null, note: null });
+    await fixture.componentInstance.submitInventoryV2Adjustment({
+      operationType: 'Set',
+      quantity: 2,
+      reasonCode: 'ManualCount',
+      reference: null,
+      note: null,
+    });
 
     expect(fixture.componentInstance.adjustErrorReason()).toBe('CONCURRENCY_CONFLICT');
   });
-
 
   it('carga categorías para filtro de negocio', async () => {
     await fixture.componentInstance['loadCatalogItems']();
     expect(getCategories).toHaveBeenCalled();
   });
 
-
   it('batch submit arma payload correcto desde selección', async () => {
     const page = fixture.componentInstance;
-    page['inventoryFacade'].rows.set([{ itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 }]);
+    page['inventoryFacade'].rows.set([
+      {
+        itemType: 'Product',
+        itemId: 'product-1',
+        name: 'Latte',
+        sku: 'LAT-1',
+        categoryName: 'Bebidas',
+        isInventoryTracked: true,
+        onHandQty: 1.25,
+      },
+    ]);
     page.batchDeltaControl.setValue(-1);
     page.batchReasonControl.setValue('Correction');
     page.toggleRowSelection(page.inventoryV2Rows()[0], true);
@@ -522,7 +595,14 @@ describe('InventoryPage', () => {
       expect.objectContaining({
         storeId: 'store-1',
         reasonCode: 'Correction',
-        items: [expect.objectContaining({ itemType: 'Product', itemId: 'product-1', operationType: 'Delta', quantityDelta: -1 })],
+        items: [
+          expect.objectContaining({
+            itemType: 'Product',
+            itemId: 'product-1',
+            operationType: 'Delta',
+            quantityDelta: -1,
+          }),
+        ],
       }),
     );
   });
@@ -536,12 +616,15 @@ describe('InventoryPage', () => {
 
     await page.exportInventoryV2Csv();
 
-    expect(exportInventoryBalancesV2).toHaveBeenCalledWith(expect.objectContaining({ storeId: 'store-1', tracked: true }));
+    expect(exportInventoryBalancesV2).toHaveBeenCalledWith(
+      expect.objectContaining({ storeId: 'store-1', tracked: true }),
+    );
   });
 
   it('import parsea CSV y permite preview', async () => {
     const page = fixture.componentInstance;
-    const csv = 'storeId,itemType,externalCode,deltaQty,reasonCode,referenceId,note\nstore-1,Product,LAT-1,-2,Correction,ref-1,nota';
+    const csv =
+      'storeId,itemType,externalCode,deltaQty,reasonCode,referenceId,note\nstore-1,Product,LAT-1,-2,Correction,ref-1,nota';
     const file = { text: () => Promise.resolve(csv) };
     const input = document.createElement('input');
     Object.defineProperty(input, 'files', { value: { item: () => file } });
@@ -553,10 +636,82 @@ describe('InventoryPage', () => {
     expect(page.importPreviewRows()[0].validationError).toBeNull();
   });
 
+  it('filtro de resultados All/Applied/Failed actualiza filas visibles', () => {
+    const page = fixture.componentInstance;
+    page.batchResultRows.set([
+      {
+        lineNo: 1,
+        itemType: 'Product',
+        externalCode: 'LAT-1',
+        itemId: '',
+        deltaQty: -1,
+        status: 'Applied',
+        errorCode: '',
+        message: '',
+        qtyBefore: 2,
+        qtyAfter: 1,
+        deltaApplied: -1,
+        adjustmentId: 'adj-1',
+      },
+      {
+        lineNo: 2,
+        itemType: 'Product',
+        externalCode: 'UNK-1',
+        itemId: '',
+        deltaQty: -1,
+        status: 'Failed',
+        errorCode: 'UNKNOWN_ITEM',
+        message: 'No existe',
+        qtyBefore: null,
+        qtyAfter: null,
+        deltaApplied: null,
+        adjustmentId: '',
+      },
+    ]);
+
+    page.batchResultFilter.set('All');
+    expect(page.filteredBatchResultRows().length).toBe(2);
+
+    page.batchResultFilter.set('Applied');
+    expect(page.filteredBatchResultRows().map((row) => row.status)).toEqual(['Applied']);
+
+    page.batchResultFilter.set('Failed');
+    expect(page.filteredBatchResultRows().map((row) => row.status)).toEqual(['Failed']);
+  });
+
+  it('preview solo inválidas cambia dataset mostrado', async () => {
+    const page = fixture.componentInstance;
+    const csv = `storeId,itemType,externalCode,deltaQty,reasonCode,referenceId,note
+store-1,Product,LAT-1,-2,Correction,ref-1,nota
+store-1,Product,,0,Correction,ref-2,nota`;
+    const file = { text: () => Promise.resolve(csv) };
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: { item: () => file } });
+
+    await page.onImportFileSelected({ target: input } as unknown as Event);
+
+    expect(page.previewRowsToRender().length).toBe(2);
+    page.showOnlyInvalidPreviewRows.set(true);
+    expect(page.previewRowsToRender().length).toBe(1);
+    expect(page.previewRowsToRender()[0].validationError).toBe('UNKNOWN_ITEM');
+  });
+
   it('mapea NEGATIVE_STOCK en errores de batch', async () => {
     const page = fixture.componentInstance;
-    createInventoryBatchAdjustmentV2.mockRejectedValueOnce(new HttpErrorResponse({ status: 409, error: { reason: 'NegativeStockNotAllowed' } }));
-    page['inventoryFacade'].rows.set([{ itemType: 'Product', itemId: 'product-1', name: 'Latte', sku: 'LAT-1', categoryName: 'Bebidas', isInventoryTracked: true, onHandQty: 1.25 }]);
+    createInventoryBatchAdjustmentV2.mockRejectedValueOnce(
+      new HttpErrorResponse({ status: 409, error: { reason: 'NegativeStockNotAllowed' } }),
+    );
+    page['inventoryFacade'].rows.set([
+      {
+        itemType: 'Product',
+        itemId: 'product-1',
+        name: 'Latte',
+        sku: 'LAT-1',
+        categoryName: 'Bebidas',
+        isInventoryTracked: true,
+        onHandQty: 1.25,
+      },
+    ]);
     page.batchDeltaControl.setValue(-3);
     page.toggleRowSelection(page.inventoryV2Rows()[0], true);
 
@@ -564,5 +719,4 @@ describe('InventoryPage', () => {
 
     expect(page.batchResultMessage()).toContain('stock negativo');
   });
-
 });
