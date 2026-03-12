@@ -289,6 +289,44 @@ export interface PagedInventoryBalancesDto {
   pageSize: number;
 }
 
+
+export interface InventoryMovementRowDto {
+  movementId: string;
+  occurredAtUtc: string;
+  reasonCode: InventoryAdjustmentReasonValue;
+  referenceType?: string | null;
+  referenceId?: string | null;
+  note?: string | null;
+  createdByUserId?: string | null;
+  createdByDisplayName?: string | null;
+  deltaQty: number;
+  qtyBefore: number;
+  qtyAfter: number;
+  clientOperationId?: string | null;
+  hasAnomaly: boolean;
+}
+
+export interface PagedInventoryMovementsDto {
+  items: InventoryMovementRowDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface InventoryMovementsQuery {
+  storeId: string;
+  itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
+  itemId: string;
+  from?: string;
+  to?: string;
+  reason?: InventoryAdjustmentReasonValue;
+  referenceType?: string;
+  referenceId?: string;
+  createdByUserId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
 export interface InventoryBalancesQuery {
   storeId: string;
   q?: string;

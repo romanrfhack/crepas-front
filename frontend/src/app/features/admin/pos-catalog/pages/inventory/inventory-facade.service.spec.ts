@@ -7,7 +7,7 @@ describe('InventoryFacadeService', () => {
     vi.useFakeTimers();
     const listInventoryV2 = vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 10 });
     TestBed.configureTestingModule({
-      providers: [InventoryFacadeService, { provide: PosInventoryAdminApiService, useValue: { listInventoryV2 } }],
+      providers: [InventoryFacadeService, { provide: PosInventoryAdminApiService, useValue: { listInventoryV2, listInventoryMovementsV2: vi.fn() } }],
     });
 
     const service = TestBed.inject(InventoryFacadeService);
@@ -29,10 +29,37 @@ describe('InventoryFacadeService', () => {
     vi.useRealTimers();
   });
 
+  it('loads movements with expected query and supports paging', async () => {
+    const listInventoryMovementsV2 = vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 10 });
+    TestBed.configureTestingModule({
+      providers: [InventoryFacadeService, { provide: PosInventoryAdminApiService, useValue: { listInventoryV2: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 10 }), listInventoryMovementsV2 } }],
+    });
+
+    const service = TestBed.inject(InventoryFacadeService);
+    service.openMovementsDrawer({ storeId: 'store-1', itemType: 'Product', itemId: 'product-1', itemName: 'Latte', itemSku: 'LAT-1', onHandQty: 5 });
+    service.updateMovementsReason('Correction');
+    service.updateMovementsReference('sale-1');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    service.updateMovementsPage(2);
+    await service.loadMovements();
+
+    expect(listInventoryMovementsV2).toHaveBeenLastCalledWith({
+      storeId: 'store-1',
+      itemType: 'Product',
+      itemId: 'product-1',
+      reason: 'Correction',
+      referenceId: 'sale-1',
+      page: 2,
+      pageSize: 10,
+      from: undefined,
+      to: undefined,
+    });
+  });
+
   it('sets error message when API fails', async () => {
     const listInventoryV2 = vi.fn().mockRejectedValue(new Error('boom'));
     TestBed.configureTestingModule({
-      providers: [InventoryFacadeService, { provide: PosInventoryAdminApiService, useValue: { listInventoryV2 } }],
+      providers: [InventoryFacadeService, { provide: PosInventoryAdminApiService, useValue: { listInventoryV2, listInventoryMovementsV2: vi.fn() } }],
     });
 
     const service = TestBed.inject(InventoryFacadeService);

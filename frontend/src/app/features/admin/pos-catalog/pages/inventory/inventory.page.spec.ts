@@ -13,11 +13,13 @@ describe('InventoryPage', () => {
   const listAdjustments = vi.fn();
   const createAdjustment = vi.fn();
   const createInventoryAdjustmentV2 = vi.fn();
+  const listInventoryMovementsV2 = vi.fn();
 
   beforeEach(async () => {
     listAdjustments.mockReset();
     createAdjustment.mockReset();
     createInventoryAdjustmentV2.mockReset();
+    listInventoryMovementsV2.mockReset();
 
     listAdjustments.mockResolvedValue([
       {
@@ -121,6 +123,7 @@ describe('InventoryPage', () => {
               pageSize: 10,
             }),
             createInventoryAdjustmentV2,
+            listInventoryMovementsV2,
             upsertInventory: vi.fn().mockResolvedValue({
               storeId: 'store-1',
               itemType: 'Product',
@@ -321,6 +324,32 @@ describe('InventoryPage', () => {
     expect(badge?.textContent).toContain('Store: store-9 · Tipo: Product · Búsqueda: latte');
   });
 
+
+
+  it('abre Kardex con item correcto y permite retry', async () => {
+    listInventoryMovementsV2.mockRejectedValueOnce(new Error('boom'));
+
+    fixture.componentInstance.openMovementsDrawer({
+      itemType: 'Product',
+      itemId: 'product-1',
+      name: 'Latte',
+      sku: 'LAT-1',
+      categoryName: 'Bebidas',
+      isInventoryTracked: true,
+      onHandQty: 1.25,
+      balanceVersion: 'v-old',
+    });
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.movementsDrawerOpen()).toBe(true);
+    expect(listInventoryMovementsV2).toHaveBeenCalledWith(expect.objectContaining({ storeId: 'store-1', itemType: 'Product', itemId: 'product-1', page: 1 }));
+    expect(fixture.componentInstance.movementError()).toContain('No fue posible cargar el kardex');
+
+    listInventoryMovementsV2.mockResolvedValueOnce({ items: [], totalCount: 0, page: 1, pageSize: 10 });
+    await fixture.componentInstance.reloadMovementsDrawer();
+
+    expect(listInventoryMovementsV2).toHaveBeenCalledTimes(2);
+  });
 
   it('v2 ajuste set manda expectedVersion y operationType correcto', async () => {
     createInventoryAdjustmentV2.mockResolvedValue({

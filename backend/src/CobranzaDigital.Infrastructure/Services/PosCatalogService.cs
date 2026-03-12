@@ -545,6 +545,153 @@ public sealed class PosCatalogService : IPosCatalogService
         return new PagedInventoryBalancesDto(items, totalCount, safePage, safePageSize);
     }
 
+    public async Task<PagedInventoryMovementsDto> GetInventoryMovementsV2Async(Guid storeId, string itemType, Guid itemId, DateTimeOffset? fromUtc, DateTimeOffset? toUtc, string? reason, string? referenceType, string? referenceId, Guid? createdByUserId, int page, int pageSize, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(storeId, tenantId, ct).ConfigureAwait(false);
+
+        var parsedItemType = ParseInventoryTrackableItemType(itemType);
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 200);
+        var now = DateTimeOffset.UtcNow;
+        var safeToUtc = toUtc ?? now;
+        var safeFromUtc = fromUtc ?? safeToUtc.AddDays(-30);
+
+        if (safeFromUtc > safeToUtc)
+        {
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["from"] = ["from must be less than or equal to to."]
+            });
+        }
+
+        if (safeToUtc - safeFromUtc > TimeSpan.FromDays(366))
+        {
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["to"] = ["Date range cannot exceed 366 days."]
+            });
+        }
+
+        InventoryAdjustmentReason? parsedReason = null;
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            if (!Enum.TryParse<InventoryAdjustmentReason>(reason.Trim(), true, out var reasonCode))
+            {
+                throw new ValidationException(new Dictionary<string, string[]>
+                {
+                    ["reason"] = ["reason is invalid."]
+                });
+            }
+
+            parsedReason = reasonCode;
+        }
+
+        var normalizedReferenceType = string.IsNullOrWhiteSpace(referenceType) ? null : referenceType.Trim();
+        var normalizedReferenceId = string.IsNullOrWhiteSpace(referenceId) ? null : referenceId.Trim();
+
+        var baseQuery = _db.CatalogInventoryAdjustments.AsNoTracking()
+            .Where(x => x.TenantId == tenantId
+                && x.StoreId == storeId
+                && x.ItemType == parsedItemType
+                && x.ItemId == itemId
+                && x.CreatedAtUtc >= safeFromUtc
+                && x.CreatedAtUtc <= safeToUtc);
+
+        if (parsedReason.HasValue)
+        {
+            var reasonCode = parsedReason.Value.ToString();
+            baseQuery = baseQuery.Where(x => x.Reason == reasonCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedReferenceType))
+        {
+            baseQuery = baseQuery.Where(x => x.ReferenceType == normalizedReferenceType);
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedReferenceId))
+        {
+            baseQuery = baseQuery.Where(x => x.ReferenceId == normalizedReferenceId);
+        }
+
+        if (createdByUserId.HasValue)
+        {
+            baseQuery = baseQuery.Where(x => x.CreatedByUserId == createdByUserId.Value);
+        }
+
+        var totalCount = await baseQuery.CountAsync(ct).ConfigureAwait(false);
+        var rows = await baseQuery
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .ThenByDescending(x => x.Id)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .Select(x => new
+            {
+                x.Id,
+                x.CreatedAtUtc,
+                x.Reason,
+                x.ReferenceType,
+                x.ReferenceId,
+                x.Note,
+                x.CreatedByUserId,
+                x.DeltaQty,
+                x.QtyBefore,
+                x.ResultingOnHandQty,
+                x.ClientOperationId
+            })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var userIds = rows
+            .Where(x => x.CreatedByUserId.HasValue)
+            .Select(x => x.CreatedByUserId!.Value)
+            .Distinct()
+            .ToList();
+
+        var userMap = userIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await _db.Users.AsNoTracking()
+                .Where(x => userIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.Email ?? x.UserName ?? x.Id.ToString(), ct)
+                .ConfigureAwait(false);
+
+        var movementRows = rows.Select(x =>
+        {
+            var hasAnomaly = x.ResultingOnHandQty < 0m || x.QtyBefore < 0m || x.QtyBefore + x.DeltaQty != x.ResultingOnHandQty;
+            if (hasAnomaly)
+            {
+                _logger.LogWarning(
+                    "Inventory movement anomaly detected. Tenant={TenantId} Store={StoreId} ItemType={ItemType} ItemId={ItemId} MovementId={MovementId} QtyBefore={QtyBefore} Delta={DeltaQty} QtyAfter={QtyAfter}",
+                    tenantId,
+                    storeId,
+                    parsedItemType,
+                    itemId,
+                    x.Id,
+                    x.QtyBefore,
+                    x.DeltaQty,
+                    x.ResultingOnHandQty);
+            }
+
+            userMap.TryGetValue(x.CreatedByUserId ?? Guid.Empty, out var displayName);
+            return new InventoryMovementRowDto(
+                x.Id,
+                x.CreatedAtUtc,
+                x.Reason,
+                x.ReferenceType,
+                x.ReferenceId,
+                x.Note,
+                x.CreatedByUserId,
+                displayName,
+                x.DeltaQty,
+                x.QtyBefore,
+                x.ResultingOnHandQty,
+                x.ClientOperationId,
+                hasAnomaly);
+        }).ToList();
+
+        return new PagedInventoryMovementsDto(movementRows, totalCount, safePage, safePageSize);
+    }
+
     public async Task<InventoryAdjustmentV2ResultDto> CreateInventoryAdjustmentV2Async(CreateInventoryAdjustmentV2Request request, CancellationToken ct)
     {
         var tenantId = RequireTenantId();

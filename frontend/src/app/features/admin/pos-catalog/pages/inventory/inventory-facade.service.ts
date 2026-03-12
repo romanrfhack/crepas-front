@@ -3,7 +3,11 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 import {
   InventoryBalanceRowDto,
   InventoryBalancesQuery,
+  InventoryMovementRowDto,
+  InventoryAdjustmentReasonValue,
+  InventoryMovementsQuery,
   PagedInventoryBalancesDto,
+  PagedInventoryMovementsDto,
 } from '../../models/pos-catalog.models';
 import { PosInventoryAdminApiService } from '../../services/pos-inventory-admin-api.service';
 
@@ -16,10 +20,29 @@ interface InventoryV2Filters {
   pageSize: number;
 }
 
+interface InventoryMovementsFilters {
+  from: string;
+  to: string;
+  reason: '' | InventoryAdjustmentReasonValue;
+  referenceId: string;
+  page: number;
+  pageSize: number;
+}
+
+interface InventoryMovementsContext {
+  storeId: string;
+  itemType: 'Product' | 'Extra';
+  itemId: string;
+  itemName: string;
+  itemSku?: string | null;
+  onHandQty: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class InventoryFacadeService {
   private readonly api = inject(PosInventoryAdminApiService);
   private readonly searchChanges = new Subject<string>();
+  private readonly movementFilterChanges = new Subject<void>();
 
   readonly rows = signal<InventoryBalanceRowDto[]>([]);
   readonly totalCount = signal(0);
@@ -34,12 +57,33 @@ export class InventoryFacadeService {
     pageSize: 10,
   });
 
+  readonly movementsOpen = signal(false);
+  readonly movementsContext = signal<InventoryMovementsContext | null>(null);
+  readonly movementsFilters = signal<InventoryMovementsFilters>({
+    from: '',
+    to: '',
+    reason: '',
+    referenceId: '',
+    page: 1,
+    pageSize: 10,
+  });
+  readonly movementsRows = signal<InventoryMovementRowDto[]>([]);
+  readonly movementsTotalCount = signal(0);
+  readonly movementsLoading = signal(false);
+  readonly movementsError = signal<string | null>(null);
+
   private readonly cache = new Map<string, PagedInventoryBalancesDto>();
+  private readonly movementsCache = new Map<string, PagedInventoryMovementsDto>();
 
   constructor() {
     this.searchChanges.pipe(debounceTime(300), distinctUntilChanged()).subscribe((term) => {
       this.filters.update((state) => ({ ...state, q: term, page: 1 }));
       void this.load();
+    });
+
+    this.movementFilterChanges.pipe(debounceTime(300)).subscribe(() => {
+      this.movementsFilters.update((state) => ({ ...state, page: 1 }));
+      void this.loadMovements();
     });
   }
 
@@ -64,14 +108,65 @@ export class InventoryFacadeService {
     this.filters.update((state) => ({ ...state, page: Math.max(page, 1) }));
   }
 
-
-
   invalidate() {
     this.cache.clear();
+    this.movementsCache.clear();
   }
 
   patchRow(itemType: string, itemId: string, onHandQty: number, balanceVersion: string) {
     this.rows.update((rows) => rows.map((row) => row.itemType === itemType && row.itemId === itemId ? { ...row, onHandQty, balanceVersion } : row));
+    const context = this.movementsContext();
+    if (context && context.itemType === itemType && context.itemId === itemId) {
+      this.movementsContext.set({ ...context, onHandQty });
+      this.movementsCache.clear();
+      void this.loadMovements();
+    }
+  }
+
+  openMovementsDrawer(context: InventoryMovementsContext) {
+    this.movementsOpen.set(true);
+    this.movementsContext.set(context);
+    this.movementsFilters.set({
+      from: '',
+      to: '',
+      reason: '',
+      referenceId: '',
+      page: 1,
+      pageSize: 10,
+    });
+    void this.loadMovements();
+  }
+
+  closeMovementsDrawer() {
+    this.movementsOpen.set(false);
+    this.movementsContext.set(null);
+    this.movementsRows.set([]);
+    this.movementsTotalCount.set(0);
+    this.movementsError.set(null);
+  }
+
+  updateMovementsFrom(from: string) {
+    this.movementsFilters.update((state) => ({ ...state, from: from.trim() }));
+    this.movementFilterChanges.next();
+  }
+
+  updateMovementsTo(to: string) {
+    this.movementsFilters.update((state) => ({ ...state, to: to.trim() }));
+    this.movementFilterChanges.next();
+  }
+
+  updateMovementsReason(reason: '' | InventoryAdjustmentReasonValue) {
+    this.movementsFilters.update((state) => ({ ...state, reason }));
+    this.movementFilterChanges.next();
+  }
+
+  updateMovementsReference(referenceId: string) {
+    this.movementsFilters.update((state) => ({ ...state, referenceId: referenceId.trim() }));
+    this.movementFilterChanges.next();
+  }
+
+  updateMovementsPage(page: number) {
+    this.movementsFilters.update((state) => ({ ...state, page: Math.max(page, 1) }));
   }
 
   async load() {
@@ -112,6 +207,51 @@ export class InventoryFacadeService {
       this.error.set('No fue posible cargar inventario. Intenta nuevamente.');
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  async loadMovements() {
+    const context = this.movementsContext();
+    if (!context) {
+      this.movementsRows.set([]);
+      this.movementsTotalCount.set(0);
+      return;
+    }
+
+    const filters = this.movementsFilters();
+    this.movementsLoading.set(true);
+    this.movementsError.set(null);
+
+    const query: InventoryMovementsQuery = {
+      storeId: context.storeId,
+      itemType: context.itemType,
+      itemId: context.itemId,
+      from: filters.from || undefined,
+      to: filters.to || undefined,
+      reason: filters.reason || undefined,
+      referenceId: filters.referenceId || undefined,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    };
+
+    const queryKey = JSON.stringify(query);
+    const cached = this.movementsCache.get(queryKey);
+    if (cached) {
+      this.movementsRows.set(cached.items);
+      this.movementsTotalCount.set(cached.totalCount);
+      this.movementsLoading.set(false);
+      return;
+    }
+
+    try {
+      const response = await this.api.listInventoryMovementsV2(query);
+      this.movementsCache.set(queryKey, response);
+      this.movementsRows.set(response.items);
+      this.movementsTotalCount.set(response.totalCount);
+    } catch {
+      this.movementsError.set('No fue posible cargar el kardex. Intenta nuevamente.');
+    } finally {
+      this.movementsLoading.set(false);
     }
   }
 }
