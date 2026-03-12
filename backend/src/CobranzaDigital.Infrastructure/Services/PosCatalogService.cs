@@ -1587,11 +1587,8 @@ internal static class PosCatalogLog
             new EventId(1, nameof(AuditWritten)),
             "audit_log_written action={Action} entity={Entity} entityId={EntityId}");
 
-    private static readonly Action<ILogger, Guid, Guid, CatalogItemType, Guid, Guid, decimal, decimal, decimal, Exception?> InventoryMovementAnomalyDetectedMessage =
-        LoggerMessage.Define<Guid, Guid, CatalogItemType, Guid, Guid, decimal, decimal, decimal>(
-            LogLevel.Warning,
-            new EventId(2, nameof(InventoryMovementAnomalyDetected)),
-            "Inventory movement anomaly detected. Tenant={TenantId} Store={StoreId} ItemType={ItemType} ItemId={ItemId} MovementId={MovementId} QtyBefore={QtyBefore} Delta={DeltaQty} QtyAfter={QtyAfter}");
+    private static readonly EventId InventoryMovementAnomalyDetectedEventId =
+        new(2, nameof(InventoryMovementAnomalyDetected));
 
     public static void AuditWritten(ILogger logger, string action, string entity, Guid entityId)
     {
@@ -1609,6 +1606,16 @@ internal static class PosCatalogLog
         decimal deltaQty,
         decimal qtyAfter)
     {
-        InventoryMovementAnomalyDetectedMessage(logger, tenantId, storeId, itemType, itemId, movementId, qtyBefore, deltaQty, qtyAfter, null);
+        logger.LogWarning(
+            InventoryMovementAnomalyDetectedEventId,
+            "Inventory movement anomaly detected. Tenant={TenantId} Store={StoreId} ItemType={ItemType} ItemId={ItemId} MovementId={MovementId} QtyBefore={QtyBefore} Delta={DeltaQty} QtyAfter={QtyAfter}",
+            tenantId,
+            storeId,
+            itemType,
+            itemId,
+            movementId,
+            qtyBefore,
+            deltaQty,
+            qtyAfter);
     }
 }
