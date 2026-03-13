@@ -35,6 +35,7 @@ import {
   InventoryBatchResultFilter,
   toInventoryBatchResultDisplayRows,
 } from './inventory-batch-result.util';
+import { parseDeltaQty, parseInventoryImportCsv } from './inventory-import-csv.util';
 
 interface InventoryRow {
   itemType: Extract<CatalogItemType, 'Product' | 'Extra'>;
@@ -55,6 +56,7 @@ interface InventoryImportPreviewRow {
   lineNo: number;
   itemType: 'Product' | 'Extra';
   externalCode: string;
+  itemId: string;
   deltaQty: number;
   reasonCode: InventoryAdjustmentReason;
   referenceId: string | null;
@@ -222,11 +224,16 @@ interface InventoryImportPreviewRow {
             <button
               type="button"
               data-testid="inventory-v2-import-apply"
-              [disabled]="batchBusy()"
+              [disabled]="batchBusy() || !canApplyImport()"
               (click)="applyBatchAdjustmentFromImport()"
             >
               Aplicar importación
             </button>
+            @if (importColumnsErrorMessage(); as columnsError) {
+              <p class="error" data-testid="inventory-v2-import-columns-error">
+                {{ columnsError }}
+              </p>
+            }
             <table data-testid="inventory-v2-import-preview-table">
               <thead>
                 <tr>
@@ -922,6 +929,7 @@ export class InventoryPage {
   readonly importPreviewRows = signal<InventoryImportPreviewRow[]>([]);
   readonly showOnlyInvalidPreviewRows = signal(false);
   readonly importRawCsv = signal('');
+  readonly importColumnsErrorMessage = signal<string | null>(null);
 
   readonly previewInvalidCount = computed(
     () => this.importPreviewRows().filter((row) => !!row.validationError).length,
@@ -936,6 +944,9 @@ export class InventoryPage {
 
     return this.importPreviewRows().filter((row) => !!row.validationError);
   });
+  readonly canApplyImport = computed(
+    () => !this.importColumnsErrorMessage() && this.previewValidCount() > 0,
+  );
   readonly filteredBatchResultRows = computed(() =>
     filterBatchResultRows(this.batchResultRows(), this.batchResultFilter()),
   );
@@ -1193,6 +1204,11 @@ export class InventoryPage {
   }
 
   async applyBatchAdjustmentFromImport() {
+    if (!this.canApplyImport()) {
+      this.batchResultMessage.set('VALIDATION_ERROR');
+      return;
+    }
+
     const validRows = this.importPreviewRows().filter((row) => !row.validationError);
     if (!validRows.length) {
       this.batchResultMessage.set('VALIDATION_ERROR');
@@ -1203,13 +1219,18 @@ export class InventoryPage {
       storeId: this.storeIdControl.value.trim(),
       reasonCode: this.batchReasonControl.value,
       clientOperationId: globalThis.crypto?.randomUUID() ?? `${Date.now()}-${Math.random()}`,
-      items: validRows.map((row) => ({
-        itemType: row.itemType,
-        itemExternalCode: row.externalCode,
-        operationType: 'Delta',
-        quantityDelta: row.deltaQty,
-        lineClientOperationId: `import-line-${row.lineNo}`,
-      })),
+      items: validRows.map((row) => {
+        const itemExternalCode = row.externalCode || null;
+        const itemId = row.itemId || null;
+        return {
+          itemType: row.itemType,
+          itemExternalCode,
+          itemId,
+          operationType: 'Delta' as const,
+          quantityDelta: row.deltaQty,
+          lineClientOperationId: `import-line-${row.lineNo}`,
+        };
+      }),
     };
 
     await this.executeBatchAdjustment(payload);
@@ -1243,31 +1264,36 @@ export class InventoryPage {
   }
 
   private parseImportCsv(csv: string): InventoryImportPreviewRow[] {
-    const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0);
-    if (lines.length <= 1) {
-      return [];
-    }
+    const parsedCsv = parseInventoryImportCsv(csv);
+    this.importColumnsErrorMessage.set(
+      parsedCsv.missingRequiredColumns.length
+        ? `Faltan columnas obligatorias: ${parsedCsv.missingRequiredColumns.join(', ')}.`
+        : null,
+    );
 
-    return lines.slice(1).map((line, index) => {
-      const [, itemTypeRaw, externalCodeRaw, deltaQtyRaw, reasonCodeRaw, referenceIdRaw, noteRaw] =
-        line.split(',');
-      const itemType = itemTypeRaw?.trim() === 'Extra' ? 'Extra' : 'Product';
-      const externalCode = externalCodeRaw?.trim() ?? '';
-      const deltaQty = Number.parseFloat(deltaQtyRaw ?? '0');
-      const validationError = !externalCode
+    return parsedCsv.rows.map((row) => {
+      const normalizedType = row.itemType.trim().toLowerCase();
+      const itemType = normalizedType === 'extra' ? 'Extra' : 'Product';
+      const deltaParse = parseDeltaQty(row.deltaQty);
+      const hasItemIdentifier = !!row.externalCode || !!row.itemId;
+
+      const validationError = !hasItemIdentifier
         ? 'UNKNOWN_ITEM'
-        : !Number.isFinite(deltaQty) || deltaQty === 0
-          ? 'VALIDATION_ERROR'
-          : null;
+        : deltaParse.error
+          ? deltaParse.error
+          : deltaParse.value === 0
+            ? 'VALIDATION_ERROR'
+            : null;
 
       return {
-        lineNo: index + 1,
+        lineNo: row.lineNo,
         itemType,
-        externalCode,
-        deltaQty,
-        reasonCode: (reasonCodeRaw?.trim() as InventoryAdjustmentReason) || 'Correction',
-        referenceId: referenceIdRaw?.trim() || null,
-        note: noteRaw?.trim() || null,
+        externalCode: row.externalCode,
+        itemId: row.itemId,
+        deltaQty: deltaParse.value ?? 0,
+        reasonCode: row.reasonCode as InventoryAdjustmentReason,
+        referenceId: row.referenceId || null,
+        note: row.note || null,
         validationError,
       };
     });
