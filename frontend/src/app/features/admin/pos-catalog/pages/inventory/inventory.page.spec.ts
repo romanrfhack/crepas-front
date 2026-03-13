@@ -648,7 +648,6 @@ describe('InventoryPage', () => {
     );
   });
 
-
   it('al cargar CSV llama validate y muestra qtyBefore/qtyAfter', async () => {
     vi.useFakeTimers();
     const page = fixture.componentInstance;
@@ -785,6 +784,138 @@ store-1,Product,,0,Correction,ref-2,nota`;
     await page.onImportFileSelected({ target: input } as unknown as Event);
 
     expect(page.importPreviewRows()[0].validationError).toContain('DeltaQty usa coma decimal');
+  });
+
+  it('muestra banner de drift cuando apply devuelve fallas por concurrencia/stock', async () => {
+    const page = fixture.componentInstance;
+    page.importPreviewRows.set([
+      {
+        lineNo: 1,
+        itemType: 'Product',
+        externalCode: 'LAT-1',
+        itemId: '',
+        deltaQty: -2,
+        reasonCode: 'Correction',
+        referenceId: null,
+        note: null,
+        validationError: null,
+        qtyBefore: 4,
+        qtyAfter: 2,
+        validationStatus: 'Valid',
+        validationMessage: null,
+      },
+    ]);
+    page.importValidatedSnapshot.set({
+      validatedAtUtc: '2026-01-01T00:00:00.000Z',
+      payloadHash: page['calculateImportPayloadHash'](
+        page['buildImportPayload'](page.importPreviewRows()),
+      ),
+    });
+    createInventoryBatchAdjustmentV2.mockResolvedValueOnce({
+      batchClientOperationId: 'batch-2',
+      totals: { appliedCount: 0, failedCount: 1 },
+      lines: [
+        {
+          lineNo: 1,
+          itemKey: 'Product:LAT-1',
+          status: 'Failed',
+          errorCode: 'CONCURRENCY_CONFLICT',
+          message: 'Drift',
+          qtyBefore: 2,
+          qtyAfter: 0,
+        },
+      ],
+    });
+
+    await page.applyBatchAdjustmentFromImport();
+
+    expect(page.importDriftDetected()).toBe(true);
+    expect(page.batchResultMessage()).toContain('Revalidar y reintentar solo fallidas');
+  });
+
+  it('revalidar dispara validate de nuevo sin recargar archivo', async () => {
+    vi.useFakeTimers();
+    const page = fixture.componentInstance;
+    const csv =
+      'storeId,itemType,externalCode,deltaQty,reasonCode,referenceId,note\nstore-1,Product,LAT-1,-2,Correction,ref-1,nota';
+    const file = { text: () => Promise.resolve(csv) };
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: { item: () => file } });
+
+    await page.onImportFileSelected({ target: input } as unknown as Event);
+    vi.advanceTimersByTime(260);
+    await Promise.resolve();
+    expect(validateInventoryBatchAdjustmentV2).toHaveBeenCalledTimes(1);
+
+    page.triggerImportValidation();
+    await Promise.resolve();
+
+    expect(validateInventoryBatchAdjustmentV2).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('cambio de store/reason invalida estado validado y deshabilita Apply hasta revalidar', async () => {
+    vi.useFakeTimers();
+    const page = fixture.componentInstance;
+    const csv =
+      'storeId,itemType,externalCode,deltaQty,reasonCode,referenceId,note\nstore-1,Product,LAT-1,-2,Correction,ref-1,nota';
+    const file = { text: () => Promise.resolve(csv) };
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: { item: () => file } });
+
+    await page.onImportFileSelected({ target: input } as unknown as Event);
+    vi.advanceTimersByTime(260);
+    await Promise.resolve();
+    expect(page.canApplyImport()).toBe(true);
+
+    page.storeIdControl.setValue('store-2');
+
+    expect(page.importValidatedSnapshot()).toBeNull();
+    expect(page.canApplyImport()).toBe(false);
+
+    page.batchReasonControl.setValue('Damage');
+    expect(page.importValidatedSnapshot()).toBeNull();
+
+    vi.advanceTimersByTime(260);
+    await Promise.resolve();
+
+    expect(page.importValidatedSnapshot()).not.toBeNull();
+    expect(page.canApplyImport()).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('pide confirmación cuando validCount supera umbral configurado', async () => {
+    const page = fixture.componentInstance;
+    page.importPreviewRows.set(
+      Array.from({ length: 201 }, (_, index) => ({
+        lineNo: index + 1,
+        itemType: 'Product' as const,
+        externalCode: `LAT-${index + 1}`,
+        itemId: '',
+        deltaQty: -1,
+        reasonCode: 'Correction' as const,
+        referenceId: null,
+        note: null,
+        validationError: null,
+        qtyBefore: 4,
+        qtyAfter: 3,
+        validationStatus: 'Valid' as const,
+        validationMessage: null,
+      })),
+    );
+    page.importValidatedSnapshot.set({
+      validatedAtUtc: '2026-01-01T00:00:00.000Z',
+      payloadHash: page['calculateImportPayloadHash'](
+        page['buildImportPayload'](page.importPreviewRows()),
+      ),
+    });
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+
+    await page.applyBatchAdjustmentFromImport();
+
+    expect(confirmSpy).toHaveBeenCalledWith('Estás por ajustar 201 líneas; continuar?');
+    expect(createInventoryBatchAdjustmentV2).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 
   it('mapea NEGATIVE_STOCK en errores de batch', async () => {

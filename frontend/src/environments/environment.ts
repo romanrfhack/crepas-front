@@ -3,4 +3,6 @@ export const environment = {
   apiBaseUrl: '/api',
   posRequireOpenShift: true,
   inventoryV2Enabled: false,
+  inventoryBatchConfirmLineThreshold: 200,
+  inventoryBatchConfirmDecrementThreshold: 20,
 };

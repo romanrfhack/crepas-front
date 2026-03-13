@@ -65,8 +65,13 @@ interface InventoryImportPreviewRow {
   validationError: string | null;
   qtyBefore: number | null;
   qtyAfter: number | null;
-  validationStatus: "Valid" | "Invalid" | "Pending";
+  validationStatus: 'Valid' | 'Invalid' | 'Pending';
   validationMessage: string | null;
+}
+
+interface ImportValidatedSnapshot {
+  validatedAtUtc: string;
+  payloadHash: string;
 }
 
 @Component({
@@ -234,12 +239,35 @@ interface InventoryImportPreviewRow {
             >
               Aplicar importación
             </button>
+            @if (importValidatedAtUtc(); as validatedAtUtc) {
+              <p data-testid="inventory-v2-import-validated-at">Validado: {{ validatedAtUtc }}</p>
+            }
             @if (importValidateLoading()) {
               <p data-testid="inventory-v2-import-validating">Validando…</p>
             }
             @if (importValidateError(); as validateError) {
-              <p class="error" data-testid="inventory-v2-import-validate-error">{{ validateError }}</p>
-              <button type="button" data-testid="inventory-v2-import-validate-retry" (click)="triggerImportValidation()">Reintentar validación</button>
+              <p class="error" data-testid="inventory-v2-import-validate-error">
+                {{ validateError }}
+              </p>
+              <button
+                type="button"
+                data-testid="inventory-v2-import-validate-retry"
+                (click)="triggerImportValidation()"
+              >
+                Reintentar validación
+              </button>
+            }
+            @if (importDriftDetected()) {
+              <p class="error" role="alert" data-testid="inventory-v2-import-drift-alert">
+                El inventario cambió desde la validación.
+              </p>
+              <button
+                type="button"
+                data-testid="inventory-v2-import-revalidate"
+                (click)="triggerImportValidation()"
+              >
+                Revalidar
+              </button>
             }
             @if (canApplyImport()) {
               <p data-testid="inventory-v2-import-apply-hint">
@@ -954,7 +982,16 @@ export class InventoryPage {
   readonly importValidateLoading = signal(false);
   readonly importValidateError = signal<string | null>(null);
   readonly importValidationResult = signal<InventoryBatchValidationResultDto | null>(null);
+  readonly importValidatedSnapshot = signal<ImportValidatedSnapshot | null>(null);
+  readonly importDriftDetected = signal(false);
+  readonly importValidatedAtUtc = computed(
+    () => this.importValidatedSnapshot()?.validatedAtUtc ?? null,
+  );
   private importValidateTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly importConfirmLinesThreshold =
+    environment.inventoryBatchConfirmLineThreshold ?? 200;
+  private readonly importConfirmDecrementThreshold =
+    environment.inventoryBatchConfirmDecrementThreshold ?? 20;
 
   readonly previewInvalidCount = computed(
     () => this.importPreviewRows().filter((row) => row.validationStatus === 'Invalid').length,
@@ -970,7 +1007,12 @@ export class InventoryPage {
     return this.importPreviewRows().filter((row) => row.validationStatus === 'Invalid');
   });
   readonly canApplyImport = computed(
-    () => !this.importColumnsErrorMessage() && !this.importValidateLoading() && !this.importValidateError() && this.previewValidCount() > 0,
+    () =>
+      !this.importColumnsErrorMessage() &&
+      !this.importValidateLoading() &&
+      !this.importValidateError() &&
+      this.previewValidCount() > 0 &&
+      this.importValidatedSnapshotMatchesCurrentPayload(),
   );
   readonly filteredBatchResultRows = computed(() =>
     filterBatchResultRows(this.batchResultRows(), this.batchResultFilter()),
@@ -1050,9 +1092,11 @@ export class InventoryPage {
     }
 
     this.storeIdControl.valueChanges.subscribe(() => {
+      this.invalidateImportValidatedSnapshot();
       this.scheduleImportValidation();
     });
     this.batchReasonControl.valueChanges.subscribe(() => {
+      this.invalidateImportValidatedSnapshot();
       this.scheduleImportValidation();
     });
   }
@@ -1209,6 +1253,7 @@ export class InventoryPage {
     this.importRawCsv.set(text);
     this.importPreviewRows.set(this.parseImportCsv(text));
     this.showOnlyInvalidPreviewRows.set(false);
+    this.invalidateImportValidatedSnapshot();
     this.scheduleImportValidation();
   }
 
@@ -1248,6 +1293,20 @@ export class InventoryPage {
       return;
     }
 
+    const requiresConfirmation =
+      validRows.length > this.importConfirmLinesThreshold ||
+      validRows.some(
+        (row) => row.deltaQty < 0 && Math.abs(row.deltaQty) > this.importConfirmDecrementThreshold,
+      );
+    if (requiresConfirmation) {
+      const confirmed = globalThis.confirm(
+        `Estás por ajustar ${validRows.length} líneas; continuar?`,
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     const payload: CreateInventoryBatchAdjustmentV2Request = {
       storeId: this.storeIdControl.value.trim(),
       reasonCode: this.batchReasonControl.value,
@@ -1272,18 +1331,30 @@ export class InventoryPage {
   private async executeBatchAdjustment(payload: CreateInventoryBatchAdjustmentV2Request) {
     this.batchBusy.set(true);
     this.batchResultMessage.set(null);
+    this.importDriftDetected.set(false);
     try {
       const result = await this.api.createInventoryBatchAdjustmentV2(payload);
+      const driftDetected = this.hasInventoryDrift(result.lines);
+      this.importDriftDetected.set(driftDetected);
       this.batchResultMessage.set(
         `Applied: ${result.totals.appliedCount} · Failed: ${result.totals.failedCount}`,
       );
       this.batchExecutionResult.set(result);
       this.batchResultRows.set(toInventoryBatchResultDisplayRows(result, payload.items));
       this.batchResultFilter.set('All');
+      if (driftDetected) {
+        this.batchResultMessage.set(
+          `${this.batchResultMessage()} · Revalidar y reintentar solo fallidas.`,
+        );
+      }
       await this.loadInventoryV2();
       await this.loadHistory();
     } catch (error) {
-      this.batchResultMessage.set(this.mapErrorCode(this.toUiErrorReason(error)));
+      const errorReason = this.toUiErrorReason(error);
+      const driftDetected =
+        errorReason === 'NEGATIVE_STOCK' || errorReason === 'CONCURRENCY_CONFLICT';
+      this.importDriftDetected.set(driftDetected);
+      this.batchResultMessage.set(this.mapErrorCode(errorReason));
       this.batchExecutionResult.set(null);
       this.batchResultRows.set([]);
     } finally {
@@ -1336,7 +1407,6 @@ export class InventoryPage {
     });
   }
 
-
   triggerImportValidation() {
     void this.validateImportPreview();
   }
@@ -1359,28 +1429,22 @@ export class InventoryPage {
     const rows = this.importPreviewRows();
     if (!rows.length) {
       this.importValidationResult.set(null);
+      this.invalidateImportValidatedSnapshot();
       return;
     }
 
-    const payload: CreateInventoryBatchAdjustmentV2Request = {
-      storeId: this.storeIdControl.value.trim(),
-      reasonCode: this.batchReasonControl.value,
-      clientOperationId: globalThis.crypto?.randomUUID() ?? `${Date.now()}-${Math.random()}`,
-      items: rows.map((row) => ({
-        itemType: row.itemType,
-        itemExternalCode: row.externalCode || null,
-        itemId: row.itemId || null,
-        operationType: 'Delta' as const,
-        quantityDelta: row.deltaQty,
-        lineClientOperationId: `validate-line-${row.lineNo}`,
-      })),
-    };
+    const payload = this.buildImportPayload(rows);
 
     this.importValidateLoading.set(true);
     this.importValidateError.set(null);
     try {
       const result = await this.api.validateInventoryBatchAdjustmentV2(payload);
       this.importValidationResult.set(result);
+      this.importValidatedSnapshot.set({
+        payloadHash: this.calculateImportPayloadHash(payload),
+        validatedAtUtc: new Date().toISOString(),
+      });
+      this.importDriftDetected.set(false);
       const linesByNo = new Map(result.lines.map((line) => [line.lineNo, line]));
       this.importPreviewRows.update((currentRows) =>
         currentRows.map((row) => {
@@ -1401,10 +1465,73 @@ export class InventoryPage {
       );
     } catch {
       this.importValidationResult.set(null);
+      this.invalidateImportValidatedSnapshot();
       this.importValidateError.set('No se pudo validar el batch. Intenta de nuevo.');
     } finally {
       this.importValidateLoading.set(false);
     }
+  }
+
+  private buildImportPayload(
+    rows: InventoryImportPreviewRow[],
+  ): CreateInventoryBatchAdjustmentV2Request {
+    return {
+      storeId: this.storeIdControl.value.trim(),
+      reasonCode: this.batchReasonControl.value,
+      clientOperationId: globalThis.crypto?.randomUUID() ?? `${Date.now()}-${Math.random()}`,
+      items: rows.map((row) => ({
+        itemType: row.itemType,
+        itemExternalCode: row.externalCode || null,
+        itemId: row.itemId || null,
+        operationType: 'Delta' as const,
+        quantityDelta: row.deltaQty,
+        lineClientOperationId: `validate-line-${row.lineNo}`,
+      })),
+    };
+  }
+
+  private invalidateImportValidatedSnapshot() {
+    this.importValidatedSnapshot.set(null);
+    this.importDriftDetected.set(false);
+  }
+
+  private importValidatedSnapshotMatchesCurrentPayload(): boolean {
+    const snapshot = this.importValidatedSnapshot();
+    if (!snapshot) {
+      return false;
+    }
+
+    const payload = this.buildImportPayload(this.importPreviewRows());
+    return snapshot.payloadHash === this.calculateImportPayloadHash(payload);
+  }
+
+  private calculateImportPayloadHash(payload: CreateInventoryBatchAdjustmentV2Request): string {
+    const serializable = {
+      storeId: payload.storeId,
+      reasonCode: payload.reasonCode,
+      items: payload.items.map((item) => ({
+        itemType: item.itemType,
+        itemExternalCode: item.itemExternalCode ?? null,
+        itemId: item.itemId ?? null,
+        operationType: item.operationType,
+        quantityDelta: item.quantityDelta,
+      })),
+    };
+    const input = JSON.stringify(serializable);
+    let hash = 0;
+    for (let i = 0; i < input.length; i += 1) {
+      hash = (hash * 31 + input.charCodeAt(i)) | 0;
+    }
+
+    return `batch-${Math.abs(hash)}`;
+  }
+
+  private hasInventoryDrift(lines: InventoryBatchAdjustmentV2ResultDto['lines']): boolean {
+    return lines.some(
+      (line) =>
+        line.status === 'Failed' &&
+        (line.errorCode === 'NEGATIVE_STOCK' || line.errorCode === 'CONCURRENCY_CONFLICT'),
+    );
   }
 
   private mapErrorCode(code: string) {
@@ -1412,6 +1539,7 @@ export class InventoryPage {
       NEGATIVE_STOCK: 'No se puede aplicar porque dejaría stock negativo.',
       UNKNOWN_ITEM: 'Hay ítems que no existen en el catálogo.',
       VALIDATION_ERROR: 'Revisa el archivo o los campos requeridos.',
+      CONCURRENCY_CONFLICT: 'Otro proceso modificó inventario al mismo tiempo.',
     };
 
     return map[code] ?? code;
