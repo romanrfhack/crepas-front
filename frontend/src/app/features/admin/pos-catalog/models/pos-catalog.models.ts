@@ -322,6 +322,30 @@ export interface InventoryBatchAdjustmentV2ResultDto {
   };
   lines: InventoryBatchAdjustmentV2LineResultDto[];
 }
+
+export interface InventoryBatchValidationLineResultDto {
+  lineNo: number;
+  itemType: Extract<CatalogItemType, 'Product' | 'Extra'> | string;
+  externalCode?: string | null;
+  itemId?: string | null;
+  status: 'Valid' | 'Invalid';
+  errorCode?: string | null;
+  message?: string | null;
+  qtyBefore?: number | null;
+  qtyAfter?: number | null;
+  deltaQtyNormalized?: number | null;
+  itemResolvedId?: string | null;
+  itemName?: string | null;
+}
+
+export interface InventoryBatchValidationResultDto {
+  storeId: string;
+  totalLines: number;
+  validCount: number;
+  invalidCount: number;
+  lines: InventoryBatchValidationLineResultDto[];
+}
+
 export interface PagedInventoryBalancesDto {
   items: InventoryBalanceRowDto[];
   totalCount: number;

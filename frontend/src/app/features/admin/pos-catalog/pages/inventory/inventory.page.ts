@@ -12,6 +12,7 @@ import {
   CreateInventoryBatchAdjustmentV2Request,
   InventoryAdjustmentReason,
   InventoryBatchAdjustmentV2ResultDto,
+  InventoryBatchValidationResultDto,
   InventoryBalanceRowDto,
 } from '../../models/pos-catalog.models';
 import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
@@ -62,6 +63,10 @@ interface InventoryImportPreviewRow {
   referenceId: string | null;
   note: string | null;
   validationError: string | null;
+  qtyBefore: number | null;
+  qtyAfter: number | null;
+  validationStatus: "Valid" | "Invalid" | "Pending";
+  validationMessage: string | null;
 }
 
 @Component({
@@ -229,6 +234,18 @@ interface InventoryImportPreviewRow {
             >
               Aplicar importación
             </button>
+            @if (importValidateLoading()) {
+              <p data-testid="inventory-v2-import-validating">Validando…</p>
+            }
+            @if (importValidateError(); as validateError) {
+              <p class="error" data-testid="inventory-v2-import-validate-error">{{ validateError }}</p>
+              <button type="button" data-testid="inventory-v2-import-validate-retry" (click)="triggerImportValidation()">Reintentar validación</button>
+            }
+            @if (canApplyImport()) {
+              <p data-testid="inventory-v2-import-apply-hint">
+                Se aplicarán {{ previewValidCount() }} líneas válidas. Las inválidas se omitirán.
+              </p>
+            }
             @if (importColumnsErrorMessage(); as columnsError) {
               <p class="error" data-testid="inventory-v2-import-columns-error">
                 {{ columnsError }}
@@ -241,6 +258,8 @@ interface InventoryImportPreviewRow {
                   <th>Tipo</th>
                   <th>externalCode</th>
                   <th>deltaQty</th>
+                  <th>Qty before</th>
+                  <th>Qty after</th>
                   <th>Estado</th>
                 </tr>
               </thead>
@@ -251,11 +270,13 @@ interface InventoryImportPreviewRow {
                     <td>{{ row.itemType }}</td>
                     <td>{{ row.externalCode || '—' }}</td>
                     <td>{{ row.deltaQty }}</td>
-                    <td>{{ row.validationError || 'Válida' }}</td>
+                    <td>{{ row.qtyBefore ?? '—' }}</td>
+                    <td>{{ row.qtyAfter ?? '—' }}</td>
+                    <td>{{ row.validationError || row.validationStatus }}</td>
                   </tr>
                 } @empty {
                   <tr>
-                    <td colspan="5" data-testid="inventory-v2-import-preview-empty">
+                    <td colspan="7" data-testid="inventory-v2-import-preview-empty">
                       Sin líneas para este filtro.
                     </td>
                   </tr>
@@ -930,9 +951,13 @@ export class InventoryPage {
   readonly showOnlyInvalidPreviewRows = signal(false);
   readonly importRawCsv = signal('');
   readonly importColumnsErrorMessage = signal<string | null>(null);
+  readonly importValidateLoading = signal(false);
+  readonly importValidateError = signal<string | null>(null);
+  readonly importValidationResult = signal<InventoryBatchValidationResultDto | null>(null);
+  private importValidateTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly previewInvalidCount = computed(
-    () => this.importPreviewRows().filter((row) => !!row.validationError).length,
+    () => this.importPreviewRows().filter((row) => row.validationStatus === 'Invalid').length,
   );
   readonly previewValidCount = computed(
     () => this.importPreviewRows().length - this.previewInvalidCount(),
@@ -942,10 +967,10 @@ export class InventoryPage {
       return this.importPreviewRows();
     }
 
-    return this.importPreviewRows().filter((row) => !!row.validationError);
+    return this.importPreviewRows().filter((row) => row.validationStatus === 'Invalid');
   });
   readonly canApplyImport = computed(
-    () => !this.importColumnsErrorMessage() && this.previewValidCount() > 0,
+    () => !this.importColumnsErrorMessage() && !this.importValidateLoading() && !this.importValidateError() && this.previewValidCount() > 0,
   );
   readonly filteredBatchResultRows = computed(() =>
     filterBatchResultRows(this.batchResultRows(), this.batchResultFilter()),
@@ -1023,6 +1048,13 @@ export class InventoryPage {
     if (this.inventoryV2Enabled) {
       void this.loadInventoryV2();
     }
+
+    this.storeIdControl.valueChanges.subscribe(() => {
+      this.scheduleImportValidation();
+    });
+    this.batchReasonControl.valueChanges.subscribe(() => {
+      this.scheduleImportValidation();
+    });
   }
 
   private applyContextFromQueryParams(): void {
@@ -1177,6 +1209,7 @@ export class InventoryPage {
     this.importRawCsv.set(text);
     this.importPreviewRows.set(this.parseImportCsv(text));
     this.showOnlyInvalidPreviewRows.set(false);
+    this.scheduleImportValidation();
   }
 
   async applyBatchAdjustmentFromSelection() {
@@ -1209,7 +1242,7 @@ export class InventoryPage {
       return;
     }
 
-    const validRows = this.importPreviewRows().filter((row) => !row.validationError);
+    const validRows = this.importPreviewRows().filter((row) => row.validationStatus === 'Valid');
     if (!validRows.length) {
       this.batchResultMessage.set('VALIDATION_ERROR');
       return;
@@ -1295,8 +1328,83 @@ export class InventoryPage {
         referenceId: row.referenceId || null,
         note: row.note || null,
         validationError,
+        qtyBefore: null,
+        qtyAfter: null,
+        validationStatus: validationError ? 'Invalid' : 'Pending',
+        validationMessage: null,
       };
     });
+  }
+
+
+  triggerImportValidation() {
+    void this.validateImportPreview();
+  }
+
+  private scheduleImportValidation() {
+    if (this.importValidateTimer) {
+      clearTimeout(this.importValidateTimer);
+    }
+
+    this.importValidateTimer = setTimeout(() => {
+      void this.validateImportPreview();
+    }, 250);
+  }
+
+  private async validateImportPreview() {
+    if (this.importColumnsErrorMessage()) {
+      return;
+    }
+
+    const rows = this.importPreviewRows();
+    if (!rows.length) {
+      this.importValidationResult.set(null);
+      return;
+    }
+
+    const payload: CreateInventoryBatchAdjustmentV2Request = {
+      storeId: this.storeIdControl.value.trim(),
+      reasonCode: this.batchReasonControl.value,
+      clientOperationId: globalThis.crypto?.randomUUID() ?? `${Date.now()}-${Math.random()}`,
+      items: rows.map((row) => ({
+        itemType: row.itemType,
+        itemExternalCode: row.externalCode || null,
+        itemId: row.itemId || null,
+        operationType: 'Delta' as const,
+        quantityDelta: row.deltaQty,
+        lineClientOperationId: `validate-line-${row.lineNo}`,
+      })),
+    };
+
+    this.importValidateLoading.set(true);
+    this.importValidateError.set(null);
+    try {
+      const result = await this.api.validateInventoryBatchAdjustmentV2(payload);
+      this.importValidationResult.set(result);
+      const linesByNo = new Map(result.lines.map((line) => [line.lineNo, line]));
+      this.importPreviewRows.update((currentRows) =>
+        currentRows.map((row) => {
+          const line = linesByNo.get(row.lineNo);
+          if (!line) {
+            return row;
+          }
+
+          return {
+            ...row,
+            qtyBefore: line.qtyBefore ?? null,
+            qtyAfter: line.qtyAfter ?? null,
+            validationStatus: line.status,
+            validationError: line.errorCode?.trim() || null,
+            validationMessage: line.message?.trim() || null,
+          };
+        }),
+      );
+    } catch {
+      this.importValidationResult.set(null);
+      this.importValidateError.set('No se pudo validar el batch. Intenta de nuevo.');
+    } finally {
+      this.importValidateLoading.set(false);
+    }
   }
 
   private mapErrorCode(code: string) {

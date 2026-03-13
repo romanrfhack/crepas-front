@@ -1046,6 +1046,139 @@ public sealed class PosCatalogService : IPosCatalogService
         }
     }
 
+    public async Task<InventoryBatchValidationResultDto> ValidateInventoryAdjustmentBatchV2Async(CreateInventoryAdjustmentV2BatchRequest request, CancellationToken ct)
+    {
+        const int maxLines = 2000;
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(request.StoreId, tenantId, ct).ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(request.ReasonCode) || !Enum.TryParse<InventoryAdjustmentReason>(request.ReasonCode, true, out _))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["reasonCode"] = ["reasonCode is required and must be valid."] });
+        }
+
+        if (request.Lines is null || request.Lines.Count == 0 || request.Lines.Count > maxLines)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["lines"] = [$"lines is required and must be between 1 and {maxLines}."] });
+        }
+
+        var orderedLines = request.Lines.OrderBy(x => x.LineNo).ToArray();
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+
+        var productCodes = orderedLines
+            .Where(x => string.Equals(x.ItemType?.Trim(), CatalogItemType.Product.ToString(), StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.ExternalCode?.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray()!;
+
+        var productIds = orderedLines
+            .Where(x => string.Equals(x.ItemType?.Trim(), CatalogItemType.Product.ToString(), StringComparison.OrdinalIgnoreCase) && x.ItemId.HasValue)
+            .Select(x => x.ItemId!.Value)
+            .Distinct()
+            .ToArray();
+
+        var extraIds = orderedLines
+            .Where(x => string.Equals(x.ItemType?.Trim(), CatalogItemType.Extra.ToString(), StringComparison.OrdinalIgnoreCase) && x.ItemId.HasValue)
+            .Select(x => x.ItemId!.Value)
+            .Distinct()
+            .ToArray();
+
+        var extraCodes = orderedLines
+            .Where(x => string.Equals(x.ItemType?.Trim(), CatalogItemType.Extra.ToString(), StringComparison.OrdinalIgnoreCase))
+            .Select(x => x.ExternalCode?.Trim())
+            .Where(x => Guid.TryParse(x, out _))
+            .Select(x => Guid.Parse(x!))
+            .Distinct()
+            .ToArray();
+
+        var productLookup = await _db.Products.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId && ((x.ExternalCode != null && productCodes.Contains(x.ExternalCode)) || productIds.Contains(x.Id)))
+            .Select(x => new ValidationItemLookup(CatalogItemType.Product, x.Id, x.ExternalCode, x.Name, x.IsInventoryTracked))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var extraLookup = await _db.Extras.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId && (extraIds.Contains(x.Id) || extraCodes.Contains(x.Id)))
+            .Select(x => new ValidationItemLookup(CatalogItemType.Extra, x.Id, null, x.Name, x.IsInventoryTracked))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var productsById = productLookup.ToDictionary(x => x.ItemId, x => x);
+        var productsByCode = productLookup
+            .Where(x => !string.IsNullOrWhiteSpace(x.ExternalCode))
+            .ToDictionary(x => x.ExternalCode!, x => x, StringComparer.Ordinal);
+        var extrasById = extraLookup.ToDictionary(x => x.ItemId, x => x);
+
+        var resolvedKeys = new HashSet<(CatalogItemType, Guid)>();
+        foreach (var line in orderedLines)
+        {
+            if (TryResolveValidationItem(line, productsById, productsByCode, extrasById) is { } resolved)
+            {
+                resolvedKeys.Add((resolved.ItemType, resolved.ItemId));
+            }
+        }
+
+        var resolvedItemIds = resolvedKeys.Select(x => x.ItemId).ToArray();
+        var balances = await _db.CatalogInventoryBalances.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.StoreId == request.StoreId && resolvedItemIds.Contains(x.ItemId))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var runningQty = resolvedKeys.ToDictionary(
+            x => x,
+            x => balances.FirstOrDefault(b => b.ItemType == x.ItemType && b.ItemId == x.ItemId)?.OnHandQty ?? 0m);
+
+        var lineResults = new List<InventoryBatchValidationLineResultDto>(orderedLines.Length);
+        var validCount = 0;
+        var invalidCount = 0;
+
+        foreach (var line in orderedLines)
+        {
+            var normalizedType = line.ItemType?.Trim() ?? string.Empty;
+            var deltaNormalized = decimal.Round(line.DeltaQty, 3, MidpointRounding.AwayFromZero);
+
+            if (line.LineNo <= 0 || deltaNormalized == 0m)
+            {
+                invalidCount++;
+                lineResults.Add(new InventoryBatchValidationLineResultDto(line.LineNo, normalizedType, line.ExternalCode, line.ItemId, "Invalid", "VALIDATION_ERROR", "lineNo must be > 0 and deltaQty cannot be zero.", null, null, deltaNormalized, null, null));
+                continue;
+            }
+
+            var resolved = TryResolveValidationItem(line, productsById, productsByCode, extrasById);
+            if (resolved is null)
+            {
+                invalidCount++;
+                lineResults.Add(new InventoryBatchValidationLineResultDto(line.LineNo, normalizedType, line.ExternalCode, line.ItemId, "Invalid", "UNKNOWN_ITEM", "Unable to resolve item.", null, null, deltaNormalized, null, null));
+                continue;
+            }
+
+            if (!resolved.IsInventoryTracked)
+            {
+                invalidCount++;
+                lineResults.Add(new InventoryBatchValidationLineResultDto(line.LineNo, normalizedType, line.ExternalCode, line.ItemId, "Invalid", "NOT_TRACKED", "Item inventory tracking is disabled.", null, null, deltaNormalized, resolved.ItemId, resolved.Name));
+                continue;
+            }
+
+            var key = (resolved.ItemType, resolved.ItemId);
+            var before = runningQty.GetValueOrDefault(key, 0m);
+            var after = decimal.Round(before + deltaNormalized, 3, MidpointRounding.AwayFromZero);
+            if (after < 0m)
+            {
+                invalidCount++;
+                lineResults.Add(new InventoryBatchValidationLineResultDto(line.LineNo, normalizedType, line.ExternalCode, line.ItemId, "Invalid", "NEGATIVE_STOCK", "Resulting stock cannot be negative.", before, after, deltaNormalized, resolved.ItemId, resolved.Name));
+                continue;
+            }
+
+            validCount++;
+            runningQty[key] = after;
+            lineResults.Add(new InventoryBatchValidationLineResultDto(line.LineNo, normalizedType, line.ExternalCode, line.ItemId, "Valid", null, null, before, after, deltaNormalized, resolved.ItemId, resolved.Name));
+        }
+
+        PosCatalogLog.InventoryBatchValidationProcessed(_logger, tenantId, request.StoreId, validCount, invalidCount);
+        return new InventoryBatchValidationResultDto(request.StoreId, orderedLines.Length, validCount, invalidCount, lineResults);
+    }
+
     public async Task<InventoryAdjustmentV2BatchResultDto> CreateInventoryAdjustmentBatchV2Async(CreateInventoryAdjustmentV2BatchRequest request, CancellationToken ct)
     {
         const int maxLines = 2000;
@@ -1859,6 +1992,48 @@ public sealed class PosCatalogService : IPosCatalogService
         throw new ValidationException(new Dictionary<string, string[]> { ["itemType"] = ["itemType must be Product or Extra."] });
     }
 
+    private static ValidationItemLookup? TryResolveValidationItem(
+        CreateInventoryAdjustmentV2BatchLineRequest line,
+        IReadOnlyDictionary<Guid, ValidationItemLookup> productsById,
+        IReadOnlyDictionary<string, ValidationItemLookup> productsByCode,
+        IReadOnlyDictionary<Guid, ValidationItemLookup> extrasById)
+    {
+        var normalizedType = line.ItemType?.Trim() ?? string.Empty;
+        if (!Enum.TryParse<CatalogItemType>(normalizedType, true, out var itemType) || itemType is CatalogItemType.OptionItem)
+        {
+            return null;
+        }
+
+        if (itemType == CatalogItemType.Product)
+        {
+            if (!string.IsNullOrWhiteSpace(line.ExternalCode) && productsByCode.TryGetValue(line.ExternalCode.Trim(), out var byCode))
+            {
+                return byCode;
+            }
+
+            if (line.ItemId.HasValue && productsById.TryGetValue(line.ItemId.Value, out var byId))
+            {
+                return byId;
+            }
+
+            return null;
+        }
+
+        if (line.ItemId.HasValue && extrasById.TryGetValue(line.ItemId.Value, out var extraById))
+        {
+            return extraById;
+        }
+
+        if (!string.IsNullOrWhiteSpace(line.ExternalCode) && Guid.TryParse(line.ExternalCode.Trim(), out var extraId) && extrasById.TryGetValue(extraId, out var extraByExternalCode))
+        {
+            return extraByExternalCode;
+        }
+
+        return null;
+    }
+
+    private sealed record ValidationItemLookup(CatalogItemType ItemType, Guid ItemId, string? ExternalCode, string Name, bool IsInventoryTracked);
+
     private static Guid DeriveLineClientOperationId(Guid batchClientOperationId, int lineNo)
     {
         var input = Encoding.UTF8.GetBytes($"{batchClientOperationId:D}:{lineNo}");
@@ -1991,4 +2166,15 @@ internal static partial class PosCatalogLog
         Guid batchClientOperationId,
         int appliedCount,
         int failedCount);
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Information,
+        Message = "Inventory batch validation processed. Tenant={TenantId} Store={StoreId} Valid={ValidCount} Invalid={InvalidCount}")]
+    public static partial void InventoryBatchValidationProcessed(
+        ILogger logger,
+        Guid tenantId,
+        Guid storeId,
+        int validCount,
+        int invalidCount);
 }

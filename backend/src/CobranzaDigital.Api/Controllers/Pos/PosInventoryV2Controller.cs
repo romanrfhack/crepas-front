@@ -103,6 +103,12 @@ public sealed class PosInventoryV2Controller : ControllerBase
         CancellationToken ct = default) =>
         _service.CreateInventoryAdjustmentBatchV2Async(request, ct);
 
+    [HttpPost("adjustments/batch/validate")]
+    public Task<InventoryBatchValidationResultDto> ValidateAdjustmentBatch(
+        [FromBody] CreateInventoryAdjustmentV2BatchRequest request,
+        CancellationToken ct = default) =>
+        _service.ValidateInventoryAdjustmentBatchV2Async(request, ct);
+
     [HttpPost("adjustments")]
     public Task<InventoryAdjustmentV2ResultDto> CreateAdjustment(
         [FromBody] CreateInventoryAdjustmentV2Request request,
