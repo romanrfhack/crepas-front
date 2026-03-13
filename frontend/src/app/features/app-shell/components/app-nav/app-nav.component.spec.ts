@@ -59,4 +59,23 @@ describe('AppNavComponent', () => {
     expect(content).toContain('Caja POS');
     expect(content).not.toContain('Users');
   });
+
+  it('shows a single Inventory entry for admin users', async () => {
+    await TestBed.configureTestingModule({
+      imports: [AppNavComponent],
+      providers: [provideRouter([])],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(AppNavComponent);
+    fixture.componentRef.setInput('navItems', APP_NAV_CONFIG);
+    fixture.componentRef.setInput('userRoles', ['AdminStore']);
+    fixture.detectChanges();
+
+    const links = Array.from(fixture.nativeElement.querySelectorAll('a')).map((link) =>
+      ((link as HTMLAnchorElement).textContent ?? '').trim(),
+    );
+
+    expect(links.filter((label) => label === 'Inventory')).toHaveLength(1);
+    expect(links).not.toContain('Inventory Legacy');
+  });
 });

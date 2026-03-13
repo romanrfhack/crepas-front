@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   CatalogInventoryAdjustmentDto,
   CatalogInventoryItemDto,
@@ -76,7 +76,7 @@ interface ImportValidatedSnapshot {
 
 @Component({
   selector: 'app-pos-inventory-page',
-  imports: [FormsModule, ReactiveFormsModule, InventoryAdjustmentDialogComponent],
+  imports: [FormsModule, ReactiveFormsModule, InventoryAdjustmentDialogComponent, RouterLink],
   template: `
     <section class="inventory-page" data-testid="inventory-page">
       <h2>Inventario Lite</h2>
@@ -104,9 +104,15 @@ interface ImportValidatedSnapshot {
         <p class="error" role="alert" data-testid="inventory-error">{{ error }}</p>
       }
 
-      @if (inventoryV2Enabled) {
+      @if (showInventoryV2()) {
         <section class="card" data-testid="inventory-v2-panel">
           <h3>Inventory V2</h3>
+          @if (canOpenLegacyInventory()) {
+            <p class="legacy-warning" data-testid="inventory-v2-legacy-link">
+              ⚠️ Esta pantalla reemplaza la versión anterior.
+              <a routerLink="/app/admin/pos/inventory-legacy">Abrir versión legacy</a>
+            </p>
+          }
           <div class="filters">
             <input
               data-testid="inventory-v2-search"
@@ -521,8 +527,9 @@ interface ImportValidatedSnapshot {
         </section>
       }
 
-      <section class="card">
-        <h3>Stock actual</h3>
+      @if (showInventoryLegacy()) {
+        <section class="card">
+          <h3>Stock actual</h3>
         <table data-testid="inventory-table">
           <thead>
             <tr>
@@ -564,7 +571,7 @@ interface ImportValidatedSnapshot {
             }
           </tbody>
         </table>
-      </section>
+        </section>
 
       @if (adjustmentDialogOpen() && selectedAdjustmentRow(); as selectedRow) {
         <app-inventory-adjustment-dialog
@@ -584,7 +591,7 @@ interface ImportValidatedSnapshot {
         }
       }
 
-      <form class="card" data-testid="inventory-adjust-form" (ngSubmit)="submitAdjustment()">
+        <form class="card" data-testid="inventory-adjust-form" (ngSubmit)="submitAdjustment()">
         <h3>Nuevo ajuste</h3>
         <label>
           StoreId
@@ -634,7 +641,8 @@ interface ImportValidatedSnapshot {
         @if (adjustSuccess(); as success) {
           <p class="success" data-testid="inventory-adjust-success">{{ success }}</p>
         }
-      </form>
+        </form>
+      }
 
       @if (movementsDrawerOpen() && movementContext(); as context) {
         <section class="card" data-testid="inventory-movements-drawer">
@@ -738,8 +746,9 @@ interface ImportValidatedSnapshot {
         </section>
       }
 
-      <section class="card">
-        <h3>Historial de movimientos</h3>
+      @if (showInventoryLegacy()) {
+        <section class="card">
+          <h3>Historial de movimientos</h3>
         <div class="filters">
           <input
             placeholder="storeId"
@@ -846,7 +855,8 @@ interface ImportValidatedSnapshot {
             }
           </tbody>
         </table>
-      </section>
+        </section>
+      }
     </section>
   `,
   styles: `
@@ -898,6 +908,10 @@ interface ImportValidatedSnapshot {
     .reason-badge.unknown {
       background: #f1f5f9;
       color: #334155;
+    }
+    .legacy-warning {
+      margin: 0;
+      color: #92400e;
     }
     table {
       width: 100%;
@@ -951,6 +965,15 @@ export class InventoryPage {
   readonly contextItemType = signal('');
   readonly contextSearch = signal('');
   readonly inventoryV2Enabled = environment.inventoryV2Enabled ?? false;
+  readonly legacyInventoryEnabled = environment.legacyInventoryEnabled ?? false;
+  readonly inventoryLegacyRoute = this.route.snapshot?.data?.['legacyInventory'] === true;
+  readonly showInventoryV2 = computed(() => this.inventoryV2Enabled && !this.inventoryLegacyRoute);
+  readonly showInventoryLegacy = computed(() => !this.inventoryV2Enabled || this.inventoryLegacyRoute);
+  readonly canOpenLegacyInventory = computed(
+    () =>
+      this.showInventoryV2() &&
+      (this.legacyInventoryEnabled || this.authService.hasRole('SuperAdmin')),
+  );
 
   readonly inventoryV2Rows = this.inventoryFacade.rows;
   readonly inventoryV2Loading = this.inventoryFacade.loading;
@@ -1085,9 +1108,12 @@ export class InventoryPage {
   constructor() {
     this.applyContextFromQueryParams();
     void this.loadCatalogItems();
-    void this.loadInventory();
-    void this.loadHistory();
-    if (this.inventoryV2Enabled) {
+    if (this.showInventoryLegacy()) {
+      void this.loadInventory();
+      void this.loadHistory();
+    }
+
+    if (this.showInventoryV2()) {
       void this.loadInventoryV2();
     }
 

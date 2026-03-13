@@ -14,6 +14,15 @@ describe('adminRoutes', () => {
     expect(route?.canActivate?.length).toBeGreaterThan(0);
   });
 
+  it('should expose canonical and legacy inventory routes with explicit mode metadata', () => {
+    const canonicalRoute = adminRoutes.find((item) => item.path === 'pos/inventory');
+    const legacyRoute = adminRoutes.find((item) => item.path === 'pos/inventory-legacy');
+
+    expect(canonicalRoute?.data?.['legacyInventory']).toBe(false);
+    expect(legacyRoute?.data?.['legacyInventory']).toBe(true);
+    expect(legacyRoute?.canMatch?.length).toBeGreaterThan(1);
+  });
+
   it('should block access to admin route for non-admin users', () => {
     TestBed.configureTestingModule({
       providers: [
