@@ -38,7 +38,7 @@ export const posCatalogRoutes: Routes = [
 
       {
         path: 'inventory',
-        loadComponent: () => import('./pages/inventory/inventory.page').then((m) => m.InventoryPage),
+        redirectTo: '/app/admin/pos/inventory',
       },
       { path: '', pathMatch: 'full', redirectTo: 'categories' },
     ],

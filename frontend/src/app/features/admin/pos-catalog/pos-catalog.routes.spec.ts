@@ -24,4 +24,10 @@ describe('posCatalogRoutes', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('should redirect catalog inventory route to canonical inventory path', () => {
+    const inventoryRoute = posCatalogRoutes[0]?.children?.find((route) => route.path === 'inventory');
+    expect(inventoryRoute?.redirectTo).toBe('/app/admin/pos/inventory');
+    expect(inventoryRoute?.loadComponent).toBeUndefined();
+  });
 });

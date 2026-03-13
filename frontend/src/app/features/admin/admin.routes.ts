@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { roleGuard } from '../../core/guards/role.guard';
+import { legacyInventoryGuard } from './legacy-inventory.guard';
 
 export const adminRoutes: Routes = [
 
@@ -7,7 +8,21 @@ export const adminRoutes: Routes = [
     path: 'pos/inventory',
     canMatch: [roleGuard(['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'])],
     canActivate: [roleGuard(['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'])],
-    data: { roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'] },
+    data: { roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'], legacyInventory: false },
+    loadComponent: () =>
+      import('./pos-catalog/pages/inventory/inventory.page').then((m) => m.InventoryPage),
+  },
+  {
+    path: 'pos/inventory-legacy',
+    canMatch: [
+      roleGuard(['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin']),
+      legacyInventoryGuard,
+    ],
+    canActivate: [
+      roleGuard(['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin']),
+      legacyInventoryGuard,
+    ],
+    data: { roles: ['AdminStore', 'Manager', 'TenantAdmin', 'SuperAdmin'], legacyInventory: true },
     loadComponent: () =>
       import('./pos-catalog/pages/inventory/inventory.page').then((m) => m.InventoryPage),
   },
