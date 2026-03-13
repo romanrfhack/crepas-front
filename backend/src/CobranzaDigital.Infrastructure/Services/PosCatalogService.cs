@@ -1110,7 +1110,7 @@ public sealed class PosCatalogService : IPosCatalogService
             .ToDictionary(x => x.ExternalCode!, x => x, StringComparer.Ordinal);
         var extrasById = extraLookup.ToDictionary(x => x.ItemId, x => x);
 
-        var resolvedKeys = new HashSet<(CatalogItemType, Guid)>();
+        var resolvedKeys = new HashSet<(CatalogItemType ItemType, Guid ItemId)>();
         foreach (var line in orderedLines)
         {
             if (TryResolveValidationItem(line, productsById, productsByCode, extrasById) is { } resolved)
