@@ -696,6 +696,31 @@ store-1,Product,,0,Correction,ref-2,nota`;
     expect(page.previewRowsToRender()[0].validationError).toBe('UNKNOWN_ITEM');
   });
 
+  it('bloquea import si faltan columnas obligatorias', async () => {
+    const page = fixture.componentInstance;
+    const csv = `storeId,itemType,externalCode\nstore-1,Product,LAT-1`;
+    const file = { text: () => Promise.resolve(csv) };
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: { item: () => file } });
+
+    await page.onImportFileSelected({ target: input } as unknown as Event);
+
+    expect(page.importColumnsErrorMessage()).toContain('Faltan columnas obligatorias');
+    expect(page.canApplyImport()).toBe(false);
+  });
+
+  it('marca error explícito para coma decimal en deltaQty', async () => {
+    const page = fixture.componentInstance;
+    const csv = `storeId,itemType,externalCode,deltaQty,reasonCode\nstore-1,Product,LAT-1,"10,5",Correction`;
+    const file = { text: () => Promise.resolve(csv) };
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: { item: () => file } });
+
+    await page.onImportFileSelected({ target: input } as unknown as Event);
+
+    expect(page.importPreviewRows()[0].validationError).toContain('DeltaQty usa coma decimal');
+  });
+
   it('mapea NEGATIVE_STOCK en errores de batch', async () => {
     const page = fixture.componentInstance;
     createInventoryBatchAdjustmentV2.mockRejectedValueOnce(
