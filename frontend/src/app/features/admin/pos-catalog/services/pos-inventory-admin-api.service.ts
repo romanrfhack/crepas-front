@@ -8,6 +8,7 @@ import {
   CreateInventoryBatchAdjustmentV2Request,
   InventoryAdjustmentV2ResultDto,
   InventoryBatchAdjustmentV2ResultDto,
+  InventoryBatchValidationResultDto,
   InventoryBalancesQuery,
   InventoryMovementsQuery,
   PagedInventoryBalancesDto,
@@ -114,6 +115,10 @@ export class PosInventoryAdminApiService {
 
   createInventoryBatchAdjustmentV2(payload: CreateInventoryBatchAdjustmentV2Request) {
     return firstValueFrom(this.apiClient.post<InventoryBatchAdjustmentV2ResultDto>('/v2/pos/inventory/adjustments/batch', payload));
+  }
+
+  validateInventoryBatchAdjustmentV2(payload: CreateInventoryBatchAdjustmentV2Request) {
+    return firstValueFrom(this.apiClient.post<InventoryBatchValidationResultDto>('/v2/pos/inventory/adjustments/batch/validate', payload));
   }
 
   buildInventoryBalancesExportPath(queryParams: InventoryBalancesQuery) {

@@ -133,6 +133,25 @@ public sealed record InventoryAdjustmentV2BatchLineResultDto(
     decimal? QtyAfter,
     decimal? DeltaApplied,
     Guid? AdjustmentId);
+public sealed record InventoryBatchValidationResultDto(
+    Guid StoreId,
+    int TotalLines,
+    int ValidCount,
+    int InvalidCount,
+    IReadOnlyList<InventoryBatchValidationLineResultDto> Lines);
+public sealed record InventoryBatchValidationLineResultDto(
+    int LineNo,
+    string ItemType,
+    string? ExternalCode,
+    Guid? ItemId,
+    string Status,
+    string? ErrorCode,
+    string? Message,
+    decimal? QtyBefore,
+    decimal? QtyAfter,
+    decimal? DeltaQtyNormalized,
+    Guid? ItemResolvedId,
+    string? ItemName);
 public sealed record InventoryReportRowDto(string ItemType, Guid ItemId, string ItemName, string? ItemSku, Guid StoreId, decimal StockOnHandQty, bool IsInventoryTracked, string AvailabilityReason, string? StoreOverrideState, DateTimeOffset? UpdatedAtUtc, DateTimeOffset? LastAdjustmentAtUtc);
 public sealed record PosInventorySettingsDto(bool ShowOnlyInStock);
 public sealed record UpdatePosInventorySettingsRequest(bool ShowOnlyInStock);

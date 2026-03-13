@@ -16,6 +16,7 @@ describe('InventoryPage', () => {
   const listInventoryMovementsV2 = vi.fn();
   const listInventoryV2 = vi.fn();
   const createInventoryBatchAdjustmentV2 = vi.fn();
+  const validateInventoryBatchAdjustmentV2 = vi.fn();
   const exportInventoryBalancesV2 = vi.fn();
   const getCategories = vi.fn();
 
@@ -26,6 +27,7 @@ describe('InventoryPage', () => {
     listInventoryMovementsV2.mockReset();
     listInventoryV2.mockReset();
     createInventoryBatchAdjustmentV2.mockReset();
+    validateInventoryBatchAdjustmentV2.mockReset();
     exportInventoryBalancesV2.mockReset();
     getCategories.mockReset();
 
@@ -48,6 +50,30 @@ describe('InventoryPage', () => {
     getCategories.mockResolvedValue([
       { id: 'cat-1', name: 'Bebidas', sortOrder: 1, isActive: true },
     ]);
+    createInventoryBatchAdjustmentV2.mockResolvedValue({
+      batchClientOperationId: 'batch-1',
+      totals: { appliedCount: 1, failedCount: 0 },
+      lines: [],
+    });
+    validateInventoryBatchAdjustmentV2.mockResolvedValue({
+      storeId: 'store-1',
+      totalLines: 1,
+      validCount: 1,
+      invalidCount: 0,
+      lines: [
+        {
+          lineNo: 1,
+          itemType: 'Product',
+          externalCode: 'LAT-1',
+          status: 'Valid',
+          qtyBefore: 4,
+          qtyAfter: 2,
+          deltaQtyNormalized: -2,
+        },
+      ],
+    });
+
+    // default apply result
     createInventoryBatchAdjustmentV2.mockResolvedValue({
       batchClientOperationId: 'batch-1',
       totals: { appliedCount: 1, failedCount: 0 },
@@ -152,6 +178,7 @@ describe('InventoryPage', () => {
             createInventoryAdjustmentV2,
             listInventoryMovementsV2,
             createInventoryBatchAdjustmentV2,
+            validateInventoryBatchAdjustmentV2,
             exportInventoryBalancesV2,
             upsertInventory: vi.fn().mockResolvedValue({
               storeId: 'store-1',
@@ -619,6 +646,45 @@ describe('InventoryPage', () => {
     expect(exportInventoryBalancesV2).toHaveBeenCalledWith(
       expect.objectContaining({ storeId: 'store-1', tracked: true }),
     );
+  });
+
+
+  it('al cargar CSV llama validate y muestra qtyBefore/qtyAfter', async () => {
+    vi.useFakeTimers();
+    const page = fixture.componentInstance;
+    const csv =
+      'storeId,itemType,externalCode,deltaQty,reasonCode,referenceId,note\nstore-1,Product,LAT-1,-2,Correction,ref-1,nota';
+    const file = { text: () => Promise.resolve(csv) };
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: { item: () => file } });
+
+    await page.onImportFileSelected({ target: input } as unknown as Event);
+    vi.advanceTimersByTime(260);
+    await Promise.resolve();
+
+    expect(validateInventoryBatchAdjustmentV2).toHaveBeenCalled();
+    expect(page.importPreviewRows()[0].qtyBefore).toBe(4);
+    expect(page.importPreviewRows()[0].qtyAfter).toBe(2);
+    vi.useRealTimers();
+  });
+
+  it('si validate falla muestra error y mantiene Apply deshabilitado', async () => {
+    vi.useFakeTimers();
+    const page = fixture.componentInstance;
+    validateInventoryBatchAdjustmentV2.mockRejectedValueOnce(new Error('boom'));
+    const csv =
+      'storeId,itemType,externalCode,deltaQty,reasonCode,referenceId,note\nstore-1,Product,LAT-1,-2,Correction,ref-1,nota';
+    const file = { text: () => Promise.resolve(csv) };
+    const input = document.createElement('input');
+    Object.defineProperty(input, 'files', { value: { item: () => file } });
+
+    await page.onImportFileSelected({ target: input } as unknown as Event);
+    vi.advanceTimersByTime(260);
+    await Promise.resolve();
+
+    expect(page.importValidateError()).toContain('No se pudo validar');
+    expect(page.canApplyImport()).toBe(false);
+    vi.useRealTimers();
   });
 
   it('import parsea CSV y permite preview', async () => {
