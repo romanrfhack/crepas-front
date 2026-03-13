@@ -941,4 +941,244 @@ store-1,Product,,0,Correction,ref-2,nota`;
 
     expect(page.batchResultMessage()).toContain('stock negativo');
   });
+  it('reintento construye payload solo con líneas fallidas y nuevo clientOperationId', async () => {
+    vi.useFakeTimers();
+    const page = fixture.componentInstance;
+    page.batchResultRows.set([
+      {
+        lineNo: 1,
+        itemType: 'Product',
+        externalCode: 'LAT-1',
+        itemId: '',
+        deltaQty: -1,
+        status: 'Failed',
+        errorCode: 'UNKNOWN_ITEM',
+        message: 'No existe',
+        qtyBefore: null,
+        qtyAfter: null,
+        deltaApplied: null,
+        adjustmentId: '',
+      },
+      {
+        lineNo: 2,
+        itemType: 'Extra',
+        externalCode: '',
+        itemId: 'extra-1',
+        deltaQty: -2,
+        status: 'Failed',
+        errorCode: 'NEGATIVE_STOCK',
+        message: 'Negativo',
+        qtyBefore: 1,
+        qtyAfter: null,
+        deltaApplied: null,
+        adjustmentId: '',
+      },
+      {
+        lineNo: 3,
+        itemType: 'Product',
+        externalCode: 'LAT-OK',
+        itemId: '',
+        deltaQty: -1,
+        status: 'Applied',
+        errorCode: '',
+        message: '',
+        qtyBefore: 4,
+        qtyAfter: 3,
+        deltaApplied: -1,
+        adjustmentId: 'adj-1',
+      },
+    ]);
+    page.batchExecutionResult.set({
+      batchClientOperationId: 'batch-1',
+      totals: { appliedCount: 1, failedCount: 2 },
+      lines: [],
+    });
+
+    page.retryFailedImportLines();
+    vi.advanceTimersByTime(260);
+    await Promise.resolve();
+
+    expect(validateInventoryBatchAdjustmentV2).toHaveBeenCalled();
+    const payload = validateInventoryBatchAdjustmentV2.mock.calls.at(-1)?.[0];
+    expect(payload.items).toHaveLength(2);
+    expect(
+      payload.items.map((item: { lineClientOperationId: string }) => item.lineClientOperationId),
+    ).toEqual(['validate-line-1', 'validate-line-2']);
+    expect(payload.items.map((item: { quantityDelta: number }) => item.quantityDelta)).toEqual([
+      -1, -2,
+    ]);
+    expect(payload.clientOperationId).toBeTruthy();
+    expect(payload.clientOperationId).not.toBe('batch-1');
+    vi.useRealTimers();
+  });
+
+  it('botón de reintentar solo aparece con fallidas y click dispara validate', async () => {
+    vi.useFakeTimers();
+    const page = fixture.componentInstance;
+    page.batchExecutionResult.set({
+      batchClientOperationId: 'batch-1',
+      totals: { appliedCount: 1, failedCount: 0 },
+      lines: [],
+    });
+    page.batchResultRows.set([
+      {
+        lineNo: 1,
+        itemType: 'Product',
+        externalCode: 'LAT-OK',
+        itemId: '',
+        deltaQty: -1,
+        status: 'Applied',
+        errorCode: '',
+        message: '',
+        qtyBefore: 4,
+        qtyAfter: 3,
+        deltaApplied: -1,
+        adjustmentId: 'adj-1',
+      },
+    ]);
+    fixture.detectChanges();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="inventory-v2-result-retry-failed"]'),
+    ).toBeNull();
+
+    page.batchExecutionResult.set({
+      batchClientOperationId: 'batch-2',
+      totals: { appliedCount: 1, failedCount: 1 },
+      lines: [],
+    });
+    page.batchResultRows.set([
+      {
+        lineNo: 1,
+        itemType: 'Product',
+        externalCode: 'LAT-1',
+        itemId: '',
+        deltaQty: -1,
+        status: 'Failed',
+        errorCode: 'UNKNOWN_ITEM',
+        message: 'No existe',
+        qtyBefore: null,
+        qtyAfter: null,
+        deltaApplied: null,
+        adjustmentId: '',
+      },
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(page.canRetryFailedLines()).toBe(true);
+    page.retryFailedImportLines();
+    vi.advanceTimersByTime(260);
+    await Promise.resolve();
+
+    expect(validateInventoryBatchAdjustmentV2).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('reintento: validate exitoso habilita apply; validate fallido muestra error y no habilita apply', async () => {
+    const page = fixture.componentInstance;
+    page.batchResultRows.set([
+      {
+        lineNo: 1,
+        itemType: 'Product',
+        externalCode: 'LAT-1',
+        itemId: '',
+        deltaQty: -1,
+        status: 'Failed',
+        errorCode: 'UNKNOWN_ITEM',
+        message: 'No existe',
+        qtyBefore: null,
+        qtyAfter: null,
+        deltaApplied: null,
+        adjustmentId: '',
+      },
+    ]);
+    page.retryFailedImportLines();
+    await Promise.resolve();
+
+    expect(page.importValidateError()).toBeNull();
+    expect(page.canApplyImport()).toBe(true);
+
+    validateInventoryBatchAdjustmentV2.mockRejectedValueOnce(new Error('failed'));
+    page.retryFailedImportLines();
+    await Promise.resolve();
+
+    expect(page.importValidateError()).toContain('No se pudo validar');
+    expect(page.canApplyImport()).toBe(false);
+  });
+
+  it('corridas muestran Run #1 y Reintento #2', async () => {
+    const page = fixture.componentInstance;
+    page.importPreviewRows.set([
+      {
+        lineNo: 1,
+        itemType: 'Product',
+        externalCode: 'LAT-1',
+        itemId: '',
+        deltaQty: -1,
+        reasonCode: 'Correction',
+        referenceId: null,
+        note: null,
+        validationError: null,
+        qtyBefore: 4,
+        qtyAfter: 3,
+        validationStatus: 'Valid',
+        validationMessage: null,
+      },
+    ]);
+    page.importValidatedSnapshot.set({
+      validatedAtUtc: '2026-01-01T00:00:00.000Z',
+      payloadHash: page['calculateImportPayloadHash'](
+        page['buildImportPayload'](page.importPreviewRows()),
+      ),
+    });
+
+    createInventoryBatchAdjustmentV2.mockResolvedValueOnce({
+      batchClientOperationId: 'batch-a',
+      totals: { appliedCount: 0, failedCount: 1 },
+      lines: [
+        {
+          lineNo: 1,
+          itemKey: 'Product:LAT-1',
+          status: 'Failed',
+          errorCode: 'UNKNOWN_ITEM',
+          message: 'No existe',
+        },
+      ],
+    });
+
+    await page.applyBatchAdjustmentFromImport();
+    expect(page.importRuns().map((run) => run.label)).toEqual(['Run #1']);
+
+    createInventoryBatchAdjustmentV2.mockResolvedValueOnce({
+      batchClientOperationId: 'batch-b',
+      totals: { appliedCount: 1, failedCount: 0 },
+      lines: [
+        {
+          lineNo: 1,
+          itemKey: 'Product:LAT-1',
+          status: 'Applied',
+          qtyBefore: 4,
+          qtyAfter: 3,
+          deltaApplied: -1,
+          adjustmentId: 'adj-1',
+        },
+      ],
+    });
+
+    page.retryFailedImportLines();
+    await Promise.resolve();
+    page.importPreviewRows.update((rows) =>
+      rows.map((row) => ({ ...row, validationStatus: 'Valid', qtyBefore: 4, qtyAfter: 3 })),
+    );
+    page.importValidatedSnapshot.set({
+      validatedAtUtc: '2026-01-01T00:01:00.000Z',
+      payloadHash: page['calculateImportPayloadHash'](
+        page['buildImportPayload'](page.importPreviewRows()),
+      ),
+    });
+    await page.applyBatchAdjustmentFromImport();
+
+    expect(page.importRuns().map((run) => run.label)).toEqual(['Reintento #2', 'Run #1']);
+  });
 });
