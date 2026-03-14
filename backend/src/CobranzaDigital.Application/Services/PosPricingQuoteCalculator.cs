@@ -33,7 +33,7 @@ public sealed class PosPricingQuoteCalculator
             hasMismatch ? appliedUnitPrice : null);
     }
 
-    public decimal RoundMoney(decimal value) => decimal.Round(value, 2, MidpointRounding.AwayFromZero);
+    public static decimal RoundMoney(decimal value) => decimal.Round(value, 2, MidpointRounding.AwayFromZero);
 
     private (decimal AppliedUnitPrice, PosPricingTierAppliedDto? TierApplied) QuoteLine(
         decimal qty,
@@ -84,7 +84,7 @@ public sealed class PosPricingQuoteCalculator
         return NormalizeTiers(tenantPolicy.Tiers, "tenant");
     }
 
-    private IReadOnlyList<PosPricingTierAppliedDto> NormalizeTiers(IReadOnlyList<PosPricingTierDto> tiers, string source)
+    private static List<PosPricingTierAppliedDto> NormalizeTiers(IReadOnlyList<PosPricingTierDto> tiers, string source)
     {
         return tiers
             .Select(x => new PosPricingTierAppliedDto(
@@ -109,10 +109,13 @@ public sealed class PosPricingQuoteCalculator
             return DiscountTypeFixed;
         }
 
-        throw new ValidationException([new ValidationFailure("discountType", "Unsupported discountType.")]);
+        throw new ValidationException(new Dictionary<string, string[]>
+        {
+            ["discountType"] = ["Unsupported discountType."],
+        });
     }
 
-    private static decimal Normalize(decimal value) => decimal.IsFinite(value) ? value : 0m;
+    private static decimal Normalize(decimal value) => value;
 }
 
 public sealed record PosPricingQuoteComputedLine(
