@@ -13,15 +13,19 @@ import {
   OptionSetDto,
   OverrideUpsertRequest,
   ProductDto,
+  ProductWholesaleOverrideDto,
   ProductOverrideDto,
   ReplaceIncludedItemsRequest,
   SchemaDto,
   SelectionGroupDto,
+  TenantWholesalePolicyDto,
+  UpsertProductWholesaleOverrideRequest,
   UpsertCategoryRequest,
   UpsertExtraRequest,
   UpsertOptionItemRequest,
   UpsertOptionSetRequest,
   UpsertProductRequest,
+  UpsertTenantWholesalePolicyRequest,
   UpsertSchemaRequest,
   UpsertSelectionGroupRequest,
 } from '../models/pos-catalog.models';
@@ -231,6 +235,35 @@ export class PosCatalogApiService {
     return firstValueFrom(
       this.apiClient.put<ProductOverrideDto>(
         `${this.basePath}/products/${productId}/overrides/${encodeURIComponent(groupKey)}`,
+        payload,
+      ),
+    );
+  }
+
+  getTenantWholesalePolicy() {
+    return firstValueFrom(
+      this.apiClient.get<TenantWholesalePolicyDto>(`${this.basePath}/wholesale/policy`),
+    );
+  }
+
+  upsertTenantWholesalePolicy(payload: UpsertTenantWholesalePolicyRequest) {
+    return firstValueFrom(
+      this.apiClient.put<TenantWholesalePolicyDto>(`${this.basePath}/wholesale/policy`, payload),
+    );
+  }
+
+  getProductWholesaleOverride(productId: string) {
+    return firstValueFrom(
+      this.apiClient.get<ProductWholesaleOverrideDto>(
+        `${this.basePath}/products/${productId}/wholesale-override`,
+      ),
+    );
+  }
+
+  upsertProductWholesaleOverride(productId: string, payload: UpsertProductWholesaleOverrideRequest) {
+    return firstValueFrom(
+      this.apiClient.put<ProductWholesaleOverrideDto>(
+        `${this.basePath}/products/${productId}/wholesale-override`,
         payload,
       ),
     );

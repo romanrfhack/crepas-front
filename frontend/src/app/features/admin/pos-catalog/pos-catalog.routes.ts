@@ -35,6 +35,10 @@ export const posCatalogRoutes: Routes = [
         path: 'overrides',
         loadComponent: () => import('./pages/overrides/overrides.page').then((m) => m.OverridesPage),
       },
+      {
+        path: 'wholesale',
+        loadComponent: () => import('./pages/wholesale/wholesale.page').then((m) => m.WholesalePage),
+      },
 
       {
         path: 'inventory',

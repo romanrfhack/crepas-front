@@ -17,7 +17,12 @@
         <li class="cart-item">
           <div class="item-info">
             <span class="item-name">{{ item.productName }}</span>
-            <span class="item-price">${{ (item.basePrice * item.quantity).toFixed(2) }}</span>
+            <span class="item-price">${{ (item.appliedUnitPrice * item.quantity).toFixed(2) }}</span>
+            @if (item.wholesaleTierLabel) {
+              <span class="item-wholesale" aria-label="Mayoreo aplicado">
+                Mayoreo aplicado · {{ item.wholesaleTierLabel }}
+              </span>
+            }
           </div>
 
           <div class="item-actions">

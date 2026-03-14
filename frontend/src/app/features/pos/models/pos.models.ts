@@ -280,7 +280,33 @@ export interface CartItem {
   productId: string;
   productName: string;
   basePrice: number;
+  appliedUnitPrice: number;
+  wholesaleTierLabel: string | null;
   quantity: number;
   selections: CartSelection[];
   extras: CartExtra[];
+}
+
+export type WholesaleDiscountType = 'Percent' | 'FixedUnitPrice';
+
+export type ProductWholesaleMode = 'UseTenantDefault' | 'Disabled' | 'CustomTiers';
+
+export interface WholesaleTierDto {
+  minQty: number;
+  discountType: WholesaleDiscountType;
+  discountValue: number;
+}
+
+export interface TenantWholesalePolicyDto {
+  isEnabled: boolean;
+  name: string;
+  updatedAtUtc?: string | null;
+  tiers: WholesaleTierDto[];
+}
+
+export interface ProductWholesaleOverrideDto {
+  productId: string;
+  mode: ProductWholesaleMode;
+  updatedAtUtc?: string | null;
+  tiers: WholesaleTierDto[];
 }

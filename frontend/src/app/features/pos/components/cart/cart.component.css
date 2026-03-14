@@ -123,6 +123,16 @@
   align-self: flex-start;
 }
 
+.item-wholesale {
+  font-size: 0.75rem;
+  color: #0f5132;
+  background: #d1e7dd;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  align-self: flex-start;
+  font-weight: 600;
+}
+
 .item-actions {
   display: flex;
   align-items: center;
