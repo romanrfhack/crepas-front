@@ -1227,6 +1227,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Contains(validation!.Lines, x => x.ErrorCode == "DUPLICATE_IN_FILE");
 
         var batchId = Guid.NewGuid();
+        var newCategoryCode = $"POS{Guid.NewGuid():N}"[..11];
+        var newCategoryName = $"Postres-{Guid.NewGuid():N}"[..20];
         using var applyReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/catalog/categories/import/apply", token);
         applyReq.Content = JsonContent.Create(new
         {
@@ -1234,7 +1236,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             lines = new[]
             {
                 new { lineNo = 1, categoryCode, name = "Bebidas X", sortOrder = 2, isActive = true },
-                new { lineNo = 2, categoryCode = "POS", name = "Postres", sortOrder = 3, isActive = true }
+                new { lineNo = 2, categoryCode = newCategoryCode, name = newCategoryName, sortOrder = 3, isActive = true }
             }
         });
         using var applyResp = await _client.SendAsync(applyReq);
