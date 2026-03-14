@@ -33,7 +33,7 @@ public sealed class PosPricingQuoteCalculator
 
     public static decimal RoundMoney(decimal value) => decimal.Round(value, 2, MidpointRounding.AwayFromZero);
 
-    private (decimal AppliedUnitPrice, PosPricingTierAppliedDto? TierApplied) QuoteLine(
+    private static (decimal AppliedUnitPrice, PosPricingTierAppliedDto? TierApplied) QuoteLine(
         decimal qty,
         decimal baseUnitPrice,
         PosPricingTenantPolicyDto? tenantPolicy,
