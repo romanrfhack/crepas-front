@@ -147,8 +147,20 @@ public sealed class PosCatalogService : IPosCatalogService
     public async Task<CatalogImportValidationResultDto> ValidateCategoryImportAsync(CatalogCategoryImportValidateRequest request, CancellationToken ct)
     {
         var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
-        var existing = await _db.Categories.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId)
-            .ToDictionaryAsync(x => x.CategoryCode, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
+        var existingCategories = await _db.Categories.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var existing = new Dictionary<string, Category>(StringComparer.OrdinalIgnoreCase);
+        foreach (var category in existingCategories)
+        {
+            var code = category.CategoryCode?.Trim();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                continue;
+            }
+
+            existing[code] = category;
+        }
         var dup = request.Lines.GroupBy(x => x.CategoryCode.Trim(), StringComparer.OrdinalIgnoreCase).Where(g => !string.IsNullOrWhiteSpace(g.Key) && g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var lines = new List<CatalogImportValidationLineDto>();
         var valid=0; var invalid=0;
@@ -166,8 +178,35 @@ public sealed class PosCatalogService : IPosCatalogService
     public async Task<CatalogImportValidationResultDto> ValidateProductImportAsync(CatalogProductImportValidateRequest request, CancellationToken ct)
     {
         var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
-        var categories = await _db.Categories.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).ToDictionaryAsync(x => x.CategoryCode, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
-        var products = await _db.Products.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId && x.ExternalCode != null).ToDictionaryAsync(x => x.ExternalCode!, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
+        var categoryEntities = await _db.Categories.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var categories = new Dictionary<string, Category>(StringComparer.OrdinalIgnoreCase);
+        foreach (var category in categoryEntities)
+        {
+            var code = category.CategoryCode?.Trim();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                continue;
+            }
+
+            categories[code] = category;
+        }
+
+        var productEntities = await _db.Products.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId && x.ExternalCode != null)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var products = new Dictionary<string, Product>(StringComparer.OrdinalIgnoreCase);
+        foreach (var product in productEntities)
+        {
+            var externalCode = product.ExternalCode?.Trim();
+            if (string.IsNullOrWhiteSpace(externalCode))
+            {
+                continue;
+            }
+
+            products[externalCode] = product;
+        }
         var dup = request.Lines.GroupBy(x => x.ExternalCode.Trim(), StringComparer.OrdinalIgnoreCase).Where(g => !string.IsNullOrWhiteSpace(g.Key) && g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var lines = new List<CatalogImportValidationLineDto>(); var valid=0; var invalid=0;
         foreach(var l in request.Lines.OrderBy(x=>x.LineNo)){
@@ -2160,7 +2199,20 @@ public sealed class PosCatalogService : IPosCatalogService
 
         var lines = new List<CatalogImportApplyLineDto>();
         var validByLine = validation.Lines.Where(x => x.Status == "Valid").ToDictionary(x => x.LineNo);
-        var byCode = await _db.Categories.Where(x => x.CatalogTemplateId == catalogTemplateId).ToDictionaryAsync(x => x.CategoryCode, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
+        var existingCategories = await _db.Categories
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var byCode = new Dictionary<string, Category>(StringComparer.OrdinalIgnoreCase);
+        foreach (var category in existingCategories)
+        {
+            var code = category.CategoryCode?.Trim();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                continue;
+            }
+
+            byCode[code] = category;
+        }
         foreach (var line in request.Lines.OrderBy(x => x.LineNo))
         {
             if (!validByLine.ContainsKey(line.LineNo))
@@ -2205,8 +2257,35 @@ public sealed class PosCatalogService : IPosCatalogService
 
         var lines = new List<CatalogImportApplyLineDto>();
         var validByLine = validation.Lines.Where(x => x.Status == "Valid").ToDictionary(x => x.LineNo);
-        var categories = await _db.Categories.Where(x => x.CatalogTemplateId == catalogTemplateId).ToDictionaryAsync(x => x.CategoryCode, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
-        var products = await _db.Products.Where(x => x.CatalogTemplateId == catalogTemplateId && x.ExternalCode != null).ToDictionaryAsync(x => x.ExternalCode!, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
+        var categoryEntities = await _db.Categories
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var categories = new Dictionary<string, Category>(StringComparer.OrdinalIgnoreCase);
+        foreach (var category in categoryEntities)
+        {
+            var code = category.CategoryCode?.Trim();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                continue;
+            }
+
+            categories[code] = category;
+        }
+
+        var productEntities = await _db.Products
+            .Where(x => x.CatalogTemplateId == catalogTemplateId && x.ExternalCode != null)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var products = new Dictionary<string, Product>(StringComparer.OrdinalIgnoreCase);
+        foreach (var product in productEntities)
+        {
+            var externalCode = product.ExternalCode?.Trim();
+            if (string.IsNullOrWhiteSpace(externalCode))
+            {
+                continue;
+            }
+
+            products[externalCode] = product;
+        }
         foreach (var line in request.Lines.OrderBy(x => x.LineNo))
         {
             if (!validByLine.ContainsKey(line.LineNo)) { var invalid = validation.Lines.First(x => x.LineNo == line.LineNo); lines.Add(new(line.LineNo, "Failed", invalid.ErrorCode, invalid.Message, null, null)); continue; }
