@@ -7,6 +7,8 @@ describe('WholesalePricingService', () => {
     const result = service.quote({ qty: 10, basePrice: 100, policy: null, override: null });
     expect(result.appliedUnitPrice).toBe(100);
     expect(result.tierApplied).toBeNull();
+    expect(result.baseUnitPrice).toBe(100);
+    expect(result.wholesale.isApplied).toBeFalsy();
   });
 
   it('applies enabled tenant tier', () => {
@@ -23,6 +25,7 @@ describe('WholesalePricingService', () => {
 
     expect(result.appliedUnitPrice).toBe(90);
     expect(result.tierLabel).toContain('≥10');
+    expect(result.wholesale.source).toBe('tenant');
   });
 
   it('does not apply when override mode is disabled', () => {
@@ -57,6 +60,7 @@ describe('WholesalePricingService', () => {
     });
 
     expect(result.appliedUnitPrice).toBe(70);
+    expect(result.wholesale.source).toBe('product');
   });
 
   it('applies tier on exact boundary qty', () => {

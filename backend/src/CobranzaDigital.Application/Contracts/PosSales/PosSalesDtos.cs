@@ -14,7 +14,21 @@ public sealed record CreateSaleItemRequestDto(
     Guid ProductId,
     int Quantity,
     IReadOnlyList<CreateSaleItemSelectionRequestDto>? Selections,
-    IReadOnlyList<CreateSaleItemExtraRequestDto>? Extras);
+    IReadOnlyList<CreateSaleItemExtraRequestDto>? Extras,
+    SaleItemPricingSnapshotRequestDto? PricingSnapshot);
+
+public sealed record SaleItemPricingSnapshotRequestDto(
+    decimal BaseUnitPrice,
+    decimal AppliedUnitPrice,
+    WholesaleTierAppliedSnapshotRequestDto? Wholesale,
+    DateTimeOffset? PricingCalculatedAtUtc);
+
+public sealed record WholesaleTierAppliedSnapshotRequestDto(
+    bool IsApplied,
+    decimal? MinQty,
+    string? DiscountType,
+    decimal? DiscountValue,
+    string? Source);
 
 public sealed record CreateSaleItemSelectionRequestDto(string GroupKey, Guid OptionItemId);
 public sealed record CreateSaleItemExtraRequestDto(Guid ExtraId, int Quantity);

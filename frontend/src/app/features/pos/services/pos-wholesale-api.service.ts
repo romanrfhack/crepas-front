@@ -1,7 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../../core/services/api-client';
-import { ProductWholesaleOverrideDto, TenantWholesalePolicyDto } from '../models/pos.models';
+import {
+  PosPricingQuoteRequestDto,
+  PosPricingQuoteResponseDto,
+  ProductWholesaleOverrideDto,
+  TenantWholesalePolicyDto,
+} from '../models/pos.models';
 
 @Injectable({ providedIn: 'root' })
 export class PosWholesaleApiService {
@@ -9,6 +14,10 @@ export class PosWholesaleApiService {
 
   getTenantWholesalePolicy() {
     return firstValueFrom(this.apiClient.get<TenantWholesalePolicyDto>('/v1/pos/wholesale/policy'));
+  }
+
+  quotePricing(payload: PosPricingQuoteRequestDto) {
+    return firstValueFrom(this.apiClient.post<PosPricingQuoteResponseDto>('/v1/pos/pricing/quote', payload));
   }
 
   getProductWholesaleOverride(productId: string) {

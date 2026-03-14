@@ -3,8 +3,10 @@ import {
   ProductWholesaleMode,
   ProductWholesaleOverrideDto,
   TenantWholesalePolicyDto,
+  WholesaleAppliedSnapshotDto,
   WholesaleTierDto,
 } from '../models/pos.models';
+import { roundMoney } from '../utils/pricing-rounding';
 
 export interface WholesalePricingInput {
   qty: number;
@@ -14,52 +16,67 @@ export interface WholesalePricingInput {
 }
 
 export interface WholesalePricingResult {
+  baseUnitPrice: number;
   appliedUnitPrice: number;
   tierLabel: string | null;
   tierApplied: WholesaleTierDto | null;
+  wholesale: WholesaleAppliedSnapshotDto;
 }
 
 @Injectable({ providedIn: 'root' })
 export class WholesalePricingService {
   quote(input: WholesalePricingInput): WholesalePricingResult {
     const normalizedQty = this.normalizeNumber(input.qty);
-    const normalizedPrice = this.round2(this.normalizeNumber(input.basePrice));
+    const normalizedPrice = roundMoney(this.normalizeNumber(input.basePrice));
     if (normalizedQty <= 0) {
-      return {
-        appliedUnitPrice: normalizedPrice,
-        tierLabel: null,
-        tierApplied: null,
-      };
+      return this.baseResult(normalizedPrice);
     }
 
     const mode: ProductWholesaleMode = input.override?.mode ?? 'UseTenantDefault';
     if (mode === 'Disabled') {
-      return {
-        appliedUnitPrice: normalizedPrice,
-        tierLabel: null,
-        tierApplied: null,
-      };
+      return this.baseResult(normalizedPrice);
     }
 
+    const source: 'tenant' | 'product' = mode === 'CustomTiers' ? 'product' : 'tenant';
     const tiers = this.resolveTiers(input.policy, input.override, mode);
     const tierApplied = this.selectTier(tiers, normalizedQty);
     if (!tierApplied) {
-      return {
-        appliedUnitPrice: normalizedPrice,
-        tierLabel: null,
-        tierApplied: null,
-      };
+      return this.baseResult(normalizedPrice);
     }
 
     const appliedUnitPrice =
       tierApplied.discountType === 'Percent'
-        ? this.round2(normalizedPrice * (1 - tierApplied.discountValue / 100))
-        : this.round2(tierApplied.discountValue);
+        ? roundMoney(normalizedPrice * (1 - tierApplied.discountValue / 100))
+        : roundMoney(tierApplied.discountValue);
 
     return {
+      baseUnitPrice: normalizedPrice,
       appliedUnitPrice,
       tierLabel: this.toTierLabel(tierApplied),
       tierApplied,
+      wholesale: {
+        isApplied: true,
+        minQty: tierApplied.minQty,
+        discountType: tierApplied.discountType,
+        discountValue: tierApplied.discountValue,
+        source,
+      },
+    };
+  }
+
+  private baseResult(baseUnitPrice: number): WholesalePricingResult {
+    return {
+      baseUnitPrice,
+      appliedUnitPrice: baseUnitPrice,
+      tierLabel: null,
+      tierApplied: null,
+      wholesale: {
+        isApplied: false,
+        minQty: null,
+        discountType: null,
+        discountValue: null,
+        source: null,
+      },
     };
   }
 
@@ -97,17 +114,13 @@ export class WholesalePricingService {
 
   private toTierLabel(tier: WholesaleTierDto) {
     if (tier.discountType === 'Percent') {
-      return `≥${tier.minQty}: -${this.round2(tier.discountValue)}%`;
+      return `≥${tier.minQty}: -${roundMoney(tier.discountValue)}%`;
     }
 
-    return `≥${tier.minQty}: $${this.round2(tier.discountValue).toFixed(2)} c/u`;
+    return `≥${tier.minQty}: $${roundMoney(tier.discountValue).toFixed(2)} c/u`;
   }
 
   private normalizeNumber(value: number) {
     return Number.isFinite(value) ? value : 0;
-  }
-
-  private round2(value: number) {
-    return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 }
