@@ -28,6 +28,7 @@ public sealed class CobranzaDigitalDbContext
     public DbSet<CatalogInventoryBalance> CatalogInventoryBalances => Set<CatalogInventoryBalance>();
     public DbSet<CatalogInventoryAdjustment> CatalogInventoryAdjustments => Set<CatalogInventoryAdjustment>();
     public DbSet<CatalogInventoryBatchOperation> CatalogInventoryBatchOperations => Set<CatalogInventoryBatchOperation>();
+    public DbSet<CatalogImportBatchOperation> CatalogImportBatchOperations => Set<CatalogImportBatchOperation>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<OptionSet> OptionSets => Set<OptionSet>();
     public DbSet<OptionItem> OptionItems => Set<OptionItem>();

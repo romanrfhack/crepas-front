@@ -55,7 +55,7 @@ public sealed class PosCatalogService : IPosCatalogService
             .Where(x => x.CatalogTemplateId == catalogTemplateId)
             .Where(x => includeInactive || x.IsActive)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new CategoryDto(x.Id, x.Name, x.SortOrder, x.IsActive))
+            .Select(x => new CategoryDto(x.Id, x.CategoryCode, x.Name, x.SortOrder, x.IsActive))
             .ToListAsync(ct)
             .ConfigureAwait(false);
     }
@@ -67,6 +67,7 @@ public sealed class PosCatalogService : IPosCatalogService
         {
             Id = Guid.NewGuid(),
             CatalogTemplateId = catalogTemplateId,
+            CategoryCode = NormalizeCategoryCode(request.CategoryCode, request.Name),
             Name = request.Name,
             SortOrder = request.SortOrder,
             IsActive = request.IsActive
@@ -74,9 +75,9 @@ public sealed class PosCatalogService : IPosCatalogService
 
         _db.Categories.Add(e);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return new CategoryDto(e.Id, e.Name, e.SortOrder, e.IsActive);
+        return new CategoryDto(e.Id, e.CategoryCode, e.Name, e.SortOrder, e.IsActive);
     }
-    public async Task<CategoryDto> UpdateCategoryAsync(Guid id, UpsertCategoryRequest request, CancellationToken ct) { var e = await FindAsync(_db.Categories, id, ct).ConfigureAwait(false); var before = new { e.Name, e.SortOrder, e.IsActive }; e.Name = request.Name; e.SortOrder = request.SortOrder; e.IsActive = request.IsActive; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Category", "Update", id, before, new { e.Name, e.SortOrder, e.IsActive }, ct).ConfigureAwait(false); return new(e.Id, e.Name, e.SortOrder, e.IsActive); }
+    public async Task<CategoryDto> UpdateCategoryAsync(Guid id, UpsertCategoryRequest request, CancellationToken ct) { var e = await FindAsync(_db.Categories, id, ct).ConfigureAwait(false); var before = new { e.CategoryCode, e.Name, e.SortOrder, e.IsActive }; e.CategoryCode = NormalizeCategoryCode(request.CategoryCode, request.Name); e.Name = request.Name; e.SortOrder = request.SortOrder; e.IsActive = request.IsActive; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Category", "Update", id, before, new { e.CategoryCode, e.Name, e.SortOrder, e.IsActive }, ct).ConfigureAwait(false); return new(e.Id, e.CategoryCode, e.Name, e.SortOrder, e.IsActive); }
     public async Task DeactivateCategoryAsync(Guid id, CancellationToken ct) { var e = await FindAsync(_db.Categories, id, ct).ConfigureAwait(false); var before = new { e.IsActive }; e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Category", "Deactivate", id, before, new { e.IsActive }, ct).ConfigureAwait(false); }
 
     public async Task<IReadOnlyList<ProductDto>> GetProductsAsync(bool includeInactive, Guid? categoryId, CancellationToken ct)
@@ -120,6 +121,78 @@ public sealed class PosCatalogService : IPosCatalogService
     }
     public async Task<ProductDto> UpdateProductAsync(Guid id, UpsertProductRequest request, CancellationToken ct) { await _productValidator.EnsureValidAsync(request, ct).ConfigureAwait(false); await EnsureSchemaActiveIfPresent(request.CustomizationSchemaId, ct).ConfigureAwait(false); var e = await FindAsync(_db.Products, id, ct).ConfigureAwait(false); var before = Map(e); e.ExternalCode = request.ExternalCode; e.Name = request.Name; e.CategoryId = request.CategoryId; e.SubcategoryName = request.SubcategoryName; e.BasePrice = request.BasePrice; e.IsActive = request.IsActive; e.IsAvailable = request.IsAvailable; e.CustomizationSchemaId = request.CustomizationSchemaId; e.IsInventoryTracked = request.IsInventoryTracked; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Product", before.IsAvailable != e.IsAvailable ? "UpdateProductAvailability" : "UpdateProduct", id, before, Map(e), ct).ConfigureAwait(false); return Map(e); }
     public async Task DeactivateProductAsync(Guid id, CancellationToken ct) { var e = await FindAsync(_db.Products, id, ct).ConfigureAwait(false); var before = new { e.IsActive }; e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Product", "Deactivate", id, before, new { e.IsActive }, ct).ConfigureAwait(false); }
+
+    public async Task<IReadOnlyList<CategoryExportRowDto>> GetCategoriesExportAsync(int maxRows, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        return await _db.Categories.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .OrderBy(x => x.SortOrder).ThenBy(x => x.Name)
+            .Take(maxRows)
+            .Select(x => new CategoryExportRowDto(x.CategoryCode, x.Name, x.SortOrder, x.UpdatedAtUtc))
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<ProductExportRowDto>> GetProductsExportAsync(int maxRows, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        return await _db.Products.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .Join(_db.Categories.AsNoTracking(), p => p.CategoryId, c => c.Id, (p,c) => new ProductExportRowDto(p.ExternalCode ?? string.Empty, p.Name, c.CategoryCode, p.BasePrice, p.IsActive, p.IsAvailable, p.IsInventoryTracked, p.SubcategoryName, p.UpdatedAtUtc))
+            .OrderBy(x => x.ExternalCode)
+            .Take(maxRows)
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<CatalogImportValidationResultDto> ValidateCategoryImportAsync(CatalogCategoryImportValidateRequest request, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var existing = await _db.Categories.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId)
+            .ToDictionaryAsync(x => x.CategoryCode, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
+        var dup = request.Lines.GroupBy(x => x.CategoryCode.Trim(), StringComparer.OrdinalIgnoreCase).Where(g => !string.IsNullOrWhiteSpace(g.Key) && g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var lines = new List<CatalogImportValidationLineDto>();
+        var valid=0; var invalid=0;
+        foreach(var l in request.Lines.OrderBy(x=>x.LineNo)){
+            var code=l.CategoryCode?.Trim() ?? string.Empty;
+            var name=l.Name?.Trim() ?? string.Empty;
+            if (l.LineNo<=0 || string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name) || l.SortOrder<0){ invalid++; lines.Add(new(l.LineNo,"Invalid","VALIDATION_ERROR","Campos requeridos inválidos.",null,null)); continue; }
+            if (dup.Contains(code)){ invalid++; lines.Add(new(l.LineNo,"Invalid","DUPLICATE_IN_FILE","categoryCode duplicado en archivo.",null,null)); continue; }
+            valid++;
+            lines.Add(new(l.LineNo,"Valid",null,null, existing.TryGetValue(code, out var c)?"Update":"Create", existing.TryGetValue(code, out c)?c.Id:null));
+        }
+        return new(request.Lines.Count, valid, invalid, lines);
+    }
+
+    public async Task<CatalogImportValidationResultDto> ValidateProductImportAsync(CatalogProductImportValidateRequest request, CancellationToken ct)
+    {
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var categories = await _db.Categories.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId).ToDictionaryAsync(x => x.CategoryCode, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
+        var products = await _db.Products.AsNoTracking().Where(x => x.CatalogTemplateId == catalogTemplateId && x.ExternalCode != null).ToDictionaryAsync(x => x.ExternalCode!, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
+        var dup = request.Lines.GroupBy(x => x.ExternalCode.Trim(), StringComparer.OrdinalIgnoreCase).Where(g => !string.IsNullOrWhiteSpace(g.Key) && g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var lines = new List<CatalogImportValidationLineDto>(); var valid=0; var invalid=0;
+        foreach(var l in request.Lines.OrderBy(x=>x.LineNo)){
+            var sku=l.ExternalCode?.Trim() ?? string.Empty; var name=l.Name?.Trim() ?? string.Empty; var cat=l.CategoryCode?.Trim() ?? string.Empty;
+            if(l.LineNo<=0 || string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(cat)){ invalid++; lines.Add(new(l.LineNo,"Invalid","VALIDATION_ERROR","Campos requeridos inválidos.",null,null)); continue; }
+            if(l.BasePrice<0){ invalid++; lines.Add(new(l.LineNo,"Invalid","VALIDATION_ERROR","basePrice debe ser >= 0.",null,null)); continue; }
+            if(dup.Contains(sku)){ invalid++; lines.Add(new(l.LineNo,"Invalid","DUPLICATE_IN_FILE","externalCode duplicado en archivo.",null,null)); continue; }
+            if(!categories.ContainsKey(cat)){ invalid++; lines.Add(new(l.LineNo,"Invalid","UNKNOWN_CATEGORY","categoryCode no existe.",null,null)); continue; }
+            valid++;
+            lines.Add(new(l.LineNo,"Valid",null,null, products.TryGetValue(sku, out var p)?"Update":"Create", products.TryGetValue(sku, out p)?p.Id:null));
+        }
+        return new(request.Lines.Count, valid, invalid, lines);
+    }
+
+    public async Task<CatalogImportApplyResultDto> ApplyCategoryImportAsync(CatalogCategoryImportApplyRequest request, CancellationToken ct)
+    {
+        var validation = await ValidateCategoryImportAsync(new CatalogCategoryImportValidateRequest(request.Lines), ct).ConfigureAwait(false);
+        return await ApplyCategoryImportInternalAsync(request, validation, ct).ConfigureAwait(false);
+    }
+
+    public async Task<CatalogImportApplyResultDto> ApplyProductImportAsync(CatalogProductImportApplyRequest request, CancellationToken ct)
+    {
+        var validation = await ValidateProductImportAsync(new CatalogProductImportValidateRequest(request.Lines), ct).ConfigureAwait(false);
+        return await ApplyProductImportInternalAsync(request, validation, ct).ConfigureAwait(false);
+    }
 
     public async Task<IReadOnlyList<OptionSetDto>> GetOptionSetsAsync(bool includeInactive, CancellationToken ct)
     {
@@ -1635,7 +1708,7 @@ public sealed class PosCatalogService : IPosCatalogService
         var categories = await _db.Categories.AsNoTracking()
             .Where(x => x.IsActive && x.CatalogTemplateId == mapping.CatalogTemplateId)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new CategoryDto(x.Id, x.Name, x.SortOrder, x.IsActive))
+            .Select(x => new CategoryDto(x.Id, x.CategoryCode, x.Name, x.SortOrder, x.IsActive))
             .ToListAsync(ct).ConfigureAwait(false);
 
         // --- Productos: primero traemos los datos necesarios desde la BD ---
@@ -2063,6 +2136,113 @@ public sealed class PosCatalogService : IPosCatalogService
                 x.LineClientOperationId
             }).ToArray()
         };
+        var json = JsonSerializer.Serialize(normalized);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        return Convert.ToHexString(hash);
+    }
+
+
+    private async Task<CatalogImportApplyResultDto> ApplyCategoryImportInternalAsync(CatalogCategoryImportApplyRequest request, CatalogImportValidationResultDto validation, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var requestHash = ComputeCatalogBatchRequestHash(request.BatchClientOperationId, "Categories", request.Lines);
+        var existingBatch = await _db.CatalogImportBatchOperations.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.CatalogTemplateId == catalogTemplateId && x.ImportType == "Categories" && x.BatchClientOperationId == request.BatchClientOperationId, ct).ConfigureAwait(false);
+        if (existingBatch is not null)
+        {
+            if (!string.Equals(existingBatch.RequestHash, requestHash, StringComparison.Ordinal))
+            {
+                throw new ConflictException("IDEMPOTENCY_CONFLICT");
+            }
+            return JsonSerializer.Deserialize<CatalogImportApplyResultDto>(existingBatch.ResultJson)!;
+        }
+
+        var lines = new List<CatalogImportApplyLineDto>();
+        var validByLine = validation.Lines.Where(x => x.Status == "Valid").ToDictionary(x => x.LineNo);
+        var byCode = await _db.Categories.Where(x => x.CatalogTemplateId == catalogTemplateId).ToDictionaryAsync(x => x.CategoryCode, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
+        foreach (var line in request.Lines.OrderBy(x => x.LineNo))
+        {
+            if (!validByLine.ContainsKey(line.LineNo))
+            {
+                var invalid = validation.Lines.First(x => x.LineNo == line.LineNo);
+                lines.Add(new(line.LineNo, "Failed", invalid.ErrorCode, invalid.Message, null, null));
+                continue;
+            }
+            var code = line.CategoryCode.Trim();
+            if (byCode.TryGetValue(code, out var existing))
+            {
+                existing.Name = line.Name.Trim(); existing.SortOrder = line.SortOrder; existing.IsActive = line.IsActive;
+                lines.Add(new(line.LineNo, "Applied", null, null, "Update", existing.Id));
+            }
+            else
+            {
+                var created = new Category { Id = Guid.NewGuid(), CatalogTemplateId = catalogTemplateId, CategoryCode = code, Name = line.Name.Trim(), SortOrder = line.SortOrder, IsActive = line.IsActive };
+                _db.Categories.Add(created); byCode[code] = created;
+                lines.Add(new(line.LineNo, "Applied", null, null, "Create", created.Id));
+            }
+        }
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        var result = new CatalogImportApplyResultDto(request.BatchClientOperationId, lines.Count(x => x.Status == "Applied"), lines.Count(x => x.Status == "Failed"), lines);
+        var json = JsonSerializer.Serialize(result);
+        _db.CatalogImportBatchOperations.Add(new CatalogImportBatchOperation { Id = Guid.NewGuid(), TenantId = tenantId, CatalogTemplateId = catalogTemplateId, ImportType = "Categories", BatchClientOperationId = request.BatchClientOperationId, RequestHash = requestHash, ResultJson = json, CreatedAtUtc = DateTimeOffset.UtcNow });
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return result;
+    }
+
+    private async Task<CatalogImportApplyResultDto> ApplyProductImportInternalAsync(CatalogProductImportApplyRequest request, CatalogImportValidationResultDto validation, CancellationToken ct)
+    {
+        var tenantId = RequireTenantId();
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+        var requestHash = ComputeCatalogBatchRequestHash(request.BatchClientOperationId, "Products", request.Lines);
+        var existingBatch = await _db.CatalogImportBatchOperations.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.CatalogTemplateId == catalogTemplateId && x.ImportType == "Products" && x.BatchClientOperationId == request.BatchClientOperationId, ct).ConfigureAwait(false);
+        if (existingBatch is not null)
+        {
+            if (!string.Equals(existingBatch.RequestHash, requestHash, StringComparison.Ordinal)) throw new ConflictException("IDEMPOTENCY_CONFLICT");
+            return JsonSerializer.Deserialize<CatalogImportApplyResultDto>(existingBatch.ResultJson)!;
+        }
+
+        var lines = new List<CatalogImportApplyLineDto>();
+        var validByLine = validation.Lines.Where(x => x.Status == "Valid").ToDictionary(x => x.LineNo);
+        var categories = await _db.Categories.Where(x => x.CatalogTemplateId == catalogTemplateId).ToDictionaryAsync(x => x.CategoryCode, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
+        var products = await _db.Products.Where(x => x.CatalogTemplateId == catalogTemplateId && x.ExternalCode != null).ToDictionaryAsync(x => x.ExternalCode!, StringComparer.OrdinalIgnoreCase, ct).ConfigureAwait(false);
+        foreach (var line in request.Lines.OrderBy(x => x.LineNo))
+        {
+            if (!validByLine.ContainsKey(line.LineNo)) { var invalid = validation.Lines.First(x => x.LineNo == line.LineNo); lines.Add(new(line.LineNo, "Failed", invalid.ErrorCode, invalid.Message, null, null)); continue; }
+            var sku = line.ExternalCode.Trim();
+            var cat = categories[line.CategoryCode.Trim()];
+            if (products.TryGetValue(sku, out var existing))
+            {
+                existing.Name = line.Name.Trim(); existing.CategoryId = cat.Id; existing.BasePrice = line.BasePrice; existing.IsActive = line.IsActive; existing.IsAvailable = line.IsAvailable; existing.IsInventoryTracked = line.IsInventoryTracked; existing.SubcategoryName = string.IsNullOrWhiteSpace(line.SubcategoryName) ? null : line.SubcategoryName.Trim();
+                lines.Add(new(line.LineNo, "Applied", null, null, "Update", existing.Id));
+            }
+            else
+            {
+                var created = new Product { Id = Guid.NewGuid(), CatalogTemplateId = catalogTemplateId, ExternalCode = sku, Name = line.Name.Trim(), CategoryId = cat.Id, BasePrice = line.BasePrice, IsActive = line.IsActive, IsAvailable = line.IsAvailable, IsInventoryTracked = line.IsInventoryTracked, SubcategoryName = string.IsNullOrWhiteSpace(line.SubcategoryName) ? null : line.SubcategoryName.Trim() };
+                _db.Products.Add(created); products[sku] = created;
+                lines.Add(new(line.LineNo, "Applied", null, null, "Create", created.Id));
+            }
+        }
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        var result = new CatalogImportApplyResultDto(request.BatchClientOperationId, lines.Count(x => x.Status == "Applied"), lines.Count(x => x.Status == "Failed"), lines);
+        var json = JsonSerializer.Serialize(result);
+        _db.CatalogImportBatchOperations.Add(new CatalogImportBatchOperation { Id = Guid.NewGuid(), TenantId = tenantId, CatalogTemplateId = catalogTemplateId, ImportType = "Products", BatchClientOperationId = request.BatchClientOperationId, RequestHash = requestHash, ResultJson = json, CreatedAtUtc = DateTimeOffset.UtcNow });
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return result;
+    }
+
+    private static string NormalizeCategoryCode(string? code, string name)
+    {
+        if (!string.IsNullOrWhiteSpace(code)) return code.Trim();
+        var normalized = new string(name.Trim().ToLowerInvariant().Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
+        while (normalized.Contains("--", StringComparison.Ordinal)) normalized = normalized.Replace("--", "-", StringComparison.Ordinal);
+        return normalized.Trim('-');
+    }
+
+    private static string ComputeCatalogBatchRequestHash<TLine>(Guid batchClientOperationId, string importType, IReadOnlyList<TLine> lines)
+    {
+        var normalized = new { BatchClientOperationId = batchClientOperationId, ImportType = importType, Lines = lines };
         var json = JsonSerializer.Serialize(normalized);
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
         return Convert.ToHexString(hash);

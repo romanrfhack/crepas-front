@@ -1196,6 +1196,95 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
+
+    [Fact]
+    public async Task CatalogV2_Categories_Export_And_Import_Validate_Apply_Workflow()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        _ = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { categoryCode = "BEB", name = "Bebidas", sortOrder = 1, isActive = true });
+
+        using var exportReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v2/pos/catalog/categories/export", token);
+        using var exportResp = await _client.SendAsync(exportReq);
+        Assert.Equal(HttpStatusCode.OK, exportResp.StatusCode);
+        var csv = await exportResp.Content.ReadAsStringAsync();
+        Assert.Contains("categoryCode,name,sortOrder,updatedAtUtc", csv);
+
+        using var validateReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/catalog/categories/import/validate", token);
+        validateReq.Content = JsonContent.Create(new
+        {
+            lines = new[]
+            {
+                new { lineNo = 1, categoryCode = "BEB", name = "Bebidas X", sortOrder = 1, isActive = true },
+                new { lineNo = 2, categoryCode = "BEB", name = "Dup", sortOrder = 1, isActive = true }
+            }
+        });
+        using var validateResp = await _client.SendAsync(validateReq);
+        Assert.Equal(HttpStatusCode.OK, validateResp.StatusCode);
+        var validation = await validateResp.Content.ReadFromJsonAsync<CatalogImportValidationResponse>();
+        Assert.NotNull(validation);
+        Assert.Contains(validation!.Lines, x => x.ErrorCode == "DUPLICATE_IN_FILE");
+
+        var batchId = Guid.NewGuid();
+        using var applyReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/catalog/categories/import/apply", token);
+        applyReq.Content = JsonContent.Create(new
+        {
+            batchClientOperationId = batchId,
+            lines = new[]
+            {
+                new { lineNo = 1, categoryCode = "BEB", name = "Bebidas X", sortOrder = 2, isActive = true },
+                new { lineNo = 2, categoryCode = "POS", name = "Postres", sortOrder = 3, isActive = true }
+            }
+        });
+        using var applyResp = await _client.SendAsync(applyReq);
+        Assert.Equal(HttpStatusCode.OK, applyResp.StatusCode);
+        var apply = await applyResp.Content.ReadFromJsonAsync<CatalogImportApplyResponse>();
+        Assert.Equal(2, apply!.AppliedCount);
+    }
+
+    [Fact]
+    public async Task CatalogV2_Products_Validate_Unknown_Category_And_Idempotency_Conflict()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        _ = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { categoryCode = "BEB", name = "Bebidas", sortOrder = 1, isActive = true });
+
+        using var validateReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/catalog/products/import/validate", token);
+        validateReq.Content = JsonContent.Create(new
+        {
+            lines = new[]
+            {
+                new { lineNo = 1, externalCode = "SKU-1", name = "Latte", categoryCode = "UNKNOWN", basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = false, subcategoryName = "" }
+            }
+        });
+        using var validateResp = await _client.SendAsync(validateReq);
+        var validation = await validateResp.Content.ReadFromJsonAsync<CatalogImportValidationResponse>();
+        Assert.Contains(validation!.Lines, x => x.ErrorCode == "UNKNOWN_CATEGORY");
+
+        var batchId = Guid.NewGuid();
+        using var applyReq1 = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/catalog/products/import/apply", token);
+        applyReq1.Content = JsonContent.Create(new
+        {
+            batchClientOperationId = batchId,
+            lines = new[]
+            {
+                new { lineNo = 1, externalCode = "SKU-1", name = "Latte", categoryCode = "BEB", basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = false, subcategoryName = "" }
+            }
+        });
+        using var applyResp1 = await _client.SendAsync(applyReq1);
+        Assert.Equal(HttpStatusCode.OK, applyResp1.StatusCode);
+
+        using var applyReqConflict = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/catalog/products/import/apply", token);
+        applyReqConflict.Content = JsonContent.Create(new
+        {
+            batchClientOperationId = batchId,
+            lines = new[]
+            {
+                new { lineNo = 1, externalCode = "SKU-1", name = "Latte XL", categoryCode = "BEB", basePrice = 12m, isActive = true, isAvailable = true, isInventoryTracked = false, subcategoryName = "" }
+            }
+        });
+        using var applyRespConflict = await _client.SendAsync(applyReqConflict);
+        Assert.Equal(HttpStatusCode.Conflict, applyRespConflict.StatusCode);
+    }
+
     [Fact]
     public async Task InventoryV2_Balances_Export_Returns_Csv_And_Respects_Filters()
     {
@@ -1388,6 +1477,10 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     private sealed record InventoryBatchAdjustmentV2LineResponse(int LineNo, string ItemType, string? ExternalCode, Guid? ItemId, string Status, string? ErrorCode, string? Message, decimal? QtyBefore, decimal? QtyAfter, decimal? DeltaApplied, Guid? AdjustmentId);
     private sealed record InventoryBatchValidationResponse(Guid StoreId, int TotalLines, int ValidCount, int InvalidCount, List<InventoryBatchValidationLineResponse> Lines);
     private sealed record InventoryBatchValidationLineResponse(int LineNo, string ItemType, string? ExternalCode, Guid? ItemId, string Status, string? ErrorCode, string? Message, decimal? QtyBefore, decimal? QtyAfter, decimal? DeltaQtyNormalized, Guid? ItemResolvedId, string? ItemName);
+    private sealed record CatalogImportValidationResponse(int TotalLines, int ValidCount, int InvalidCount, List<CatalogImportValidationLineResponse> Lines);
+    private sealed record CatalogImportValidationLineResponse(int LineNo, string Status, string? ErrorCode, string? Message, string? Action, Guid? EntityId);
+    private sealed record CatalogImportApplyResponse(Guid BatchClientOperationId, int AppliedCount, int FailedCount, List<CatalogImportApplyLineResponse> Lines);
+    private sealed record CatalogImportApplyLineResponse(int LineNo, string Status, string? ErrorCode, string? Message, string? Action, Guid? EntityId);
     private sealed record PagedInventoryBalancesResponse(List<InventoryBalanceRowResponse> Items, int TotalCount, int Page, int PageSize);
     private sealed record InventoryMovementRowResponse(Guid MovementId, DateTimeOffset OccurredAtUtc, string ReasonCode, string? ReferenceType, string? ReferenceId, string? Note, Guid? CreatedByUserId, string? CreatedByDisplayName, decimal DeltaQty, decimal QtyBefore, decimal QtyAfter, string? ClientOperationId, bool HasAnomaly);
     private sealed record PagedInventoryMovementsResponse(List<InventoryMovementRowResponse> Items, int TotalCount, int Page, int PageSize);

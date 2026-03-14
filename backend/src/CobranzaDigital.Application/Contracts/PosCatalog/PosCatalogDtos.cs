@@ -2,8 +2,8 @@ using CobranzaDigital.Domain.Entities;
 
 namespace CobranzaDigital.Application.Contracts.PosCatalog;
 
-public sealed record CategoryDto(Guid Id, string Name, int SortOrder, bool IsActive);
-public sealed record UpsertCategoryRequest(string Name, int SortOrder, bool IsActive = true);
+public sealed record CategoryDto(Guid Id, string CategoryCode, string Name, int SortOrder, bool IsActive);
+public sealed record UpsertCategoryRequest(string? CategoryCode, string Name, int SortOrder, bool IsActive = true);
 
 public sealed record ProductDto(Guid Id, string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive, bool IsAvailable, Guid? CustomizationSchemaId, bool? IsInventoryTracked = null, decimal? StockOnHandQty = null, string? AvailabilityReason = null, string? StoreOverrideState = null);
 public sealed record UpsertProductRequest(string? ExternalCode, string Name, Guid CategoryId, string? SubcategoryName, decimal BasePrice, bool IsActive = true, bool IsAvailable = true, Guid? CustomizationSchemaId = null, bool IsInventoryTracked = false);
@@ -152,6 +152,20 @@ public sealed record InventoryBatchValidationLineResultDto(
     decimal? DeltaQtyNormalized,
     Guid? ItemResolvedId,
     string? ItemName);
+
+public sealed record CategoryExportRowDto(string CategoryCode, string Name, int SortOrder, DateTimeOffset UpdatedAtUtc);
+public sealed record ProductExportRowDto(string ExternalCode, string Name, string CategoryCode, decimal BasePrice, bool IsActive, bool IsAvailable, bool IsInventoryTracked, string? SubcategoryName, DateTimeOffset UpdatedAtUtc);
+public sealed record CatalogCategoryImportValidateRequest(IReadOnlyList<CatalogCategoryImportLineDto> Lines);
+public sealed record CatalogCategoryImportApplyRequest(Guid BatchClientOperationId, IReadOnlyList<CatalogCategoryImportLineDto> Lines);
+public sealed record CatalogCategoryImportLineDto(int LineNo, string CategoryCode, string Name, int SortOrder, bool IsActive);
+public sealed record CatalogProductImportValidateRequest(IReadOnlyList<CatalogProductImportLineDto> Lines);
+public sealed record CatalogProductImportApplyRequest(Guid BatchClientOperationId, IReadOnlyList<CatalogProductImportLineDto> Lines);
+public sealed record CatalogProductImportLineDto(int LineNo, string ExternalCode, string Name, string CategoryCode, decimal BasePrice, bool IsActive, bool IsAvailable, bool IsInventoryTracked, string? SubcategoryName);
+public sealed record CatalogImportValidationResultDto(int TotalLines, int ValidCount, int InvalidCount, IReadOnlyList<CatalogImportValidationLineDto> Lines);
+public sealed record CatalogImportValidationLineDto(int LineNo, string Status, string? ErrorCode, string? Message, string? Action, Guid? EntityId);
+public sealed record CatalogImportApplyResultDto(Guid BatchClientOperationId, int AppliedCount, int FailedCount, IReadOnlyList<CatalogImportApplyLineDto> Lines);
+public sealed record CatalogImportApplyLineDto(int LineNo, string Status, string? ErrorCode, string? Message, string? Action, Guid? EntityId);
+
 public sealed record InventoryReportRowDto(string ItemType, Guid ItemId, string ItemName, string? ItemSku, Guid StoreId, decimal StockOnHandQty, bool IsInventoryTracked, string AvailabilityReason, string? StoreOverrideState, DateTimeOffset? UpdatedAtUtc, DateTimeOffset? LastAdjustmentAtUtc);
 public sealed record PosInventorySettingsDto(bool ShowOnlyInStock);
 public sealed record UpdatePosInventorySettingsRequest(bool ShowOnlyInStock);

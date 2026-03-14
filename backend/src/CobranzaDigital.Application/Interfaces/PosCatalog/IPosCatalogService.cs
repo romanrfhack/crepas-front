@@ -14,6 +14,14 @@ public interface IPosCatalogService
     Task<ProductDto> UpdateProductAsync(Guid id, UpsertProductRequest request, CancellationToken ct);
     Task DeactivateProductAsync(Guid id, CancellationToken ct);
 
+    Task<IReadOnlyList<CategoryExportRowDto>> GetCategoriesExportAsync(int maxRows, CancellationToken ct);
+    Task<CatalogImportValidationResultDto> ValidateCategoryImportAsync(CatalogCategoryImportValidateRequest request, CancellationToken ct);
+    Task<CatalogImportApplyResultDto> ApplyCategoryImportAsync(CatalogCategoryImportApplyRequest request, CancellationToken ct);
+
+    Task<IReadOnlyList<ProductExportRowDto>> GetProductsExportAsync(int maxRows, CancellationToken ct);
+    Task<CatalogImportValidationResultDto> ValidateProductImportAsync(CatalogProductImportValidateRequest request, CancellationToken ct);
+    Task<CatalogImportApplyResultDto> ApplyProductImportAsync(CatalogProductImportApplyRequest request, CancellationToken ct);
+
     Task<IReadOnlyList<OptionSetDto>> GetOptionSetsAsync(bool includeInactive, CancellationToken ct);
     Task<OptionSetDto> CreateOptionSetAsync(UpsertOptionSetRequest request, CancellationToken ct);
     Task<OptionSetDto> UpdateOptionSetAsync(Guid id, UpsertOptionSetRequest request, CancellationToken ct);

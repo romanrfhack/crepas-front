@@ -617,6 +617,7 @@ export class CategoriesPage {
 
     this.errorMessage.set('');
     const payload = {
+      categoryCode: this.toCategoryCode(this.nameControl.value),
       name: this.nameControl.value.trim(),
       sortOrder: this.sortOrderControl.value,
       isActive: this.isActiveControl.value,
@@ -662,6 +663,10 @@ export class CategoriesPage {
     this.isActiveControl.setValue(true);
     this.nameControl.markAsUntouched();
     this.sortOrderControl.markAsUntouched();
+  }
+
+  private toCategoryCode(name: string): string {
+    return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   }
 
   private async load() {
