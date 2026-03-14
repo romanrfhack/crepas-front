@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Data;
 using System.Security.Claims;
+using System.Text.Json;
 
 using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Common.Exceptions;
@@ -266,7 +267,14 @@ public sealed class PosSalesService : IPosSalesService
                 var extraRows = requestItem.Extras ?? [];
 
                 const decimal selectionUnitDelta = 0m;
-                var baseLineTotal = (product.BasePrice + selectionUnitDelta) * requestItem.Quantity;
+                var pricingSnapshot = requestItem.PricingSnapshot;
+                var appliedUnitPrice = pricingSnapshot is null
+                    ? product.BasePrice
+                    : RoundMoney(pricingSnapshot.AppliedUnitPrice);
+                var baseUnitPrice = pricingSnapshot is null
+                    ? product.BasePrice
+                    : RoundMoney(pricingSnapshot.BaseUnitPrice);
+                var baseLineTotal = (appliedUnitPrice + selectionUnitDelta) * requestItem.Quantity;
 
                 var saleItem = new SaleItem
                 {
@@ -275,10 +283,24 @@ public sealed class PosSalesService : IPosSalesService
                     ProductId = product.Id,
                     ProductExternalCode = product.ExternalCode,
                     ProductNameSnapshot = product.Name,
-                    UnitPriceSnapshot = product.BasePrice,
+                    UnitPriceSnapshot = appliedUnitPrice,
                     Quantity = requestItem.Quantity,
                     LineTotal = baseLineTotal
                 };
+                if (pricingSnapshot is not null)
+                {
+                    saleItem.NotesSnapshot = JsonSerializer.Serialize(new
+                    {
+                        pricing = new
+                        {
+                            baseUnitPrice,
+                            appliedUnitPrice,
+                            wholesale = pricingSnapshot.Wholesale,
+                            pricingCalculatedAtUtc = pricingSnapshot.PricingCalculatedAtUtc
+                        }
+                    });
+                }
+
                 _db.SaleItems.Add(saleItem);
 
                 foreach (var selection in selectionRows)

@@ -50,6 +50,8 @@ import { PosTimezoneService } from '../services/pos-timezone.service';
 import { PosWholesaleApiService } from '../services/pos-wholesale-api.service';
 import { StoreContextService } from '../services/store-context.service';
 import { WholesalePricingService } from '../services/wholesale-pricing.service';
+import { roundMoney } from '../utils/pricing-rounding';
+import { applyQuoteResponseToCart } from '../utils/quote-mapping';
 
 @Component({
   selector: 'app-pos-caja-page',
@@ -188,14 +190,14 @@ export class PosCajaPage implements OnDestroy {
   });
 
   readonly estimatedTotal = computed(() =>
-    this.round2(
+    roundMoney(
       this.cartItems().reduce((acc, item) => {
         const extrasTotal = item.extras.reduce(
-          (sum, extra) => sum + extra.unitPrice * extra.quantity,
+          (sum, extra) => sum + roundMoney(extra.unitPrice * extra.quantity),
           0,
         );
-        const unit = item.appliedUnitPrice + extrasTotal;
-        return acc + unit * item.quantity;
+        const unit = roundMoney(item.appliedUnitPrice + extrasTotal);
+        return acc + roundMoney(unit * item.quantity);
       }, 0),
     ),
   );
@@ -267,6 +269,7 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
+    void this.revalidatePricing();
     this.showPayment.set(true);
   }
 
@@ -462,8 +465,11 @@ export class PosCajaPage implements OnDestroy {
           return {
             ...item,
             quantity,
+            baseUnitPrice: pricing.baseUnitPrice,
             appliedUnitPrice: pricing.appliedUnitPrice,
             wholesaleTierLabel: pricing.tierLabel,
+            wholesale: pricing.wholesale,
+            pricingCalculatedAtUtc: new Date().toISOString(),
           };
         })
         .filter((item) => item.quantity > 0),
@@ -510,6 +516,12 @@ export class PosCajaPage implements OnDestroy {
               quantity: extra.quantity,
             }))
           : null,
+        pricingSnapshot: {
+          baseUnitPrice: item.baseUnitPrice,
+          appliedUnitPrice: item.appliedUnitPrice,
+          wholesale: item.wholesale,
+          pricingCalculatedAtUtc: item.pricingCalculatedAtUtc,
+        },
       })),
       payments: event.payments,
       ...(this.storeContext.getActiveStoreId()
@@ -730,8 +742,11 @@ export class PosCajaPage implements OnDestroy {
         productId: product.id,
         productName: product.name,
         basePrice: product.basePrice,
+        baseUnitPrice: pricing.baseUnitPrice,
         appliedUnitPrice: pricing.appliedUnitPrice,
         wholesaleTierLabel: pricing.tierLabel,
+        wholesale: pricing.wholesale,
+        pricingCalculatedAtUtc: new Date().toISOString(),
         quantity: 1,
         selections: customization.selections,
         extras: customization.extras,
@@ -859,6 +874,42 @@ export class PosCajaPage implements OnDestroy {
       this.productWholesaleOverrides.update((current) => ({ ...current, [productId]: override }));
     } catch {
       this.productWholesaleOverrides.update((current) => ({ ...current, [productId]: null }));
+    }
+  }
+
+
+  async revalidatePricing() {
+    const storeId = this.storeContext.getActiveStoreId();
+    if (!storeId || this.cartItems().length === 0) {
+      return;
+    }
+
+    try {
+      const response = await this.wholesaleApi.quotePricing({
+        storeId,
+        tenantPolicy: this.tenantWholesalePolicy()
+          ? {
+              isEnabled: this.tenantWholesalePolicy()!.isEnabled,
+              tiers: this.tenantWholesalePolicy()!.tiers,
+            }
+          : null,
+        lines: this.cartItems().map((item) => ({
+          productId: item.productId,
+          qty: item.quantity,
+          basePrice: item.basePrice,
+          requestedUnitPrice: item.appliedUnitPrice,
+          override: this.productWholesaleOverrides()[item.productId]
+            ? {
+                mode: this.productWholesaleOverrides()[item.productId]!.mode,
+                tiers: this.productWholesaleOverrides()[item.productId]!.tiers,
+              }
+            : null,
+        })),
+      });
+
+      this.cartItems.update((items) => applyQuoteResponseToCart(items, response));
+    } catch {
+      // no-op: fallback to local pricing for UX continuity.
     }
   }
 
@@ -1018,10 +1069,6 @@ export class PosCajaPage implements OnDestroy {
     }
 
     return null;
-  }
-
-  private round2(value: number) {
-    return Math.round(value * 100) / 100;
   }
 
   formatDateTime(value: string) {

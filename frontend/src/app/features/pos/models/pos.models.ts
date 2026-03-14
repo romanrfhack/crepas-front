@@ -116,11 +116,27 @@ export interface CreateSaleItemExtraDto {
   quantity: number;
 }
 
+export interface WholesaleAppliedSnapshotDto {
+  isApplied: boolean;
+  minQty: number | null;
+  discountType: WholesaleDiscountType | null;
+  discountValue: number | null;
+  source: 'tenant' | 'product' | null;
+}
+
+export interface SaleItemPricingSnapshotDto {
+  baseUnitPrice: number;
+  appliedUnitPrice: number;
+  wholesale: WholesaleAppliedSnapshotDto;
+  pricingCalculatedAtUtc: string | null;
+}
+
 export interface CreateSaleItemRequestDto {
   productId: string;
   quantity: number;
   selections: CreateSaleItemSelectionDto[] | null;
   extras: CreateSaleItemExtraDto[] | null;
+  pricingSnapshot?: SaleItemPricingSnapshotDto | null;
 }
 
 export interface CreatePaymentRequestDto {
@@ -280,8 +296,11 @@ export interface CartItem {
   productId: string;
   productName: string;
   basePrice: number;
+  baseUnitPrice: number;
   appliedUnitPrice: number;
   wholesaleTierLabel: string | null;
+  wholesale: WholesaleAppliedSnapshotDto;
+  pricingCalculatedAtUtc: string | null;
   quantity: number;
   selections: CartSelection[];
   extras: CartExtra[];
@@ -309,4 +328,50 @@ export interface ProductWholesaleOverrideDto {
   mode: ProductWholesaleMode;
   updatedAtUtc?: string | null;
   tiers: WholesaleTierDto[];
+}
+
+export interface PosPricingQuoteRequestLineDto {
+  productId?: string | null;
+  externalCode?: string | null;
+  qty: number;
+  basePrice?: number | null;
+  requestedUnitPrice?: number | null;
+  override?: {
+    mode: ProductWholesaleMode;
+    tiers: WholesaleTierDto[];
+  } | null;
+}
+
+export interface PosPricingQuoteRequestDto {
+  storeId: string;
+  tenantPolicy: {
+    isEnabled: boolean;
+    tiers: WholesaleTierDto[];
+  } | null;
+  lines: PosPricingQuoteRequestLineDto[];
+}
+
+export interface PosPricingQuoteResponseLineDto {
+  productId: string;
+  externalCode: string | null;
+  qty: number;
+  baseUnitPrice: number;
+  appliedUnitPrice: number;
+  tierApplied: {
+    minQty: number;
+    discountType: WholesaleDiscountType;
+    discountValue: number;
+    source: 'tenant' | 'product';
+  } | null;
+  lineSubtotal: number;
+  isMismatch: boolean;
+  expectedUnitPrice: number | null;
+}
+
+export interface PosPricingQuoteResponseDto {
+  lines: PosPricingQuoteResponseLineDto[];
+  totals: {
+    subtotal: number;
+    total: number;
+  };
 }
