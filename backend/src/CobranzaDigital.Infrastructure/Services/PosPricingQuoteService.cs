@@ -15,16 +15,13 @@ public sealed class PosPricingQuoteService : IPosPricingQuoteService
 {
     private readonly CobranzaDigitalDbContext _db;
     private readonly ITenantContext _tenantContext;
-    private readonly PosPricingQuoteCalculator _calculator;
 
     public PosPricingQuoteService(
         CobranzaDigitalDbContext db,
-        ITenantContext tenantContext,
-        PosPricingQuoteCalculator calculator)
+        ITenantContext tenantContext)
     {
         _db = db;
         _tenantContext = tenantContext;
-        _calculator = calculator;
     }
 
     public async Task<PosPricingQuoteResponseDto> QuoteAsync(PosPricingQuoteRequestDto request, CancellationToken ct)
@@ -66,7 +63,7 @@ public sealed class PosPricingQuoteService : IPosPricingQuoteService
         foreach (var line in request.Lines)
         {
             var product = ResolveProduct(line, byId, byCode);
-            var computed = _calculator.ComputeLine(
+            var computed = PosPricingQuoteCalculator.ComputeLine(
                 line.Qty,
                 line.BasePrice ?? product.BasePrice,
                 request.TenantPolicy,
@@ -86,7 +83,7 @@ public sealed class PosPricingQuoteService : IPosPricingQuoteService
                 computed.ExpectedUnitPrice));
         }
 
-        subtotal = _calculator.RoundMoney(subtotal);
+        subtotal = PosPricingQuoteCalculator.RoundMoney(subtotal);
         return new PosPricingQuoteResponseDto(lines, new PosPricingQuoteTotalsDto(subtotal, subtotal));
     }
 

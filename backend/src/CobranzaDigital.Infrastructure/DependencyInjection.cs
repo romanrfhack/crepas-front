@@ -93,7 +93,6 @@ public static class DependencyInjection
         services.AddScoped<PosStoreContextService>();
         services.AddScoped<IPointsReversalService, NoOpPointsReversalService>();
         services.AddScoped<InventoryConsumptionService>();
-        services.AddSingleton<PosPricingQuoteCalculator>();
         services.AddScoped<IPosSalesService, PosSalesService>();
         services.AddScoped<IPosPricingQuoteService, PosPricingQuoteService>();
         services.AddScoped<IPosShiftService, PosShiftService>();

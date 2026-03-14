@@ -8,7 +8,7 @@ public sealed class PosPricingQuoteCalculator
     private const string DiscountTypePercent = "Percent";
     private const string DiscountTypeFixed = "FixedUnitPrice";
 
-    public PosPricingQuoteComputedLine ComputeLine(
+    public static PosPricingQuoteComputedLine ComputeLine(
         decimal qty,
         decimal baseUnitPrice,
         PosPricingTenantPolicyDto? tenantPolicy,
