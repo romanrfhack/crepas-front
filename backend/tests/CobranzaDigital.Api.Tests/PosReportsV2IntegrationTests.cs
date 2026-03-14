@@ -121,6 +121,7 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var runSuffix = Guid.NewGuid().ToString("N")[..8];
 
         var storeId = await db.PosSettings.AsNoTracking().Select(x => x.DefaultStoreId).SingleAsync();
         var storeSeed = await db.Stores.AsNoTracking().Where(x => x.Id == storeId).Select(x => new { x.TimeZoneId, x.TenantId }).SingleAsync();
@@ -167,8 +168,8 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
             });
 
         db.Categories.AddRange(
-            new Category { Id = categoryA, CatalogTemplateId = catalogTemplateId, Name = $"{Prefix}-cat-a", SortOrder = 1, IsActive = true },
-            new Category { Id = categoryB, CatalogTemplateId = catalogTemplateId, Name = $"{Prefix}-cat-b", SortOrder = 2, IsActive = true });
+            new Category { Id = categoryA, CatalogTemplateId = catalogTemplateId, CategoryCode = $"{Prefix}-a-{runSuffix}", Name = $"{Prefix}-cat-a", SortOrder = 1, IsActive = true },
+            new Category { Id = categoryB, CatalogTemplateId = catalogTemplateId, CategoryCode = $"{Prefix}-b-{runSuffix}", Name = $"{Prefix}-cat-b", SortOrder = 2, IsActive = true });
 
         db.Products.AddRange(
             new Product { Id = productA, CatalogTemplateId = catalogTemplateId, CategoryId = categoryA, Name = "Producto A", ExternalCode = $"{Prefix}-P-A", BasePrice = 100m, IsActive = true },

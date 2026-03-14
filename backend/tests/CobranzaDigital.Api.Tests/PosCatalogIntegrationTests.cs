@@ -33,14 +33,15 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     public async Task Category_And_Product_Crud_SoftDelete_Works()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var unique = Guid.NewGuid().ToString("N")[..8];
         using var createCategory = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/categories", token);
-        createCategory.Content = JsonContent.Create(new { name = "Bebidas", sortOrder = 1, isActive = true });
+        createCategory.Content = JsonContent.Create(new { categoryCode = $"beb-{unique}", name = $"Bebidas-{unique}", sortOrder = 1, isActive = true });
         using var createdCategoryResp = await _client.SendAsync(createCategory);
         var category = await createdCategoryResp.Content.ReadFromJsonAsync<CategoryResponse>();
         Assert.Equal(HttpStatusCode.OK, createdCategoryResp.StatusCode);
 
         using var createProduct = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/admin/products", token);
-        createProduct.Content = JsonContent.Create(new { name = "Cafe", categoryId = category!.Id, basePrice = 10.5m, isActive = true });
+        createProduct.Content = JsonContent.Create(new { name = $"Cafe-{unique}", externalCode = $"CAFE-{unique}", categoryId = category!.Id, basePrice = 10.5m, isActive = true });
         using var createdProductResp = await _client.SendAsync(createProduct);
         var product = await createdProductResp.Content.ReadFromJsonAsync<ProductResponse>();
         Assert.Equal(HttpStatusCode.OK, createdProductResp.StatusCode);
@@ -1201,7 +1202,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     public async Task CatalogV2_Categories_Export_And_Import_Validate_Apply_Workflow()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
-        _ = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { categoryCode = "BEB", name = "Bebidas", sortOrder = 1, isActive = true });
+        var categoryCode = $"BEB{Guid.NewGuid():N}"[..11];
+        _ = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { categoryCode, name = "Bebidas", sortOrder = 1, isActive = true });
 
         using var exportReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v2/pos/catalog/categories/export", token);
         using var exportResp = await _client.SendAsync(exportReq);
@@ -1214,8 +1216,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         {
             lines = new[]
             {
-                new { lineNo = 1, categoryCode = "BEB", name = "Bebidas X", sortOrder = 1, isActive = true },
-                new { lineNo = 2, categoryCode = "BEB", name = "Dup", sortOrder = 1, isActive = true }
+                new { lineNo = 1, categoryCode, name = "Bebidas X", sortOrder = 1, isActive = true },
+                new { lineNo = 2, categoryCode, name = "Dup", sortOrder = 1, isActive = true }
             }
         });
         using var validateResp = await _client.SendAsync(validateReq);
@@ -1231,7 +1233,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             batchClientOperationId = batchId,
             lines = new[]
             {
-                new { lineNo = 1, categoryCode = "BEB", name = "Bebidas X", sortOrder = 2, isActive = true },
+                new { lineNo = 1, categoryCode, name = "Bebidas X", sortOrder = 2, isActive = true },
                 new { lineNo = 2, categoryCode = "POS", name = "Postres", sortOrder = 3, isActive = true }
             }
         });
@@ -1245,7 +1247,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     public async Task CatalogV2_Products_Validate_Unknown_Category_And_Idempotency_Conflict()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
-        _ = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { categoryCode = "BEB", name = "Bebidas", sortOrder = 1, isActive = true });
+        var categoryCode = $"BEB{Guid.NewGuid():N}"[..11];
+        _ = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { categoryCode, name = "Bebidas", sortOrder = 1, isActive = true });
 
         using var validateReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/catalog/products/import/validate", token);
         validateReq.Content = JsonContent.Create(new
@@ -1266,7 +1269,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             batchClientOperationId = batchId,
             lines = new[]
             {
-                new { lineNo = 1, externalCode = "SKU-1", name = "Latte", categoryCode = "BEB", basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = false, subcategoryName = "" }
+                new { lineNo = 1, externalCode = "SKU-1", name = "Latte", categoryCode, basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = false, subcategoryName = "" }
             }
         });
         using var applyResp1 = await _client.SendAsync(applyReq1);
@@ -1278,7 +1281,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             batchClientOperationId = batchId,
             lines = new[]
             {
-                new { lineNo = 1, externalCode = "SKU-1", name = "Latte XL", categoryCode = "BEB", basePrice = 12m, isActive = true, isAvailable = true, isInventoryTracked = false, subcategoryName = "" }
+                new { lineNo = 1, externalCode = "SKU-1", name = "Latte XL", categoryCode, basePrice = 12m, isActive = true, isAvailable = true, isInventoryTracked = false, subcategoryName = "" }
             }
         });
         using var applyRespConflict = await _client.SendAsync(applyReqConflict);
