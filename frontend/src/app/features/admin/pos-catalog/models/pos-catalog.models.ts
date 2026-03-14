@@ -1,11 +1,13 @@
 export interface CategoryDto {
   id: string;
+  categoryCode: string;
   name: string;
   sortOrder: number;
   isActive: boolean;
 }
 
 export interface UpsertCategoryRequest {
+  categoryCode?: string | null;
   name: string;
   sortOrder: number;
   isActive: boolean;
@@ -400,4 +402,57 @@ export interface InventoryBalancesQuery {
   onHandMax?: number;
   page?: number;
   pageSize?: number;
+}
+
+
+export interface CatalogCategoryImportLineDto {
+  lineNo: number;
+  categoryCode: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface CatalogProductImportLineDto {
+  lineNo: number;
+  externalCode: string;
+  name: string;
+  categoryCode: string;
+  basePrice: number;
+  isActive: boolean;
+  isAvailable: boolean;
+  isInventoryTracked: boolean;
+  subcategoryName?: string | null;
+}
+
+export interface CatalogImportValidationLineDto {
+  lineNo: number;
+  status: 'Valid' | 'Invalid';
+  errorCode?: string | null;
+  message?: string | null;
+  action?: 'Create' | 'Update' | 'NoChange' | null;
+  entityId?: string | null;
+}
+
+export interface CatalogImportValidationResultDto {
+  totalLines: number;
+  validCount: number;
+  invalidCount: number;
+  lines: CatalogImportValidationLineDto[];
+}
+
+export interface CatalogImportApplyLineDto {
+  lineNo: number;
+  status: 'Applied' | 'Failed';
+  errorCode?: string | null;
+  message?: string | null;
+  action?: 'Create' | 'Update' | 'NoChange' | null;
+  entityId?: string | null;
+}
+
+export interface CatalogImportApplyResultDto {
+  batchClientOperationId: string;
+  appliedCount: number;
+  failedCount: number;
+  lines: CatalogImportApplyLineDto[];
 }

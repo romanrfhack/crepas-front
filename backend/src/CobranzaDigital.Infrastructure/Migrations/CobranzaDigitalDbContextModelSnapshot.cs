@@ -234,6 +234,11 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<string>("CategoryCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -287,6 +292,10 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("SortOrder");
+
+                    b.HasIndex("CatalogTemplateId", "CategoryCode")
+                        .IsUnique()
+                        .HasFilter("[CatalogTemplateId] IS NOT NULL");
 
                     b.HasIndex("CatalogTemplateId", "Name")
                         .IsUnique()

@@ -2,6 +2,10 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../../../core/services/api-client';
 import {
+  CatalogCategoryImportLineDto,
+  CatalogImportApplyResultDto,
+  CatalogImportValidationResultDto,
+  CatalogProductImportLineDto,
   CategoryDto,
   ExtraDto,
   IncludedItemDto,
@@ -61,6 +65,45 @@ export class PosCatalogApiService {
 
   deactivateProduct(id: string) {
     return firstValueFrom(this.apiClient.delete<void>(`${this.basePath}/products/${id}`));
+  }
+
+
+  exportCategoriesCsv() {
+    return firstValueFrom(this.apiClient.getBlob('/v2/pos/catalog/categories/export'));
+  }
+
+  exportProductsCsv() {
+    return firstValueFrom(this.apiClient.getBlob('/v2/pos/catalog/products/export'));
+  }
+
+  validateCategoriesImport(lines: CatalogCategoryImportLineDto[]) {
+    return firstValueFrom(
+      this.apiClient.post<CatalogImportValidationResultDto>('/v2/pos/catalog/categories/import/validate', { lines }),
+    );
+  }
+
+  applyCategoriesImport(batchClientOperationId: string, lines: CatalogCategoryImportLineDto[]) {
+    return firstValueFrom(
+      this.apiClient.post<CatalogImportApplyResultDto>('/v2/pos/catalog/categories/import/apply', {
+        batchClientOperationId,
+        lines,
+      }),
+    );
+  }
+
+  validateProductsImport(lines: CatalogProductImportLineDto[]) {
+    return firstValueFrom(
+      this.apiClient.post<CatalogImportValidationResultDto>('/v2/pos/catalog/products/import/validate', { lines }),
+    );
+  }
+
+  applyProductsImport(batchClientOperationId: string, lines: CatalogProductImportLineDto[]) {
+    return firstValueFrom(
+      this.apiClient.post<CatalogImportApplyResultDto>('/v2/pos/catalog/products/import/apply', {
+        batchClientOperationId,
+        lines,
+      }),
+    );
   }
 
   getOptionSets(includeInactive = true) {

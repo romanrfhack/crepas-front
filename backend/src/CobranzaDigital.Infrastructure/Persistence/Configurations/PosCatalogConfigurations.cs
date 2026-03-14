@@ -140,13 +140,32 @@ public sealed class CatalogInventoryBatchOperationConfiguration : IEntityTypeCon
     }
 }
 
+
+public sealed class CatalogImportBatchOperationConfiguration : IEntityTypeConfiguration<CatalogImportBatchOperation>
+{
+    public void Configure(EntityTypeBuilder<CatalogImportBatchOperation> builder)
+    {
+        builder.ToTable("CatalogImportBatchOperations");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.ImportType).HasMaxLength(50).IsRequired();
+        builder.Property(x => x.RequestHash).HasMaxLength(128).IsRequired();
+        builder.Property(x => x.ResultJson).IsRequired();
+        builder.Property(x => x.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.HasIndex(x => new { x.TenantId, x.CatalogTemplateId, x.ImportType, x.BatchClientOperationId }).IsUnique();
+        builder.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<CatalogTemplate>().WithMany().HasForeignKey(x => x.CatalogTemplateId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
 {
     public void Configure(EntityTypeBuilder<Category> builder)
     {
         builder.ToTable("Categories");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.CategoryCode).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        builder.HasIndex(x => new { x.CatalogTemplateId, x.CategoryCode }).IsUnique();
         builder.HasIndex(x => new { x.CatalogTemplateId, x.Name }).IsUnique();
         builder.HasIndex(x => x.SortOrder);
         builder.Property(x => x.UpdatedAtUtc)

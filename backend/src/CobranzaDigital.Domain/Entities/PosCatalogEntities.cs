@@ -131,10 +131,22 @@ public sealed class CatalogInventoryBatchOperation : Entity
 public sealed class Category : Entity
 {
     public Guid? CatalogTemplateId { get; set; }
+    public string CategoryCode { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class CatalogImportBatchOperation : Entity
+{
+    public Guid TenantId { get; set; }
+    public Guid CatalogTemplateId { get; set; }
+    public string ImportType { get; set; } = string.Empty;
+    public Guid BatchClientOperationId { get; set; }
+    public string RequestHash { get; set; } = string.Empty;
+    public string ResultJson { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAtUtc { get; set; }
 }
 
 public sealed class Product : Entity
