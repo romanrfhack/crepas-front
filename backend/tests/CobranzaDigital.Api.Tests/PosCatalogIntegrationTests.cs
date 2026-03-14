@@ -1203,7 +1203,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
         var categoryCode = $"BEB{Guid.NewGuid():N}"[..11];
-        _ = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { categoryCode, name = "Bebidas", sortOrder = 1, isActive = true });
+        var categoryName = $"Bebidas-{Guid.NewGuid():N}"[..20];
+        _ = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { categoryCode, name = categoryName, sortOrder = 1, isActive = true });
 
         using var exportReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v2/pos/catalog/categories/export", token);
         using var exportResp = await _client.SendAsync(exportReq);
