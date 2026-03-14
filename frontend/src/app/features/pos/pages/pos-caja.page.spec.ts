@@ -7,6 +7,7 @@ import { PosSalesApiService } from '../services/pos-sales-api.service';
 import { PosShiftApiService } from '../services/pos-shift-api.service';
 import { StoreContextService } from '../services/store-context.service';
 import { PosTimezoneService } from '../services/pos-timezone.service';
+import { PosWholesaleApiService } from '../services/pos-wholesale-api.service';
 import { PosCajaPage } from './pos-caja.page';
 
 describe('PosCajaPage', () => {
@@ -126,6 +127,21 @@ describe('PosCajaPage', () => {
             },
           },
         },
+        {
+          provide: PosWholesaleApiService,
+          useValue: {
+            getTenantWholesalePolicy: async () => ({
+              isEnabled: true,
+              name: 'Mayoreo base',
+              tiers: [{ minQty: 10, discountType: 'Percent', discountValue: 10 }],
+            }),
+            getProductWholesaleOverride: async () => ({
+              productId: 'product-1',
+              mode: 'UseTenantDefault',
+              tiers: [],
+            }),
+          },
+        },
         PosTimezoneService,
         {
           provide: StoreContextService,
@@ -144,6 +160,8 @@ describe('PosCajaPage', () => {
         productId: 'product-1',
         productName: 'Latte',
         basePrice: 10,
+        appliedUnitPrice: 10,
+        wholesaleTierLabel: null,
         quantity: 1,
         selections: [],
         extras: [],
@@ -291,8 +309,8 @@ describe('PosCajaPage', () => {
     expect(fixture.componentInstance.voidForbiddenError()).toBeFalsy();
   });
 
-  it('blocks unavailable products from being added to cart', () => {
-    fixture.componentInstance.onProductSelected({
+  it('blocks unavailable products from being added to cart', async () => {
+    await fixture.componentInstance.onProductSelected({
       id: 'product-unavailable',
       externalCode: null,
       name: 'Sin stock',
@@ -309,6 +327,32 @@ describe('PosCajaPage', () => {
         .cartItems()
         .some((item) => item.productId === 'product-unavailable'),
     ).toBe(false);
+  });
+
+  it('applies and reverts wholesale tier when quantity changes', async () => {
+    fixture.componentInstance.cartItems.set([
+      {
+        id: 'cart-1',
+        productId: 'product-1',
+        productName: 'Latte',
+        basePrice: 10,
+        appliedUnitPrice: 10,
+        wholesaleTierLabel: null,
+        quantity: 9,
+        selections: [],
+        extras: [],
+      },
+    ]);
+
+    fixture.componentInstance.increaseQty('cart-1');
+    expect(fixture.componentInstance.cartItems()[0]?.appliedUnitPrice).toBe(9);
+
+    fixture.componentInstance.increaseQty('cart-1');
+    expect(fixture.componentInstance.cartItems()[0]?.appliedUnitPrice).toBe(9);
+
+    fixture.componentInstance.decreaseQty('cart-1');
+    fixture.componentInstance.decreaseQty('cart-1');
+    expect(fixture.componentInstance.cartItems()[0]?.appliedUnitPrice).toBe(10);
   });
 
 

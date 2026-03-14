@@ -151,6 +151,41 @@ export interface OverrideUpsertRequest {
   allowedOptionItemIds: string[];
 }
 
+export type WholesaleDiscountType = 'Percent' | 'FixedUnitPrice';
+
+export type ProductWholesaleMode = 'UseTenantDefault' | 'Disabled' | 'CustomTiers';
+
+export interface WholesaleTierDto {
+  minQty: number;
+  discountType: WholesaleDiscountType;
+  discountValue: number;
+}
+
+export interface TenantWholesalePolicyDto {
+  isEnabled: boolean;
+  name: string;
+  updatedAtUtc?: string | null;
+  tiers: WholesaleTierDto[];
+}
+
+export interface UpsertTenantWholesalePolicyRequest {
+  isEnabled: boolean;
+  name: string;
+  tiers: WholesaleTierDto[];
+}
+
+export interface ProductWholesaleOverrideDto {
+  productId: string;
+  mode: ProductWholesaleMode;
+  updatedAtUtc?: string | null;
+  tiers: WholesaleTierDto[];
+}
+
+export interface UpsertProductWholesaleOverrideRequest {
+  mode: ProductWholesaleMode;
+  tiers: WholesaleTierDto[];
+}
+
 export interface StoreInventoryItemDto {
   storeId: string;
   productId: string;

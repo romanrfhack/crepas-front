@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
-import { CategoryDto, ProductDto, SchemaDto } from '../../models/pos-catalog.models';
+import { CategoryDto, ProductDto, ProductWholesaleMode, ProductWholesaleOverrideDto, SchemaDto } from '../../models/pos-catalog.models';
 import { PosCatalogApiService } from '../../services/pos-catalog-api.service';
 import { PosAdminCatalogOverridesApiService } from '../../services/pos-admin-catalog-overrides-api.service';
 import { PosAdminCatalogAvailabilityApiService } from '../../services/pos-admin-catalog-availability-api.service';
@@ -195,7 +195,25 @@ import { firstValueFrom } from 'rxjs';
                       <input type="checkbox" [checked]="isSnapshotAvailable('Product', item.id)" [disabled]="!isOverrideEnabled(item.id)" (change)="onToggleAvailability(item.id, $event)" [attr.data-testid]="'availability-toggle-Product-' + item.id" />
                       Disponible en sucursal
                     </label>
+                    <label>
+                      Mayoreo
+                      <select
+                        [value]="getWholesaleMode(item.id)"
+                        (change)="onWholesaleModeChange(item.id, $event)"
+                        [attr.data-testid]="'wholesale-mode-' + item.id"
+                      >
+                        <option value="UseTenantDefault">Default tenant</option>
+                        <option value="Disabled">Desactivado</option>
+                        <option value="CustomTiers">Tiers custom</option>
+                      </select>
+                    </label>
+                    <button type="button" class="btn-outline btn-small" (click)="saveWholesaleOverride(item.id)">
+                      Guardar mayoreo
+                    </button>
                   </div>
+                  @if (getWholesaleMode(item.id) === 'CustomTiers') {
+                    <p>Custom tiers se configuran en API (MVP).</p>
+                  }
                   <div class="product-category">
                     <span class="meta-label">Categoría:</span>
                     {{ getCategoryName(item.categoryId) }}
@@ -717,6 +735,8 @@ export class ProductsPage {
   readonly snapshotAvailabilityByItemId = signal<Record<string, boolean>>({});
   readonly tenantRequiredError = signal('');
   readonly availabilityForbiddenError = signal('');
+  readonly wholesaleOverrideByProductId = signal<Record<string, ProductWholesaleOverrideDto>>({});
+  readonly dirtyWholesaleModeByProductId = signal<Record<string, ProductWholesaleMode>>({});
 
   readonly nameControl = new FormControl('', {
     nonNullable: true,
@@ -775,7 +795,7 @@ export class ProductsPage {
         await this.api.createProduct(payload);
       }
       this.resetForm();
-      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability()]);
+      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability(), this.loadWholesaleOverrides()]);
     } catch {
       this.errorMessage.set('No fue posible guardar el producto.');
     }
@@ -801,6 +821,44 @@ export class ProductsPage {
     }
 
     return this.snapshotAvailabilityByItemId()[itemId] ?? true;
+  }
+
+  getWholesaleOverride(productId: string) {
+    return this.wholesaleOverrideByProductId()[productId] ?? null;
+  }
+
+  getWholesaleMode(productId: string): ProductWholesaleMode {
+    return (
+      this.dirtyWholesaleModeByProductId()[productId] ??
+      this.getWholesaleOverride(productId)?.mode ??
+      'UseTenantDefault'
+    );
+  }
+
+  onWholesaleModeChange(productId: string, event: Event) {
+    const mode = (event.target as HTMLSelectElement).value as ProductWholesaleMode;
+    this.dirtyWholesaleModeByProductId.update((current) => ({ ...current, [productId]: mode }));
+  }
+
+  async saveWholesaleOverride(productId: string) {
+    const mode = this.getWholesaleMode(productId);
+    const current = this.getWholesaleOverride(productId);
+    const tiers =
+      mode === 'CustomTiers'
+        ? current?.tiers ?? [{ minQty: 10, discountType: 'Percent', discountValue: 10 }]
+        : [];
+
+    try {
+      const saved = await this.api.upsertProductWholesaleOverride(productId, { mode, tiers });
+      this.wholesaleOverrideByProductId.update((state) => ({ ...state, [productId]: saved }));
+      this.dirtyWholesaleModeByProductId.update((state) => {
+        const next = { ...state };
+        delete next[productId];
+        return next;
+      });
+    } catch {
+      this.errorMessage.set('No fue posible guardar override de mayoreo.');
+    }
   }
 
   async onToggleOverride(itemId: string, event: Event) {
@@ -843,7 +901,7 @@ export class ProductsPage {
     this.errorMessage.set('');
     try {
       await this.api.deactivateProduct(item.id);
-      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability()]);
+      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability(), this.loadWholesaleOverrides()]);
     } catch {
       this.errorMessage.set('No fue posible desactivar el producto.');
     }
@@ -889,7 +947,7 @@ export class ProductsPage {
         this.categoryIdControl.setValue(categories[0].id);
       }
 
-      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability()]);
+      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability(), this.loadWholesaleOverrides()]);
     } catch {
       this.errorMessage.set('No fue posible cargar catálogos base.');
     }
@@ -923,6 +981,21 @@ export class ProductsPage {
     } catch {
       this.snapshotAvailabilityByItemId.set({});
     }
+  }
+
+  private async loadWholesaleOverrides() {
+    const products = this.products();
+    const entries = await Promise.all(
+      products.map(async (product) => {
+        try {
+          const override = await this.api.getProductWholesaleOverride(product.id);
+          return [product.id, override] as const;
+        } catch {
+          return [product.id, { productId: product.id, mode: 'UseTenantDefault', tiers: [] }] as const;
+        }
+      }),
+    );
+    this.wholesaleOverrideByProductId.set(Object.fromEntries(entries));
   }
 
   private handlePosAdminError(error: unknown) {

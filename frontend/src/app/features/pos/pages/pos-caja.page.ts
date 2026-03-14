@@ -36,16 +36,20 @@ import {
   CreateSaleRequestDto,
   PosShiftDto,
   ProductDto,
+  ProductWholesaleOverrideDto,
   SaleListItemUi,
   SaleResponseDto,
   SaleVoidRequestDto,
   ShiftClosePreviewDto,
+  TenantWholesalePolicyDto,
 } from '../models/pos.models';
 import { PosCatalogSnapshotService } from '../services/pos-catalog-snapshot.service';
 import { PosSalesApiService } from '../services/pos-sales-api.service';
 import { PosShiftApiService } from '../services/pos-shift-api.service';
 import { PosTimezoneService } from '../services/pos-timezone.service';
+import { PosWholesaleApiService } from '../services/pos-wholesale-api.service';
 import { StoreContextService } from '../services/store-context.service';
+import { WholesalePricingService } from '../services/wholesale-pricing.service';
 
 @Component({
   selector: 'app-pos-caja-page',
@@ -68,6 +72,8 @@ export class PosCajaPage implements OnDestroy {
   private readonly formBuilder = inject(FormBuilder);
   private readonly timezone = inject(PosTimezoneService);
   private readonly storeContext = inject(StoreContextService);
+  private readonly wholesaleApi = inject(PosWholesaleApiService);
+  private readonly wholesalePricing = inject(WholesalePricingService);
 
   readonly snapshot = signal<CatalogSnapshotDto | null>(null);
   readonly selectedCategoryId = signal<string | null>(null);
@@ -93,6 +99,8 @@ export class PosCajaPage implements OnDestroy {
   readonly selectedSaleForVoid = signal<SaleListItemUi | null>(null);
   readonly closeShiftError = signal<string | null>(null);
   readonly voidForbiddenError = signal(false);
+  readonly tenantWholesalePolicy = signal<TenantWholesalePolicyDto | null>(null);
+  readonly productWholesaleOverrides = signal<Record<string, ProductWholesaleOverrideDto | null>>({});
 
   private autoCollapseTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -186,7 +194,7 @@ export class PosCajaPage implements OnDestroy {
           (sum, extra) => sum + extra.unitPrice * extra.quantity,
           0,
         );
-        const unit = item.basePrice + extrasTotal;
+        const unit = item.appliedUnitPrice + extrasTotal;
         return acc + unit * item.quantity;
       }, 0),
     ),
@@ -236,6 +244,7 @@ export class PosCajaPage implements OnDestroy {
     try {
       const data = await firstValueFrom(this.snapshotService.getSnapshot({ forceRefresh }));
       this.snapshot.set(data);
+      await this.loadWholesalePolicy();
     } catch {
       this.errorMessage.set('No se pudo cargar el catálogo. Intenta nuevamente.');
     }
@@ -392,7 +401,7 @@ export class PosCajaPage implements OnDestroy {
     this.cartExpanded.update((prev) => !prev);
   }
 
-  onProductSelected(product: ProductDto) {
+  async onProductSelected(product: ProductDto) {
     if (!product.isAvailable) {
       return;
     }
@@ -402,15 +411,17 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
+    await this.ensureProductOverrideLoaded(product.id);
     this.addToCart(product, { selections: [], extras: [] });
   }
 
-  onConfirmCustomization(payload: ProductCustomizationResult) {
+  async onConfirmCustomization(payload: ProductCustomizationResult) {
     const product = this.activeCustomizationProduct();
     if (!product) {
       return;
     }
 
+    await this.ensureProductOverrideLoaded(product.id);
     this.addToCart(product, payload);
     this.activeCustomizationProduct.set(null);
   }
@@ -421,14 +432,40 @@ export class PosCajaPage implements OnDestroy {
 
   increaseQty(itemId: string) {
     this.cartItems.update((items) =>
-      items.map((item) => (item.id === itemId ? { ...item, quantity: item.quantity + 1 } : item)),
+      items.map((item) => {
+        if (item.id !== itemId) {
+          return item;
+        }
+
+        const quantity = item.quantity + 1;
+        const pricing = this.quoteWholesale(item.productId, quantity, item.basePrice);
+        return {
+          ...item,
+          quantity,
+          appliedUnitPrice: pricing.appliedUnitPrice,
+          wholesaleTierLabel: pricing.tierLabel,
+        };
+      }),
     );
   }
 
   decreaseQty(itemId: string) {
     this.cartItems.update((items) =>
       items
-        .map((item) => (item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item))
+        .map((item) => {
+          if (item.id !== itemId) {
+            return item;
+          }
+
+          const quantity = item.quantity - 1;
+          const pricing = this.quoteWholesale(item.productId, quantity, item.basePrice);
+          return {
+            ...item,
+            quantity,
+            appliedUnitPrice: pricing.appliedUnitPrice,
+            wholesaleTierLabel: pricing.tierLabel,
+          };
+        })
         .filter((item) => item.quantity > 0),
     );
   }
@@ -685,6 +722,7 @@ export class PosCajaPage implements OnDestroy {
   }
 
   private addToCart(product: ProductDto, customization: ProductCustomizationResult) {
+    const pricing = this.quoteWholesale(product.id, 1, product.basePrice);
     this.cartItems.update((items) => [
       ...items,
       {
@@ -692,6 +730,8 @@ export class PosCajaPage implements OnDestroy {
         productId: product.id,
         productName: product.name,
         basePrice: product.basePrice,
+        appliedUnitPrice: pricing.appliedUnitPrice,
+        wholesaleTierLabel: pricing.tierLabel,
         quantity: 1,
         selections: customization.selections,
         extras: customization.extras,
@@ -786,6 +826,40 @@ export class PosCajaPage implements OnDestroy {
     }
 
     this.errorMessage.set('No fue posible registrar la venta.');
+  }
+
+  private async loadWholesalePolicy() {
+    try {
+      const policy = await this.wholesaleApi.getTenantWholesalePolicy();
+      this.tenantWholesalePolicy.set(policy);
+    } catch {
+      this.tenantWholesalePolicy.set(null);
+    }
+  }
+
+  private quoteWholesale(productId: string, qty: number, basePrice: number) {
+    const overrideMap = this.productWholesaleOverrides();
+    const override = overrideMap[productId] ?? null;
+
+    return this.wholesalePricing.quote({
+      qty,
+      basePrice,
+      policy: this.tenantWholesalePolicy(),
+      override,
+    });
+  }
+
+  private async ensureProductOverrideLoaded(productId: string) {
+    if (productId in this.productWholesaleOverrides()) {
+      return;
+    }
+
+    try {
+      const override = await this.wholesaleApi.getProductWholesaleOverride(productId);
+      this.productWholesaleOverrides.update((current) => ({ ...current, [productId]: override }));
+    } catch {
+      this.productWholesaleOverrides.update((current) => ({ ...current, [productId]: null }));
+    }
   }
 
   private isNoOpenShiftError(payload: unknown) {
