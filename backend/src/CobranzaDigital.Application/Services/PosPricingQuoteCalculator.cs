@@ -1,8 +1,6 @@
 using CobranzaDigital.Application.Common.Exceptions;
 using CobranzaDigital.Application.Contracts.PosPricing;
 
-using FluentValidation.Results;
-
 namespace CobranzaDigital.Application.Services;
 
 public sealed class PosPricingQuoteCalculator
@@ -66,7 +64,7 @@ public sealed class PosPricingQuoteCalculator
         return (applied, tier);
     }
 
-    private IReadOnlyList<PosPricingTierAppliedDto> ResolveTiers(
+    private static List<PosPricingTierAppliedDto> ResolveTiers(
         PosPricingTenantPolicyDto? tenantPolicy,
         PosPricingProductOverrideDto? productOverride,
         string mode)
