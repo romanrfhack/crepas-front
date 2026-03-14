@@ -294,6 +294,7 @@ export interface CartExtra {
 export interface CartItem {
   id: string;
   productId: string;
+  externalCode: string | null;
   productName: string;
   basePrice: number;
   baseUnitPrice: number;
@@ -373,5 +374,34 @@ export interface PosPricingQuoteResponseDto {
   totals: {
     subtotal: number;
     total: number;
+  };
+}
+
+
+export interface PosInventoryValidateAvailabilityRequestLineDto {
+  productId?: string | null;
+  externalCode?: string | null;
+  qty: number;
+}
+
+export interface PosInventoryValidateAvailabilityRequestDto {
+  storeId: string;
+  lines: PosInventoryValidateAvailabilityRequestLineDto[];
+}
+
+export interface PosInventoryValidateAvailabilityResponseLineDto {
+  productId: string | null;
+  externalCode: string | null;
+  requestedQty: number;
+  onHandQty: number;
+  ok: boolean;
+  message?: string | null;
+}
+
+export interface PosInventoryValidateAvailabilityResponseDto {
+  ok: boolean;
+  lines: PosInventoryValidateAvailabilityResponseLineDto[];
+  summary: {
+    insufficientCount: number;
   };
 }

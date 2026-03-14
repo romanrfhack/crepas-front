@@ -1,5 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { CreatePaymentRequestDto, PaymentMethod } from '../../models/pos.models';
+import {
+  CreatePaymentRequestDto,
+  PaymentMethod,
+  PosInventoryValidateAvailabilityResponseLineDto,
+} from '../../models/pos.models';
 
 interface PaymentLine {
   id: string;
@@ -20,9 +24,17 @@ export interface PaymentSubmitEvent {
 })
 export class PaymentModalComponent {
   readonly total = input.required<number>();
+  readonly subtotal = input<number | null>(null);
+  readonly itemCount = input<number>(0);
+  readonly wholesaleApplied = input<boolean>(false);
   readonly loading = input<boolean>(false);
+  readonly validating = input<boolean>(false);
+  readonly pricingUpdated = input<boolean>(false);
+  readonly insufficientLines = input<PosInventoryValidateAvailabilityResponseLineDto[]>([]);
   readonly submitPayment = output<PaymentSubmitEvent>();
   readonly cancelAction = output<void>();
+  readonly adjustLineToAvailable = output<PosInventoryValidateAvailabilityResponseLineDto>();
+  readonly retryValidation = output<void>();
 
   readonly paymentLines = signal<PaymentLine[]>([
     { id: crypto.randomUUID(), method: 'Cash', amount: 0, reference: '' },
@@ -50,8 +62,12 @@ export class PaymentModalComponent {
   readonly hasInvalidAmount = computed(() =>
     this.paymentLines().some((line) => this.sanitizeAmount(line.amount) <= 0),
   );
+  readonly checkoutBlocked = computed(
+    () => this.validating() || this.insufficientLines().length > 0 || this.loading(),
+  );
+
   readonly canSubmit = computed(() => {
-    if (this.loading()) {
+    if (this.checkoutBlocked()) {
       return false;
     }
 
@@ -147,7 +163,9 @@ export class PaymentModalComponent {
         const reference = line.reference.trim();
         return {
           method: line.method,
-          amount: this.round2(this.sanitizeAmount(line.amount)) - (line.method === 'Cash' ? this.changeAmount() : 0),
+          amount:
+            this.round2(this.sanitizeAmount(line.amount)) -
+            (line.method === 'Cash' ? this.changeAmount() : 0),
           reference: line.method === 'Cash' ? null : reference || null,
         };
       }),

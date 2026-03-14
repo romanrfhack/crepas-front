@@ -67,6 +67,7 @@ public interface IPosCatalogService
     Task<InventoryAdjustmentV2ResultDto> CreateInventoryAdjustmentV2Async(CreateInventoryAdjustmentV2Request request, CancellationToken ct);
     Task<InventoryAdjustmentV2BatchResultDto> CreateInventoryAdjustmentBatchV2Async(CreateInventoryAdjustmentV2BatchRequest request, CancellationToken ct);
     Task<InventoryBatchValidationResultDto> ValidateInventoryAdjustmentBatchV2Async(CreateInventoryAdjustmentV2BatchRequest request, CancellationToken ct);
+    Task<ValidateInventoryAvailabilityResponseDto> ValidateInventoryAvailabilityAsync(ValidateInventoryAvailabilityRequestDto request, CancellationToken ct);
     Task<CatalogInventoryItemDto> UpsertCatalogInventoryAsync(UpsertCatalogInventoryRequest request, CancellationToken ct);
     Task<CatalogInventoryAdjustmentDto> CreateCatalogInventoryAdjustmentAsync(CreateCatalogInventoryAdjustmentRequest request, CancellationToken ct);
     Task<IReadOnlyList<CatalogInventoryAdjustmentDto>> GetCatalogInventoryAdjustmentsAsync(Guid storeId, string? itemType, Guid? itemId, DateTimeOffset? fromUtc, DateTimeOffset? toUtc, CancellationToken ct);

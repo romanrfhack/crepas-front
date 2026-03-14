@@ -1158,6 +1158,120 @@ public sealed class PosCatalogService : IPosCatalogService
         }
     }
 
+    public async Task<ValidateInventoryAvailabilityResponseDto> ValidateInventoryAvailabilityAsync(ValidateInventoryAvailabilityRequestDto request, CancellationToken ct)
+    {
+        const int maxLines = 2000;
+        var tenantId = RequireTenantId();
+        await EnsureStoreBelongsToTenantAsync(request.StoreId, tenantId, ct).ConfigureAwait(false);
+
+        if (request.Lines is null || request.Lines.Count == 0 || request.Lines.Count > maxLines)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["lines"] = [$"lines is required and must be between 1 and {maxLines}."] });
+        }
+
+        var normalizedLines = request.Lines
+            .Select((line, index) => new
+            {
+                Index = index,
+                ProductId = line.ProductId,
+                ExternalCode = string.IsNullOrWhiteSpace(line.ExternalCode) ? null : line.ExternalCode.Trim(),
+                RequestedQty = decimal.Round(line.Qty, 3, MidpointRounding.AwayFromZero)
+            })
+            .ToArray();
+
+        if (normalizedLines.Any(x => x.RequestedQty <= 0m || (x.ProductId is null && string.IsNullOrWhiteSpace(x.ExternalCode))))
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["lines"] = ["Each line requires qty > 0 and either productId or externalCode."] });
+        }
+
+        var productIds = normalizedLines.Where(x => x.ProductId.HasValue).Select(x => x.ProductId!.Value).Distinct().ToArray();
+        var externalCodes = normalizedLines.Where(x => !string.IsNullOrWhiteSpace(x.ExternalCode)).Select(x => x.ExternalCode!).Distinct(StringComparer.Ordinal).ToArray();
+        var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
+
+        var products = await _db.Products.AsNoTracking()
+            .Where(x => x.CatalogTemplateId == catalogTemplateId && (productIds.Contains(x.Id) || (x.ExternalCode != null && externalCodes.Contains(x.ExternalCode))))
+            .Select(x => new { x.Id, x.ExternalCode, x.IsInventoryTracked })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var productsById = products.ToDictionary(x => x.Id, x => x);
+        var productsByExternalCode = products
+            .Where(x => !string.IsNullOrWhiteSpace(x.ExternalCode))
+            .ToDictionary(x => x.ExternalCode!, x => x, StringComparer.Ordinal);
+
+        var trackedProductIds = normalizedLines
+            .Select(line =>
+            {
+                if (line.ProductId.HasValue && productsById.TryGetValue(line.ProductId.Value, out var byId))
+                {
+                    return byId.IsInventoryTracked ? byId.Id : (Guid?)null;
+                }
+
+                if (!string.IsNullOrWhiteSpace(line.ExternalCode) && productsByExternalCode.TryGetValue(line.ExternalCode, out var byCode))
+                {
+                    return byCode.IsInventoryTracked ? byCode.Id : (Guid?)null;
+                }
+
+                return (Guid?)null;
+            })
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToArray();
+
+        var balances = await _db.CatalogInventoryBalances.AsNoTracking()
+            .Where(x => x.TenantId == tenantId
+                && x.StoreId == request.StoreId
+                && x.ItemType == CatalogItemType.Product
+                && trackedProductIds.Contains(x.ItemId))
+            .ToDictionaryAsync(x => x.ItemId, x => x.OnHandQty, ct)
+            .ConfigureAwait(false);
+
+        var responseLines = new List<ValidateInventoryAvailabilityLineResponseDto>(normalizedLines.Length);
+        var insufficientCount = 0;
+
+        foreach (var line in normalizedLines)
+        {
+            var resolved = line.ProductId.HasValue
+                ? productsById.GetValueOrDefault(line.ProductId.Value)
+                : (!string.IsNullOrWhiteSpace(line.ExternalCode) ? productsByExternalCode.GetValueOrDefault(line.ExternalCode) : null);
+
+            var resolvedProductId = resolved?.Id ?? line.ProductId;
+            var resolvedExternalCode = resolved?.ExternalCode ?? line.ExternalCode;
+
+            if (resolved is null || !resolved.IsInventoryTracked)
+            {
+                responseLines.Add(new ValidateInventoryAvailabilityLineResponseDto(
+                    resolvedProductId,
+                    resolvedExternalCode,
+                    line.RequestedQty,
+                    0m,
+                    true));
+                continue;
+            }
+
+            var onHand = balances.GetValueOrDefault(resolved.Id, 0m);
+            var isOk = onHand >= line.RequestedQty;
+            if (!isOk)
+            {
+                insufficientCount++;
+            }
+
+            responseLines.Add(new ValidateInventoryAvailabilityLineResponseDto(
+                resolved.Id,
+                resolved.ExternalCode,
+                line.RequestedQty,
+                onHand,
+                isOk,
+                isOk ? null : "Stock insuficiente"));
+        }
+
+        return new ValidateInventoryAvailabilityResponseDto(
+            insufficientCount == 0,
+            responseLines,
+            new ValidateInventoryAvailabilitySummaryDto(insufficientCount));
+    }
+
     public async Task<InventoryBatchValidationResultDto> ValidateInventoryAdjustmentBatchV2Async(CreateInventoryAdjustmentV2BatchRequest request, CancellationToken ct)
     {
         const int maxLines = 2000;

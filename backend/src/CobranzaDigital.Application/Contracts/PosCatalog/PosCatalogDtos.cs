@@ -153,6 +153,30 @@ public sealed record InventoryBatchValidationLineResultDto(
     Guid? ItemResolvedId,
     string? ItemName);
 
+public sealed record ValidateInventoryAvailabilityRequestDto(
+    Guid StoreId,
+    IReadOnlyList<ValidateInventoryAvailabilityLineRequestDto> Lines);
+
+public sealed record ValidateInventoryAvailabilityLineRequestDto(
+    Guid? ProductId,
+    string? ExternalCode,
+    decimal Qty);
+
+public sealed record ValidateInventoryAvailabilityResponseDto(
+    bool Ok,
+    IReadOnlyList<ValidateInventoryAvailabilityLineResponseDto> Lines,
+    ValidateInventoryAvailabilitySummaryDto Summary);
+
+public sealed record ValidateInventoryAvailabilityLineResponseDto(
+    Guid? ProductId,
+    string? ExternalCode,
+    decimal RequestedQty,
+    decimal OnHandQty,
+    bool Ok,
+    string? Message = null);
+
+public sealed record ValidateInventoryAvailabilitySummaryDto(int InsufficientCount);
+
 public sealed record CategoryExportRowDto(string CategoryCode, string Name, int SortOrder, DateTimeOffset UpdatedAtUtc);
 public sealed record ProductExportRowDto(string ExternalCode, string Name, string CategoryCode, decimal BasePrice, bool IsActive, bool IsAvailable, bool IsInventoryTracked, string? SubcategoryName, DateTimeOffset UpdatedAtUtc);
 public sealed record CatalogCategoryImportValidateRequest(IReadOnlyList<CatalogCategoryImportLineDto> Lines);

@@ -16,12 +16,16 @@ describe('PosCajaPage', () => {
   let voidCalls: { saleId: string; payload: { clientVoidId: string }; correlationId: string }[];
   let closePreviewCalls: unknown[];
   let invalidateCalls: (string | undefined)[];
+  let quotePricingCalls = 0;
+  let validateAvailabilityCalls = 0;
 
   beforeEach(async () => {
     salesCalls = [];
     voidCalls = [];
     closePreviewCalls = [];
     invalidateCalls = [];
+    quotePricingCalls = 0;
+    validateAvailabilityCalls = 0;
 
     await TestBed.configureTestingModule({
       imports: [PosCajaPage],
@@ -140,13 +144,49 @@ describe('PosCajaPage', () => {
               mode: 'UseTenantDefault',
               tiers: [],
             }),
+            quotePricing: async () => {
+              quotePricingCalls += 1;
+              return {
+                lines: [
+                  {
+                    productId: 'product-1',
+                    externalCode: null,
+                    qty: 1,
+                    baseUnitPrice: 10,
+                    appliedUnitPrice: 9,
+                    tierApplied: null,
+                    lineSubtotal: 9,
+                    isMismatch: true,
+                    expectedUnitPrice: 9,
+                  },
+                ],
+                totals: { subtotal: 9, total: 9 },
+              };
+            },
+            validateAvailability: async () => {
+              validateAvailabilityCalls += 1;
+              return {
+                ok: true,
+                lines: [
+                  {
+                    productId: 'product-1',
+                    externalCode: null,
+                    requestedQty: 1,
+                    onHandQty: 5,
+                    ok: true,
+                    message: null,
+                  },
+                ],
+                summary: { insufficientCount: 0 },
+              };
+            },
           },
         },
         PosTimezoneService,
         {
           provide: StoreContextService,
           useValue: {
-            getActiveStoreId: () => null,
+            getActiveStoreId: () => 'store-1',
             setActiveStoreId: () => undefined,
           },
         },
@@ -158,6 +198,7 @@ describe('PosCajaPage', () => {
       {
         id: 'cart-1',
         productId: 'product-1',
+        externalCode: null,
         productName: 'Latte',
         basePrice: 10,
         baseUnitPrice: 10,
@@ -343,6 +384,7 @@ describe('PosCajaPage', () => {
       {
         id: 'cart-1',
         productId: 'product-1',
+        externalCode: null,
         productName: 'Latte',
         basePrice: 10,
         baseUnitPrice: 10,
@@ -545,4 +587,77 @@ describe('PosCajaPage', () => {
     expect(fixture.componentInstance.errorMessage()).toContain('ya fue registrada');
     expect(fixture.componentInstance.canRefreshCatalogAfterUnavailable()).toBe(false);
   });
+
+  it('calls quote and availability when opening checkout', async () => {
+    fixture.componentInstance.openPaymentModal();
+    await fixture.whenStable();
+
+    expect(quotePricingCalls).toBe(1);
+    expect(validateAvailabilityCalls).toBe(1);
+  });
+
+  it('blocks confirm when availability validation fails', async () => {
+    const wholesaleApi = TestBed.inject(PosWholesaleApiService) as unknown as {
+      validateAvailability: () => Promise<unknown>;
+    };
+
+    wholesaleApi.validateAvailability = async () => ({
+      ok: false,
+      lines: [
+        {
+          productId: 'product-1',
+          externalCode: null,
+          requestedQty: 2,
+          onHandQty: 1,
+          ok: false,
+          message: 'Stock insuficiente',
+        },
+      ],
+      summary: { insufficientCount: 1 },
+    });
+
+    await fixture.componentInstance.canCheckoutTicket();
+    await fixture.componentInstance.confirmPayment({
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
+    });
+
+    expect(salesCalls.length).toBe(0);
+    expect(fixture.componentInstance.checkoutInsufficientLines().length).toBe(1);
+  });
+
+  it('updates pricing snapshot on quote mismatch', async () => {
+    await fixture.componentInstance.canCheckoutTicket();
+
+    expect(fixture.componentInstance.checkoutPricingUpdated()).toBe(true);
+    expect(fixture.componentInstance.cartItems()[0]?.appliedUnitPrice).toBe(9);
+  });
+
+  it('renders insufficient list and adjusts quantity to available', async () => {
+    fixture.componentInstance.showPayment.set(true);
+    fixture.componentInstance.checkoutInsufficientLines.set([
+      {
+        productId: 'product-1',
+        externalCode: null,
+        requestedQty: 5,
+        onHandQty: 2,
+        ok: false,
+        message: 'Stock insuficiente',
+      },
+    ]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="insufficient-lines"]')).toBeTruthy();
+
+    fixture.componentInstance.adjustLineToAvailable({
+      productId: 'product-1',
+      externalCode: null,
+      requestedQty: 5,
+      onHandQty: 2,
+      ok: false,
+      message: 'Stock insuficiente',
+    });
+
+    expect(fixture.componentInstance.cartItems()[0]?.quantity).toBe(2);
+  });
+
 });

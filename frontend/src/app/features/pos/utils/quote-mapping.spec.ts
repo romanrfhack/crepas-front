@@ -8,6 +8,7 @@ describe('applyQuoteResponseToCart', () => {
       {
         id: '1',
         productId: 'p1',
+        externalCode: null,
         productName: 'Latte',
         basePrice: 100,
         baseUnitPrice: 100,
