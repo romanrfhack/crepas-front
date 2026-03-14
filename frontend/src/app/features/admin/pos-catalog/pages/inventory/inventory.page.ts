@@ -57,7 +57,11 @@ interface InventoryImportPreviewRow {
   lineNo: number;
   itemType: 'Product' | 'Extra';
   externalCode: string;
+  originalExternalCode?: string;
+  editableExternalCode?: string;
   itemId: string;
+  originalItemId?: string;
+  editableItemId?: string;
   deltaQty: number;
   reasonCode: CreateInventoryBatchAdjustmentV2Request['reasonCode'];
   referenceId: string | null;
@@ -67,6 +71,9 @@ interface InventoryImportPreviewRow {
   qtyAfter: number | null;
   validationStatus: 'Valid' | 'Invalid' | 'Pending';
   validationMessage: string | null;
+  isUnknownItem?: boolean;
+  isDirty?: boolean;
+  localEditError?: string | null;
 }
 
 interface ImportValidatedSnapshot {
@@ -267,6 +274,9 @@ interface InventoryBatchContext {
             @if (importValidateLoading()) {
               <p data-testid="inventory-v2-import-validating">Validando…</p>
             }
+            @if (hasPendingValidationChanges() && !importValidateLoading()) {
+              <p data-testid="inventory-v2-pending-validation">Cambios pendientes de validar.</p>
+            }
             @if (importValidateError(); as validateError) {
               <p class="error" data-testid="inventory-v2-import-validate-error">
                 {{ validateError }}
@@ -318,7 +328,35 @@ interface InventoryBatchContext {
                   <tr [attr.data-testid]="'inventory-v2-import-preview-row-' + row.lineNo">
                     <td>{{ row.lineNo }}</td>
                     <td>{{ row.itemType }}</td>
-                    <td>{{ row.externalCode || '—' }}</td>
+                    <td>
+                      @if (row.isUnknownItem) {
+                        @if (row.itemType === 'Product') {
+                          <label [attr.for]="'inventory-v2-preview-edit-code-' + row.lineNo">Corrige SKU</label>
+                          <input
+                            [id]="'inventory-v2-preview-edit-code-' + row.lineNo"
+                            [attr.data-testid]="'inventory-v2-preview-edit-code-' + row.lineNo"
+                            [value]="row.editableExternalCode"
+                            (input)="onPreviewIdentifierEdit(row.lineNo, row.itemType, $any($event.target).value)"
+                          />
+                        } @else {
+                          <label [attr.for]="'inventory-v2-preview-edit-id-' + row.lineNo">Corrige itemId</label>
+                          <input
+                            [id]="'inventory-v2-preview-edit-id-' + row.lineNo"
+                            [attr.data-testid]="'inventory-v2-preview-edit-id-' + row.lineNo"
+                            [value]="row.editableItemId"
+                            (input)="onPreviewIdentifierEdit(row.lineNo, row.itemType, $any($event.target).value)"
+                          />
+                        }
+                        @if (row.isDirty) {
+                          <span data-testid="inventory-v2-preview-edited-badge">Editado</span>
+                        }
+                        @if (row.localEditError; as localEditError) {
+                          <p class="error" [attr.data-testid]="'inventory-v2-preview-edit-error-' + row.lineNo">{{ localEditError }}</p>
+                        }
+                      } @else {
+                        {{ row.externalCode || '—' }}
+                      }
+                    </td>
                     <td>{{ row.deltaQty }}</td>
                     <td>{{ row.qtyBefore ?? '—' }}</td>
                     <td>{{ row.qtyAfter ?? '—' }}</td>
@@ -445,8 +483,38 @@ interface InventoryBatchContext {
                     <tr [attr.data-testid]="'inventory-v2-result-row-' + row.lineNo">
                       <td>{{ row.lineNo }}</td>
                       <td>{{ row.itemType }}</td>
-                      <td>{{ row.externalCode || '—' }}</td>
-                      <td>{{ row.itemId || '—' }}</td>
+                      <td>
+                        @if (row.isUnknownItem && row.status === 'Failed' && row.itemType === 'Product') {
+                          <label [attr.for]="'inventory-v2-result-edit-code-' + row.lineNo">Corrige SKU</label>
+                          <input
+                            [id]="'inventory-v2-result-edit-code-' + row.lineNo"
+                            [attr.data-testid]="'inventory-v2-result-edit-code-' + row.lineNo"
+                            [value]="row.editableExternalCode ?? row.externalCode"
+                            (input)="onResultIdentifierEdit(row.lineNo, row.itemType, $any($event.target).value)"
+                          />
+                        } @else {
+                          {{ row.externalCode || '—' }}
+                        }
+                      </td>
+                      <td>
+                        @if (row.isUnknownItem && row.status === 'Failed' && row.itemType === 'Extra') {
+                          <label [attr.for]="'inventory-v2-result-edit-id-' + row.lineNo">Corrige itemId</label>
+                          <input
+                            [id]="'inventory-v2-result-edit-id-' + row.lineNo"
+                            [attr.data-testid]="'inventory-v2-result-edit-id-' + row.lineNo"
+                            [value]="row.editableItemId ?? row.itemId"
+                            (input)="onResultIdentifierEdit(row.lineNo, row.itemType, $any($event.target).value)"
+                          />
+                        } @else {
+                          {{ row.itemId || '—' }}
+                        }
+                        @if (row.isDirty) {
+                          <span data-testid="inventory-v2-result-edited-badge">Editado</span>
+                        }
+                        @if (row.localEditError; as localEditError) {
+                          <p class="error" [attr.data-testid]="'inventory-v2-result-edit-error-' + row.lineNo">{{ localEditError }}</p>
+                        }
+                      </td>
                       <td>{{ row.deltaQty }}</td>
                       <td>{{ row.status }}</td>
                       <td>{{ row.errorCode || '—' }}</td>
@@ -1094,6 +1162,7 @@ export class InventoryPage {
       !this.importColumnsErrorMessage() &&
       !this.importValidateLoading() &&
       !this.importValidateError() &&
+      !this.hasPreviewLocalEditErrors() &&
       this.previewValidCount() > 0 &&
       this.importValidatedSnapshotMatchesCurrentPayload(),
   );
@@ -1113,7 +1182,15 @@ export class InventoryPage {
   });
   readonly canRetryFailedLines = computed(() => this.failedBatchResultRows().length > 0);
   readonly retryFailedDisabled = computed(
-    () => !this.canRetryFailedLines() || this.batchBusy() || this.importValidateLoading(),
+    () =>
+      !this.canRetryFailedLines() ||
+      this.batchBusy() ||
+      this.importValidateLoading() ||
+      this.hasResultLocalEditErrors(),
+  );
+  readonly hasPendingValidationChanges = computed(() =>
+    this.importPreviewRows().some((row) => row.isDirty) ||
+    this.batchResultRows().some((row) => row.isDirty),
   );
 
   readonly availableItems = computed(() =>
@@ -1351,6 +1428,87 @@ export class InventoryPage {
     this.scheduleImportValidation();
   }
 
+
+  onPreviewIdentifierEdit(lineNo: number, itemType: 'Product' | 'Extra', value: string) {
+    const normalizedValue = value.trim();
+    let hasChanged = false;
+    this.importPreviewRows.update((rows) =>
+      rows.map((row) => {
+        if (row.lineNo !== lineNo || !row.isUnknownItem) {
+          return row;
+        }
+
+        if (itemType === 'Product') {
+          const localEditError = normalizedValue ? null : 'SKU es obligatorio.';
+          hasChanged = (row.editableExternalCode ?? row.externalCode) !== normalizedValue;
+          return {
+            ...row,
+            editableExternalCode: normalizedValue,
+            externalCode: normalizedValue,
+            validationStatus: localEditError ? 'Invalid' : 'Pending',
+            validationError: localEditError ? 'VALIDATION_ERROR' : null,
+            validationMessage: null,
+            isDirty: (row.originalExternalCode ?? row.externalCode) !== normalizedValue,
+            localEditError,
+          };
+        }
+
+        const localEditError = this.toItemIdLocalError(normalizedValue);
+        hasChanged = (row.editableItemId ?? row.itemId) !== normalizedValue;
+        return {
+          ...row,
+          editableItemId: normalizedValue,
+          itemId: normalizedValue,
+          validationStatus: localEditError ? 'Invalid' : 'Pending',
+          validationError: localEditError ? 'VALIDATION_ERROR' : null,
+          validationMessage: null,
+          isDirty: (row.originalItemId ?? row.itemId) !== normalizedValue,
+          localEditError,
+        };
+      }),
+    );
+
+    if (!hasChanged) {
+      return;
+    }
+
+    this.invalidateImportValidatedSnapshot();
+    if (this.hasPreviewLocalEditErrors()) {
+      return;
+    }
+
+    this.scheduleImportValidation();
+  }
+
+  onResultIdentifierEdit(lineNo: number, itemType: 'Product' | 'Extra', value: string) {
+    const normalizedValue = value.trim();
+    this.batchResultRows.update((rows) =>
+      rows.map((row) => {
+        if (row.lineNo !== lineNo || !row.isUnknownItem || row.status !== 'Failed') {
+          return row;
+        }
+
+        if (itemType === 'Product') {
+          return {
+            ...row,
+            editableExternalCode: normalizedValue,
+            externalCode: normalizedValue,
+            isDirty: (row.originalExternalCode ?? '') !== normalizedValue,
+            localEditError: normalizedValue ? null : 'SKU es obligatorio.',
+          };
+        }
+
+        return {
+          ...row,
+          editableItemId: normalizedValue,
+          itemId: normalizedValue,
+          isDirty: (row.originalItemId ?? '') !== normalizedValue,
+          localEditError: this.toItemIdLocalError(normalizedValue),
+        };
+      }),
+    );
+  }
+
   async applyBatchAdjustmentFromSelection() {
     const selectedRows = this.inventoryV2Rows().filter((row) => this.isRowSelected(row));
     const delta = this.batchDeltaControl.value;
@@ -1514,11 +1672,17 @@ export class InventoryPage {
             ? 'VALIDATION_ERROR'
             : null;
 
+      const normalizedExternalCode = row.externalCode.trim();
+      const normalizedItemId = row.itemId.trim();
       return {
         lineNo: row.lineNo,
         itemType,
-        externalCode: row.externalCode,
-        itemId: row.itemId,
+        externalCode: normalizedExternalCode,
+        originalExternalCode: normalizedExternalCode,
+        editableExternalCode: normalizedExternalCode,
+        itemId: normalizedItemId,
+        originalItemId: normalizedItemId,
+        editableItemId: normalizedItemId,
         deltaQty: deltaParse.value ?? 0,
         reasonCode: row.reasonCode as InventoryAdjustmentReason,
         referenceId: row.referenceId || null,
@@ -1528,6 +1692,9 @@ export class InventoryPage {
         qtyAfter: null,
         validationStatus: validationError ? 'Invalid' : 'Pending',
         validationMessage: null,
+        isUnknownItem: validationError === 'UNKNOWN_ITEM',
+        isDirty: false,
+        localEditError: null,
       };
     });
   }
@@ -1558,6 +1725,11 @@ export class InventoryPage {
       return;
     }
 
+    if (this.hasPreviewLocalEditErrors()) {
+      this.importValidateError.set('Corrige los identificadores inválidos antes de validar.');
+      return;
+    }
+
     const payload = this.buildImportPayload(rows);
 
     this.importValidateLoading.set(true);
@@ -1578,6 +1750,7 @@ export class InventoryPage {
             return row;
           }
 
+          const isUnknownItem = line.errorCode?.trim() === 'UNKNOWN_ITEM';
           return {
             ...row,
             qtyBefore: line.qtyBefore ?? null,
@@ -1585,6 +1758,9 @@ export class InventoryPage {
             validationStatus: line.status,
             validationError: line.errorCode?.trim() || null,
             validationMessage: line.message?.trim() || null,
+            isUnknownItem,
+            isDirty: false,
+            localEditError: null,
           };
         }),
       );
@@ -1624,11 +1800,15 @@ export class InventoryPage {
   ): InventoryImportPreviewRow[] {
     return rows
       .filter((row) => row.status === 'Failed')
-      .map((row, index) => ({
-        lineNo: index + 1,
+      .map((row) => ({
+        lineNo: row.lineNo,
         itemType: row.itemType,
-        externalCode: row.externalCode,
-        itemId: row.itemId,
+        externalCode: (row.editableExternalCode ?? row.externalCode).trim(),
+        originalExternalCode: (row.editableExternalCode ?? row.externalCode).trim(),
+        editableExternalCode: (row.editableExternalCode ?? row.externalCode).trim(),
+        itemId: (row.editableItemId ?? row.itemId).trim(),
+        originalItemId: (row.editableItemId ?? row.itemId).trim(),
+        editableItemId: (row.editableItemId ?? row.itemId).trim(),
         deltaQty: row.deltaQty,
         reasonCode: this.lastBatchContext?.reasonCode ?? this.batchReasonControl.value,
         referenceId: this.lastBatchContext?.referenceId ?? null,
@@ -1638,6 +1818,9 @@ export class InventoryPage {
         qtyAfter: null,
         validationStatus: 'Pending',
         validationMessage: null,
+        isUnknownItem: row.errorCode === 'UNKNOWN_ITEM',
+        isDirty: false,
+        localEditError: null,
       }));
   }
 
@@ -1701,6 +1884,24 @@ export class InventoryPage {
         line.status === 'Failed' &&
         (line.errorCode === 'NEGATIVE_STOCK' || line.errorCode === 'CONCURRENCY_CONFLICT'),
     );
+  }
+
+  private hasPreviewLocalEditErrors(): boolean {
+    return this.importPreviewRows().some((row) => !!row.localEditError);
+  }
+
+  private hasResultLocalEditErrors(): boolean {
+    return this.batchResultRows().some((row) => !!row.localEditError);
+  }
+
+  private toItemIdLocalError(itemId: string): string | null {
+    if (!itemId) {
+      return 'ItemId es obligatorio.';
+    }
+
+    const guidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return guidPattern.test(itemId) ? null : 'ItemId debe ser un GUID válido.';
   }
 
   private mapErrorCode(code: string) {

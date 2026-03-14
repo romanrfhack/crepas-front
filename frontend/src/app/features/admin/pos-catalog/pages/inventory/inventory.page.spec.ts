@@ -1181,4 +1181,182 @@ store-1,Product,,0,Correction,ref-2,nota`;
 
     expect(page.importRuns().map((run) => run.label)).toEqual(['Reintento #2', 'Run #1']);
   });
+
+  it('preview inline edit invalida snapshot, dispara validate y resuelve línea UNKNOWN_ITEM', async () => {
+    vi.useFakeTimers();
+    const page = fixture.componentInstance;
+    page.importPreviewRows.set([
+      {
+        lineNo: 1,
+        itemType: 'Product',
+        externalCode: 'BAD-SKU',
+        originalExternalCode: 'BAD-SKU',
+        editableExternalCode: 'BAD-SKU',
+        itemId: '',
+        originalItemId: '',
+        editableItemId: '',
+        deltaQty: -1,
+        reasonCode: 'Correction',
+        referenceId: null,
+        note: null,
+        validationError: 'UNKNOWN_ITEM',
+        qtyBefore: null,
+        qtyAfter: null,
+        validationStatus: 'Invalid',
+        validationMessage: 'No existe',
+        isUnknownItem: true,
+        isDirty: false,
+        localEditError: null,
+      },
+    ]);
+    page.importValidatedSnapshot.set({ validatedAtUtc: '2026-01-01T00:00:00.000Z', payloadHash: 'abc' });
+
+    validateInventoryBatchAdjustmentV2.mockResolvedValueOnce({
+      storeId: 'store-1',
+      totalLines: 1,
+      validCount: 1,
+      invalidCount: 0,
+      lines: [
+        {
+          lineNo: 1,
+          itemType: 'Product',
+          externalCode: 'LAT-OK',
+          status: 'Valid',
+          qtyBefore: 8,
+          qtyAfter: 7,
+          deltaQtyNormalized: -1,
+        },
+      ],
+    });
+
+    page.onPreviewIdentifierEdit(1, 'Product', 'LAT-OK');
+    expect(page.importValidatedSnapshot()).toBeNull();
+
+    vi.advanceTimersByTime(260);
+    await Promise.resolve();
+
+    expect(validateInventoryBatchAdjustmentV2).toHaveBeenCalled();
+    const payload = validateInventoryBatchAdjustmentV2.mock.calls.at(-1)?.[0];
+    expect(payload.items[0].itemExternalCode).toBe('LAT-OK');
+    expect(page.importPreviewRows()[0].validationStatus).toBe('Valid');
+    expect(page.importPreviewRows()[0].qtyBefore).toBe(8);
+    expect(page.importPreviewRows()[0].qtyAfter).toBe(7);
+    vi.useRealTimers();
+  });
+
+  it('valida GUID localmente y bloquea validate/apply cuando itemId es inválido', async () => {
+    vi.useFakeTimers();
+    const page = fixture.componentInstance;
+    page.importPreviewRows.set([
+      {
+        lineNo: 1,
+        itemType: 'Extra',
+        externalCode: '',
+        itemId: 'not-a-guid',
+        deltaQty: -1,
+        reasonCode: 'Correction',
+        referenceId: null,
+        note: null,
+        validationError: 'UNKNOWN_ITEM',
+        qtyBefore: null,
+        qtyAfter: null,
+        validationStatus: 'Invalid',
+        validationMessage: 'No existe',
+        isUnknownItem: true,
+      },
+    ]);
+
+    page.onPreviewIdentifierEdit(1, 'Extra', 'not-a-guid');
+    vi.advanceTimersByTime(260);
+    await Promise.resolve();
+
+    expect(page.importPreviewRows()[0].localEditError).toContain('GUID');
+    expect(validateInventoryBatchAdjustmentV2).not.toHaveBeenCalled();
+    expect(page.canApplyImport()).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('retry usa externalCode corregido en resultados failed UNKNOWN_ITEM', async () => {
+    vi.useFakeTimers();
+    const page = fixture.componentInstance;
+    page.batchResultRows.set([
+      {
+        lineNo: 10,
+        itemType: 'Product',
+        externalCode: 'BAD-1',
+        originalExternalCode: 'BAD-1',
+        editableExternalCode: 'BAD-1',
+        itemId: '',
+        deltaQty: -2,
+        status: 'Failed',
+        errorCode: 'UNKNOWN_ITEM',
+        message: 'No existe',
+        qtyBefore: null,
+        qtyAfter: null,
+        deltaApplied: null,
+        adjustmentId: '',
+        isUnknownItem: true,
+      },
+    ]);
+
+    page.onResultIdentifierEdit(10, 'Product', 'FIXED-1');
+    page.retryFailedImportLines();
+    vi.advanceTimersByTime(260);
+    await Promise.resolve();
+
+    const payload = validateInventoryBatchAdjustmentV2.mock.calls.at(-1)?.[0];
+    expect(payload.items[0].itemExternalCode).toBe('FIXED-1');
+    expect(payload.items[0].lineClientOperationId).toBe('validate-line-10');
+    vi.useRealTimers();
+  });
+
+  it('UI state: solo UNKNOWN_ITEM es editable, marca Editado y refleja Validando', () => {
+    const page = fixture.componentInstance;
+    page.importPreviewRows.set([
+      {
+        lineNo: 1,
+        itemType: 'Product',
+        externalCode: 'BAD-1',
+        editableExternalCode: 'BAD-1',
+        itemId: '',
+        deltaQty: -1,
+        reasonCode: 'Correction',
+        referenceId: null,
+        note: null,
+        validationError: 'UNKNOWN_ITEM',
+        qtyBefore: null,
+        qtyAfter: null,
+        validationStatus: 'Invalid',
+        validationMessage: 'No existe',
+        isUnknownItem: true,
+        isDirty: false,
+      },
+      {
+        lineNo: 2,
+        itemType: 'Product',
+        externalCode: 'LAT-1',
+        itemId: '',
+        deltaQty: -1,
+        reasonCode: 'Correction',
+        referenceId: null,
+        note: null,
+        validationError: null,
+        qtyBefore: 5,
+        qtyAfter: 4,
+        validationStatus: 'Valid',
+        validationMessage: null,
+        isUnknownItem: false,
+      },
+    ]);
+
+    page.onPreviewIdentifierEdit(1, 'Product', 'NEW-1');
+
+    expect(page.importPreviewRows()[0].isUnknownItem).toBe(true);
+    expect(page.importPreviewRows()[0].isDirty).toBe(true);
+    expect(page.importPreviewRows()[1].isUnknownItem).toBe(false);
+
+    page.importValidateLoading.set(true);
+    expect(page.importValidateLoading()).toBe(true);
+  });
+
 });
