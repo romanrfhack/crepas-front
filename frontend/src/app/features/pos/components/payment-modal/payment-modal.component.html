@@ -2,6 +2,36 @@
   <div class="modal-card">
     <h3>💰 Cobrar</h3>
 
+    <div class="checkout-summary">
+      <p>Artículos: <strong>{{ itemCount() }}</strong></p>
+      <p>Subtotal: <strong>${{ (subtotal() ?? total()).toFixed(2) }}</strong></p>
+      <p>Total: <strong>${{ total().toFixed(2) }}</strong></p>
+      <p>Mayoreo aplicado: <strong>{{ wholesaleApplied() ? 'Sí' : 'No' }}</strong></p>
+    </div>
+
+    @if (validating()) {
+      <p class="info" role="status">Validando…</p>
+    }
+
+    @if (pricingUpdated()) {
+      <p class="info" role="status">Precio actualizado</p>
+    }
+
+    @if (insufficientLines().length > 0) {
+      <section class="error" role="alert" data-testid="insufficient-lines">
+        <p>Stock insuficiente:</p>
+        <ul>
+          @for (line of insufficientLines(); track $index) {
+            <li>
+              {{ line.externalCode || line.productId || 'Producto' }} · Solicitado: {{ line.requestedQty }} · Disponible: {{ line.onHandQty }}
+              <button type="button" class="btn-link" (click)="adjustLineToAvailable.emit(line)">Ajustar cantidad a disponible</button>
+            </li>
+          }
+        </ul>
+        <button type="button" class="btn-link" (click)="retryValidation.emit()">Reintentar validación</button>
+      </section>
+    }
+
     <div class="total-row">
       <span class="total-label">Total a pagar</span>
       <span class="total-amount">${{ total().toFixed(2) }}</span>

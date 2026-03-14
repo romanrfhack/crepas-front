@@ -260,6 +260,99 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         Assert.DoesNotContain(filtered, x => x.ProductId == zeroStock.Id);
     }
 
+
+    [Fact]
+    public async Task Inventory_ValidateAvailability_Returns_Ok_For_Tracked_Product_With_Enough_Stock()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"availability-ok-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var tracked = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Tracked Available", externalCode = "AVL-OK", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        await UpsertCatalogInventoryAsync(token, snapshot.StoreId, tracked.Id, 8m);
+
+        var payload = new
+        {
+            storeId = snapshot.StoreId,
+            lines = new[]
+            {
+                new { productId = tracked.Id, qty = 3m }
+            }
+        };
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/inventory/validate-availability", token);
+        request.Content = JsonContent.Create(payload);
+        using var response = await _client.SendAsync(request);
+        var result = await response.Content.ReadFromJsonAsync<InventoryAvailabilityValidationResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(result);
+        Assert.True(result!.Ok);
+        Assert.Equal(0, result.Summary.InsufficientCount);
+        Assert.Single(result.Lines);
+        Assert.True(result.Lines[0].Ok);
+        Assert.Equal(8m, result.Lines[0].OnHandQty);
+    }
+
+    [Fact]
+    public async Task Inventory_ValidateAvailability_Returns_Insufficient_For_Tracked_Product_Without_Stock()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"availability-fail-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var tracked = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Tracked Low", externalCode = "AVL-LOW", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var snapshot = await GetSnapshotAsync(token);
+
+        await UpsertCatalogInventoryAsync(token, snapshot.StoreId, tracked.Id, 1m);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/inventory/validate-availability", token);
+        request.Content = JsonContent.Create(new
+        {
+            storeId = snapshot.StoreId,
+            lines = new[]
+            {
+                new { productId = tracked.Id, qty = 2m }
+            }
+        });
+        using var response = await _client.SendAsync(request);
+        var result = await response.Content.ReadFromJsonAsync<InventoryAvailabilityValidationResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(result);
+        Assert.False(result!.Ok);
+        Assert.Equal(1, result.Summary.InsufficientCount);
+        Assert.Single(result.Lines);
+        Assert.False(result.Lines[0].Ok);
+        Assert.Equal("Stock insuficiente", result.Lines[0].Message);
+    }
+
+    [Fact]
+    public async Task Inventory_ValidateAvailability_Does_Not_Block_NonTracked_Product()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"availability-not-tracked-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var nonTracked = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "No Track", externalCode = "AVL-NT", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = false });
+        var snapshot = await GetSnapshotAsync(token);
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/inventory/validate-availability", token);
+        request.Content = JsonContent.Create(new
+        {
+            storeId = snapshot.StoreId,
+            lines = new[]
+            {
+                new { productId = nonTracked.Id, qty = 100m }
+            }
+        });
+        using var response = await _client.SendAsync(request);
+        var result = await response.Content.ReadFromJsonAsync<InventoryAvailabilityValidationResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(result);
+        Assert.True(result!.Ok);
+        Assert.Equal(0, result.Summary.InsufficientCount);
+        Assert.Single(result.Lines);
+        Assert.True(result.Lines[0].Ok);
+    }
+
     [Fact]
     public async Task Catalog_Overrides_Get_Returns_Item_Metadata()
     {

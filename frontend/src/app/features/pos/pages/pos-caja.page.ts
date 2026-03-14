@@ -36,6 +36,7 @@ import {
   CreateSaleRequestDto,
   PosShiftDto,
   ProductDto,
+  PosInventoryValidateAvailabilityResponseLineDto,
   ProductWholesaleOverrideDto,
   SaleListItemUi,
   SaleResponseDto,
@@ -103,6 +104,9 @@ export class PosCajaPage implements OnDestroy {
   readonly voidForbiddenError = signal(false);
   readonly tenantWholesalePolicy = signal<TenantWholesalePolicyDto | null>(null);
   readonly productWholesaleOverrides = signal<Record<string, ProductWholesaleOverrideDto | null>>({});
+  readonly checkoutValidating = signal(false);
+  readonly checkoutPricingUpdated = signal(false);
+  readonly checkoutInsufficientLines = signal<PosInventoryValidateAvailabilityResponseLineDto[]>([]);
 
   private autoCollapseTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -189,6 +193,11 @@ export class PosCajaPage implements OnDestroy {
       .filter((product) => (search.length ? product.name.toLowerCase().includes(search) : true));
   });
 
+  readonly ticketItemCount = computed(() => this.cartItems().reduce((sum, item) => sum + item.quantity, 0));
+  readonly wholesaleAppliedInTicket = computed(() =>
+    this.cartItems().some((item) => item.wholesale.isApplied),
+  );
+
   readonly estimatedTotal = computed(() =>
     roundMoney(
       this.cartItems().reduce((acc, item) => {
@@ -240,8 +249,8 @@ export class PosCajaPage implements OnDestroy {
       this.errorMessage.set(null);
       this.canRefreshCatalogAfterUnavailable.set(false);
       this.unavailableItemName.set(null);
-    this.outOfStockItemName.set(null);
-    this.outOfStockAvailableQty.set(null);
+      this.outOfStockItemName.set(null);
+      this.outOfStockAvailableQty.set(null);
     }
     try {
       const data = await firstValueFrom(this.snapshotService.getSnapshot({ forceRefresh }));
@@ -269,8 +278,8 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
-    void this.revalidatePricing();
     this.showPayment.set(true);
+    void this.canCheckoutTicket();
   }
 
   async submitOpenShift() {
@@ -484,6 +493,11 @@ export class PosCajaPage implements OnDestroy {
     if (!this.canCheckout()) {
       this.showOpenShiftModal.set(true);
       this.errorMessage.set('Debes tener un turno abierto para registrar ventas.');
+      return;
+    }
+
+    if (!(await this.canCheckoutTicket())) {
+      this.errorMessage.set('No se puede confirmar: valida precios e inventario.');
       return;
     }
 
@@ -740,6 +754,7 @@ export class PosCajaPage implements OnDestroy {
       {
         id: crypto.randomUUID(),
         productId: product.id,
+        externalCode: product.externalCode,
         productName: product.name,
         basePrice: product.basePrice,
         baseUnitPrice: pricing.baseUnitPrice,
@@ -881,10 +896,13 @@ export class PosCajaPage implements OnDestroy {
   async revalidatePricing() {
     const storeId = this.storeContext.getActiveStoreId();
     if (!storeId || this.cartItems().length === 0) {
-      return;
+      return false;
     }
 
     try {
+      const previousByProduct = new Map(
+        this.cartItems().map((item) => [item.productId, item.appliedUnitPrice]),
+      );
       const response = await this.wholesaleApi.quotePricing({
         storeId,
         tenantPolicy: this.tenantWholesalePolicy()
@@ -908,9 +926,59 @@ export class PosCajaPage implements OnDestroy {
       });
 
       this.cartItems.update((items) => applyQuoteResponseToCart(items, response));
+      return response.lines.some((line) => previousByProduct.get(line.productId) !== line.appliedUnitPrice);
     } catch {
-      // no-op: fallback to local pricing for UX continuity.
+      return false;
     }
+  }
+
+  async canCheckoutTicket() {
+    const storeId = this.storeContext.getActiveStoreId();
+    if (!storeId || this.cartItems().length === 0) {
+      return false;
+    }
+
+    this.checkoutValidating.set(true);
+    this.checkoutInsufficientLines.set([]);
+    try {
+      const pricingUpdated = await this.revalidatePricing();
+      this.checkoutPricingUpdated.set(pricingUpdated);
+
+      const availability = await this.wholesaleApi.validateAvailability({
+        storeId,
+        lines: this.cartItems().map((item) => ({
+          productId: item.productId,
+          externalCode: item.externalCode,
+          qty: item.quantity,
+        })),
+      });
+
+      const insufficient = availability.lines.filter((line) => !line.ok);
+      this.checkoutInsufficientLines.set(insufficient);
+      return insufficient.length === 0;
+    } finally {
+      this.checkoutValidating.set(false);
+    }
+  }
+
+  adjustLineToAvailable(line: PosInventoryValidateAvailabilityResponseLineDto) {
+    this.cartItems.update((items) =>
+      items
+        .map((item) => {
+          const sameProduct = line.productId ? item.productId === line.productId : item.externalCode === line.externalCode;
+          if (!sameProduct) {
+            return item;
+          }
+
+          return {
+            ...item,
+            quantity: Math.max(0, line.onHandQty),
+          };
+        })
+        .filter((item) => item.quantity > 0),
+    );
+
+    void this.canCheckoutTicket();
   }
 
   private isNoOpenShiftError(payload: unknown) {

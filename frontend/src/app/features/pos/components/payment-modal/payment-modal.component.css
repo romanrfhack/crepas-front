@@ -326,3 +326,8 @@ input[type='number']:focus-visible {
     width: 100%;
   }
 }
+
+.checkout-summary { background: rgba(243,182,194,.08); border-radius: 12px; padding: .75rem; }
+.checkout-summary p { margin: .2rem 0; }
+.info { color: #1f2937; font-weight: 600; margin: 0; }
+

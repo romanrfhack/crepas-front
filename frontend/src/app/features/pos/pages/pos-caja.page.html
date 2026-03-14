@@ -218,7 +218,15 @@
   @if (showPayment()) {
     <app-pos-payment-modal
       [total]="estimatedTotal()"
+      [subtotal]="estimatedTotal()"
+      [itemCount]="ticketItemCount()"
+      [wholesaleApplied]="wholesaleAppliedInTicket()"
       [loading]="loading()"
+      [validating]="checkoutValidating()"
+      [pricingUpdated]="checkoutPricingUpdated()"
+      [insufficientLines]="checkoutInsufficientLines()"
+      (retryValidation)="canCheckoutTicket()"
+      (adjustLineToAvailable)="adjustLineToAvailable($event)"
       (cancelAction)="showPayment.set(false)"
       (submitPayment)="confirmPayment($event)"
     />
