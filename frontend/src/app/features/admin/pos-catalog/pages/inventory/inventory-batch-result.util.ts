@@ -10,11 +10,18 @@ export interface InventoryBatchResultDisplayRow {
   lineNo: number;
   itemType: 'Product' | 'Extra';
   externalCode: string;
+  originalExternalCode?: string;
+  editableExternalCode?: string;
   itemId: string;
+  originalItemId?: string;
+  editableItemId?: string;
   deltaQty: number;
   status: 'Applied' | 'Failed';
   errorCode: string;
   message: string;
+  isUnknownItem?: boolean;
+  isDirty?: boolean;
+  localEditError?: string | null;
   qtyBefore: number | null;
   qtyAfter: number | null;
   deltaApplied: number | null;
@@ -29,11 +36,18 @@ function toDisplayRow(
     lineNo: line.lineNo,
     itemType: requestLine?.itemType ?? 'Product',
     externalCode: requestLine?.itemExternalCode?.trim() ?? '',
+    originalExternalCode: requestLine?.itemExternalCode?.trim() ?? '',
+    editableExternalCode: requestLine?.itemExternalCode?.trim() ?? '',
     itemId: requestLine?.itemId?.trim() ?? '',
+    originalItemId: requestLine?.itemId?.trim() ?? '',
+    editableItemId: requestLine?.itemId?.trim() ?? '',
     deltaQty: requestLine?.quantityDelta ?? 0,
     status: line.status,
     errorCode: line.errorCode?.trim() ?? '',
     message: line.message?.trim() ?? '',
+    isUnknownItem: line.errorCode?.trim() === 'UNKNOWN_ITEM',
+    isDirty: false,
+    localEditError: null,
     qtyBefore: line.qtyBefore ?? null,
     qtyAfter: line.qtyAfter ?? null,
     deltaApplied: line.deltaApplied ?? null,
