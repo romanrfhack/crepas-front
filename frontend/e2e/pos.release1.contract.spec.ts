@@ -335,12 +335,27 @@ const addSingleProductToCart = async (page: Page) => {
 };
 
 const submitMixedPayment = async (page: Page) => {
-  await page.getByTestId('payment-amount-0').fill('20');
-  await page.getByTestId('add-payment').click();
-  await page.getByTestId('payment-method-1').selectOption('Card');
-  await page.getByTestId('payment-amount-1').fill('100');
-  await page.getByTestId('payment-ref-1').fill('AUTH-123');
-  await page.getByTestId('confirm-payment').click();
+  const amountCashInput = page.getByTestId('payment-amount-0');
+  const addPaymentButton = page.getByTestId('add-payment');
+  const confirmPaymentButton = page.getByTestId('confirm-payment');
+
+  await expect(amountCashInput).toBeVisible();
+  await amountCashInput.fill('20');
+
+  await expect(addPaymentButton).toBeEnabled();
+  await addPaymentButton.click();
+
+  const methodCardSelect = page.getByTestId('payment-method-1');
+  const amountCardInput = page.getByTestId('payment-amount-1');
+  const cardReferenceInput = page.getByTestId('payment-ref-1');
+
+  await expect(methodCardSelect).toBeVisible();
+  await methodCardSelect.selectOption('Card');
+  await amountCardInput.fill('100');
+  await cardReferenceInput.fill('AUTH-123');
+
+  await expect(confirmPaymentButton).toBeEnabled();
+  await confirmPaymentButton.click();
 };
 
 test('A) Mixed payments envía payments[] en POST /pos/sales', async ({ page }) => {
