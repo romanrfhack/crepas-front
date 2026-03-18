@@ -5,8 +5,6 @@ using CobranzaDigital.Application.Interfaces.PosSales;
 using CobranzaDigital.Application.Services;
 using CobranzaDigital.Infrastructure.Persistence;
 
-using FluentValidation.Results;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace CobranzaDigital.Infrastructure.Services;
@@ -31,10 +29,13 @@ public sealed class PosPricingQuoteService : IPosPricingQuoteService
             return new PosPricingQuoteResponseDto([], new PosPricingQuoteTotalsDto(0m, 0m));
         }
 
-        var tenantId = _tenantContext.GetEffectiveTenantId();
-        if (tenantId is null)
+        var tenantId = _tenantContext.EffectiveTenantId;
+        if (!tenantId.HasValue)
         {
-            throw new ValidationException([new ValidationFailure("tenantId", "A tenant context is required.")]);
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["tenantId"] = ["A tenant context is required."]
+            });
         }
 
         var storeExists = await _db.Stores.AsNoTracking()
@@ -42,7 +43,10 @@ public sealed class PosPricingQuoteService : IPosPricingQuoteService
             .ConfigureAwait(false);
         if (!storeExists)
         {
-            throw new ValidationException([new ValidationFailure("storeId", "Store does not exist for the active tenant.")]);
+            throw new ValidationException(new Dictionary<string, string[]>
+            {
+                ["storeId"] = ["Store does not exist for the active tenant."]
+            });
         }
 
         var ids = request.Lines.Where(x => x.ProductId.HasValue).Select(x => x.ProductId!.Value).Distinct().ToArray();
@@ -102,7 +106,10 @@ public sealed class PosPricingQuoteService : IPosPricingQuoteService
             return byCodeProduct;
         }
 
-        throw new ValidationException([new ValidationFailure("lines", "Product not found for one or more quote lines.")]);
+        throw new ValidationException(new Dictionary<string, string[]>
+        {
+            ["lines"] = ["Product not found for one or more quote lines."]
+        });
     }
 
     private sealed record PosQuoteProductProjection(Guid Id, string? ExternalCode, decimal BasePrice);

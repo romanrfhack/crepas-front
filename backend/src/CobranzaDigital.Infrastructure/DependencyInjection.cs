@@ -3,7 +3,6 @@ using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Interfaces.PosCatalog;
 using CobranzaDigital.Application.Interfaces.PosSales;
 using CobranzaDigital.Application.Interfaces.Platform;
-using CobranzaDigital.Application.Services;
 using CobranzaDigital.Infrastructure.Auditing;
 using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Options;
