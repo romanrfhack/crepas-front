@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CobranzaDigital.Application.Contracts.PosCatalog;
 using CobranzaDigital.Infrastructure.Identity;
 using CobranzaDigital.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -283,7 +284,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         using var request = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/inventory/validate-availability", token);
         request.Content = JsonContent.Create(payload);
         using var response = await _client.SendAsync(request);
-        var result = await response.Content.ReadFromJsonAsync<InventoryAvailabilityValidationResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ValidateInventoryAvailabilityResponseDto>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(result);
@@ -314,7 +315,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             }
         });
         using var response = await _client.SendAsync(request);
-        var result = await response.Content.ReadFromJsonAsync<InventoryAvailabilityValidationResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ValidateInventoryAvailabilityResponseDto>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(result);
@@ -343,7 +344,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             }
         });
         using var response = await _client.SendAsync(request);
-        var result = await response.Content.ReadFromJsonAsync<InventoryAvailabilityValidationResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ValidateInventoryAvailabilityResponseDto>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(result);

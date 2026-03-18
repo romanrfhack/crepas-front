@@ -1,5 +1,6 @@
 using CobranzaDigital.Application.Contracts.PosPricing;
 using CobranzaDigital.Application.Services;
+using Xunit;
 
 namespace CobranzaDigital.Application.Tests;
 
