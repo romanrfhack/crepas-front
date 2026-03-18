@@ -6,12 +6,10 @@ namespace CobranzaDigital.Application.Tests;
 
 public sealed class PosPricingQuoteCalculatorTests
 {
-    private readonly PosPricingQuoteCalculator _sut = new();
-
     [Fact]
     public void QtyLowerThanTierMin_DoesNotApply()
     {
-        var result = _sut.ComputeLine(
+        var result = PosPricingQuoteCalculator.ComputeLine(
             qty: 9,
             baseUnitPrice: 100m,
             tenantPolicy: new PosPricingTenantPolicyDto(true, [new PosPricingTierDto(10m, "Percent", 10m)]),
@@ -25,7 +23,7 @@ public sealed class PosPricingQuoteCalculatorTests
     [Fact]
     public void QtyAtTierMin_Applies()
     {
-        var result = _sut.ComputeLine(
+        var result = PosPricingQuoteCalculator.ComputeLine(
             qty: 10,
             baseUnitPrice: 100m,
             tenantPolicy: new PosPricingTenantPolicyDto(true, [new PosPricingTierDto(10m, "Percent", 10m)]),
@@ -40,7 +38,7 @@ public sealed class PosPricingQuoteCalculatorTests
     [Fact]
     public void OverrideDisabled_DoesNotApply()
     {
-        var result = _sut.ComputeLine(
+        var result = PosPricingQuoteCalculator.ComputeLine(
             qty: 10,
             baseUnitPrice: 100m,
             tenantPolicy: new PosPricingTenantPolicyDto(true, [new PosPricingTierDto(10m, "Percent", 10m)]),
@@ -54,7 +52,7 @@ public sealed class PosPricingQuoteCalculatorTests
     [Fact]
     public void CustomTiers_UseProductSource()
     {
-        var result = _sut.ComputeLine(
+        var result = PosPricingQuoteCalculator.ComputeLine(
             qty: 12,
             baseUnitPrice: 100m,
             tenantPolicy: new PosPricingTenantPolicyDto(true, [new PosPricingTierDto(10m, "Percent", 10m)]),
@@ -68,7 +66,7 @@ public sealed class PosPricingQuoteCalculatorTests
     [Fact]
     public void Rounding_IsConsistent()
     {
-        var result = _sut.ComputeLine(
+        var result = PosPricingQuoteCalculator.ComputeLine(
             qty: 3,
             baseUnitPrice: 10.005m,
             tenantPolicy: new PosPricingTenantPolicyDto(true, [new PosPricingTierDto(3m, "Percent", 5m)]),
