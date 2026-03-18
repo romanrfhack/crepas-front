@@ -232,6 +232,8 @@ describe('PosCajaPage', () => {
     expect(salesCalls.length).toBe(2);
     expect(salesCalls[0]?.payload.clientSaleId).toBeTruthy();
     expect(salesCalls[0]?.payload.clientSaleId).toBe(salesCalls[1]?.payload.clientSaleId);
+    expect(salesCalls[0]?.payload.clientOperationId).toBe(salesCalls[0]?.payload.clientSaleId);
+    expect(salesCalls[1]?.payload.clientOperationId).toBe(salesCalls[1]?.payload.clientSaleId);
     expect(fixture.componentInstance.cartItems().length).toBe(0);
   });
 
@@ -415,7 +417,6 @@ describe('PosCajaPage', () => {
     expect(fixture.componentInstance.cartItems()[0]?.appliedUnitPrice).toBe(10);
   });
 
-
   it('shows out-of-stock alert with available qty when sale returns 409 OutOfStock', async () => {
     const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
       createSale: (payload: CreateSaleRequestDto, correlationId: string) => Promise<unknown>;
@@ -566,7 +567,7 @@ describe('PosCajaPage', () => {
     expect(fixture.componentInstance.canRefreshCatalogAfterUnavailable()).toBe(true);
   });
 
-  it('keeps duplicate-sale message when 409 conflict explicitly indicates duplicate', async () => {
+  it('shows idempotency conflict message when backend returns IDEMPOTENCY_CONFLICT', async () => {
     const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
       createSale: (payload: CreateSaleRequestDto, correlationId: string) => Promise<unknown>;
     };
@@ -574,8 +575,7 @@ describe('PosCajaPage', () => {
       throw new HttpErrorResponse({
         status: 409,
         error: {
-          code: 'DUPLICATE_CLIENT_SALE_ID',
-          detail: 'Sale already exists for this clientSaleId.',
+          detail: 'IDEMPOTENCY_CONFLICT',
         },
       });
     };
@@ -584,7 +584,7 @@ describe('PosCajaPage', () => {
       payments: [{ method: 'Cash', amount: 10, reference: null }],
     });
 
-    expect(fixture.componentInstance.errorMessage()).toContain('ya fue registrada');
+    expect(fixture.componentInstance.errorMessage()).toContain('idempotencia');
     expect(fixture.componentInstance.canRefreshCatalogAfterUnavailable()).toBe(false);
   });
 
@@ -659,5 +659,4 @@ describe('PosCajaPage', () => {
 
     expect(fixture.componentInstance.cartItems()[0]?.quantity).toBe(2);
   });
-
 });

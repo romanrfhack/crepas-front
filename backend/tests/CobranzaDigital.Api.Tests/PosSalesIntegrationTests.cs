@@ -260,6 +260,145 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     }
 
     [Fact]
+    public async Task CreateSale_IdempotencyReplay_And_Conflict_AreHandled()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"Idem-{Guid.NewGuid():N}", sortOrder = 3, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Mocha", categoryId = category.Id, basePrice = 90m, isActive = true, isInventoryTracked = false });
+        var clientOperationId = Guid.NewGuid();
+
+        using var firstReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        firstReq.Content = JsonContent.Create(new
+        {
+            clientOperationId,
+            items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
+            payment = new { method = "Cash", amount = 90m }
+        });
+        using var firstResp = await _client.SendAsync(firstReq);
+        Assert.Equal(HttpStatusCode.OK, firstResp.StatusCode);
+
+        using var replayReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        replayReq.Content = JsonContent.Create(new
+        {
+            clientOperationId,
+            items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
+            payment = new { method = "Cash", amount = 90m }
+        });
+        using var replayResp = await _client.SendAsync(replayReq);
+        Assert.Equal(HttpStatusCode.OK, replayResp.StatusCode);
+
+        using var conflictReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        conflictReq.Content = JsonContent.Create(new
+        {
+            clientOperationId,
+            items = new[] { new { productId = product.Id, quantity = 2, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
+            payment = new { method = "Cash", amount = 180m }
+        });
+        using var conflictResp = await _client.SendAsync(conflictReq);
+        var conflictPayload = await conflictResp.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal(HttpStatusCode.Conflict, conflictResp.StatusCode);
+        Assert.Equal("IDEMPOTENCY_CONFLICT", conflictPayload?["detail"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task CreateSale_ReturnsConflict_OnPriceMismatch()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"Pricing-{Guid.NewGuid():N}", sortOrder = 3, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Flat White", categoryId = category.Id, basePrice = 70m, isActive = true, isInventoryTracked = false });
+
+        using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        req.Content = JsonContent.Create(new
+        {
+            clientOperationId = Guid.NewGuid(),
+            items = new[]
+            {
+                new
+                {
+                    productId = product.Id,
+                    quantity = 1,
+                    selections = Array.Empty<object>(),
+                    extras = Array.Empty<object>(),
+                    pricingSnapshot = new { baseUnitPrice = 70m, appliedUnitPrice = 60m }
+                }
+            },
+            payment = new { method = "Cash", amount = 70m }
+        });
+
+        using var resp = await _client.SendAsync(req);
+        var payload = await resp.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+        Assert.Equal("PRICE_MISMATCH", payload?["detail"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Sales_List_And_Detail_Endpoints_ReturnPersistedSales()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"List-{Guid.NewGuid():N}", sortOrder = 3, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Espresso", categoryId = category.Id, basePrice = 40m, isActive = true, isInventoryTracked = false });
+
+        using var createReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        createReq.Content = JsonContent.Create(new
+        {
+            clientOperationId = Guid.NewGuid(),
+            items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
+            payment = new { method = "Cash", amount = 40m }
+        });
+        using var createResp = await _client.SendAsync(createReq);
+        var created = await createResp.Content.ReadFromJsonAsync<CreateSaleResponse>();
+        Assert.Equal(HttpStatusCode.OK, createResp.StatusCode);
+
+        using var listReq = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/sales?page=1&pageSize=10&q=", token);
+        using var listResp = await _client.SendAsync(listReq);
+        var listPayload = await listResp.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal(HttpStatusCode.OK, listResp.StatusCode);
+        var items = listPayload?["items"]?.AsArray();
+        Assert.NotNull(items);
+        Assert.Contains(items!, x => x?["saleId"]?.GetValue<Guid>() == created!.SaleId);
+
+        using var detailReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/sales/{created!.SaleId}", token);
+        using var detailResp = await _client.SendAsync(detailReq);
+        var detailPayload = await detailResp.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal(HttpStatusCode.OK, detailResp.StatusCode);
+        Assert.Equal(created.SaleId, detailPayload?["saleId"]?.GetValue<Guid>());
+        Assert.NotNull(detailPayload?["lines"]?.AsArray());
+    }
+
+    [Fact]
+    public async Task CreateSale_ReturnsConflict_OnInsufficientStock()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+        await UpdateInventorySettingsAsync(token, true);
+        var storeId = await GetDefaultStoreIdAsync();
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"Stock-{Guid.NewGuid():N}", sortOrder = 3, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Cold Brew", categoryId = category.Id, basePrice = 55m, isActive = true, isInventoryTracked = true });
+        await UpsertInventoryAsync(token, storeId, product.Id, 1m);
+
+        using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        req.Content = JsonContent.Create(new
+        {
+            clientOperationId = Guid.NewGuid(),
+            items = new[] { new { productId = product.Id, quantity = 2, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
+            payment = new { method = "Cash", amount = 110m },
+            storeId
+        });
+
+        using var resp = await _client.SendAsync(req);
+        var payload = await resp.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+        Assert.Equal("INSUFFICIENT_STOCK", payload?["detail"]?.GetValue<string>());
+    }
+
+    [Fact]
     public async Task Reports_DailySummary_And_TopProducts_Work()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");

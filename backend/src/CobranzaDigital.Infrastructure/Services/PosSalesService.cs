@@ -1,12 +1,17 @@
 using System.Diagnostics;
 using System.Data;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 using CobranzaDigital.Application.Auditing;
 using CobranzaDigital.Application.Common.Exceptions;
 using CobranzaDigital.Application.Contracts.PosSales;
+using CobranzaDigital.Application.Contracts.PosPricing;
+using CobranzaDigital.Application.Contracts.Admin;
 using CobranzaDigital.Application.Interfaces;
+using CobranzaDigital.Application.Interfaces.PosCatalog;
 using CobranzaDigital.Application.Interfaces.PosSales;
 using CobranzaDigital.Domain.Entities;
 using CobranzaDigital.Infrastructure.Options;
@@ -35,7 +40,8 @@ public sealed class PosSalesService : IPosSalesService
     private readonly PosStoreContextService _storeContext;
     private readonly IPointsReversalService _pointsReversalService;
     private readonly ITenantContext _tenantContext;
-    private readonly InventoryConsumptionService _inventoryConsumptionService;
+    private readonly IPosPricingQuoteService _pricingQuoteService;
+    private readonly IPosCatalogService _catalogService;
 
     public PosSalesService(
         CobranzaDigitalDbContext db,
@@ -47,7 +53,8 @@ public sealed class PosSalesService : IPosSalesService
         PosStoreContextService storeContext,
         IPointsReversalService pointsReversalService,
         ITenantContext tenantContext,
-        InventoryConsumptionService inventoryConsumptionService)
+        IPosPricingQuoteService pricingQuoteService,
+        IPosCatalogService catalogService)
     {
         _db = db;
         _auditLogger = auditLogger;
@@ -58,7 +65,8 @@ public sealed class PosSalesService : IPosSalesService
         _storeContext = storeContext;
         _pointsReversalService = pointsReversalService;
         _tenantContext = tenantContext;
-        _inventoryConsumptionService = inventoryConsumptionService;
+        _pricingQuoteService = pricingQuoteService;
+        _catalogService = catalogService;
     }
 
     public async Task<CreateSaleResponseDto> CreateSaleAsync(CreateSaleRequestDto request, CancellationToken ct)
@@ -74,6 +82,9 @@ public sealed class PosSalesService : IPosSalesService
             var correlationId = GetCorrelationId();
             var tenantId = RequireEffectiveTenantId();
             var (storeId, settings) = await _storeContext.ResolveStoreAsync(request.StoreId, ct).ConfigureAwait(false);
+            var clientOperationId = request.ClientOperationId ?? request.ClientSaleId
+                ?? throw ValidationError("clientOperationId", "clientOperationId is required.");
+            var requestHash = ComputeSaleRequestHash(request, storeId);
 
             Guid? openShiftId = null;
             if (_posOptions.RequireOpenShiftForSales)
@@ -95,19 +106,47 @@ public sealed class PosSalesService : IPosSalesService
                 }
             }
 
-            if (request.ClientSaleId.HasValue)
+            var existingSale = await _db.Sales.AsNoTracking()
+                .Where(x => x.ClientSaleId == clientOperationId &&
+                            x.TenantId == tenantId &&
+                            x.StoreId == storeId)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.Folio,
+                    x.OccurredAtUtc,
+                    x.Subtotal,
+                    x.Total,
+                    x.Currency,
+                    x.CorrelationId
+                })
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
+
+            if (existingSale is not null)
             {
-                var existing = await _db.Sales.AsNoTracking()
-                    .Where(x => x.ClientSaleId == request.ClientSaleId.Value && x.TenantId == tenantId)
-                    .Select(x => new CreateSaleResponseDto(x.Id, x.Folio, x.OccurredAtUtc, x.Total))
-                    .FirstOrDefaultAsync(ct)
+                if (!string.Equals(existingSale.CorrelationId, requestHash, StringComparison.Ordinal))
+                {
+                    throw new ConflictException("IDEMPOTENCY_CONFLICT");
+                }
+
+                var existingLines = await _db.SaleItems.AsNoTracking()
+                    .Where(x => x.SaleId == existingSale.Id)
+                    .Select(x => new CreateSaleReceiptLineDto(
+                        x.ProductId,
+                        x.ProductExternalCode,
+                        x.ProductNameSnapshot,
+                        x.Quantity,
+                        x.UnitPriceSnapshot,
+                        x.UnitPriceSnapshot,
+                        x.LineTotal,
+                        x.NotesSnapshot,
+                        x.NotesSnapshot))
+                    .ToListAsync(ct)
                     .ConfigureAwait(false);
 
-                if (existing is not null)
-                {
-                    LogAction("IdempotentHit", "Sale", existing.SaleId, correlationId);
-                    return existing;
-                }
+                LogAction("IdempotentHit", "Sale", existingSale.Id, correlationId);
+                return new CreateSaleResponseDto(existingSale.Id, existingSale.Folio, existingSale.OccurredAtUtc, existingSale.Total);
             }
 
             var tenantTemplateId = await _db.TenantCatalogTemplates.AsNoTracking()
@@ -137,6 +176,40 @@ public sealed class PosSalesService : IPosSalesService
             if (products.Count != productIds.Length)
             {
                 throw ValidationError("items.productId", "One or more products were not found or are inactive.");
+            }
+
+            var availability = await _catalogService.ValidateInventoryAvailabilityAsync(
+                new(
+                    storeId,
+                    request.Items.Select(item => new CobranzaDigital.Application.Contracts.PosCatalog.ValidateInventoryAvailabilityLineRequestDto(
+                        item.ProductId,
+                        products[item.ProductId].ExternalCode,
+                        item.Quantity)).ToArray()),
+                ct).ConfigureAwait(false);
+            var insufficient = availability.Lines.FirstOrDefault(x => !x.Ok);
+            if (insufficient is not null)
+            {
+                throw new ConflictException("INSUFFICIENT_STOCK");
+            }
+
+            var quote = await _pricingQuoteService.QuoteAsync(
+                new PosPricingQuoteRequestDto(
+                    storeId,
+                    null,
+                    request.Items.Select(item => new PosPricingQuoteLineRequestDto(
+                        item.ProductId,
+                        products[item.ProductId].ExternalCode,
+                        item.Quantity,
+                        products[item.ProductId].BasePrice,
+                        item.PricingSnapshot?.AppliedUnitPrice,
+                        null)).ToArray()),
+                ct).ConfigureAwait(false);
+            var mismatchLine = request.Items
+                .Join(quote.Lines, item => item.ProductId, line => line.ProductId, (item, line) => new { item, line })
+                .FirstOrDefault(x => x.item.PricingSnapshot is null || RoundMoney(x.item.PricingSnapshot.AppliedUnitPrice) != RoundMoney(x.line.AppliedUnitPrice));
+            if (mismatchLine is not null)
+            {
+                throw new ConflictException("PRICE_MISMATCH");
             }
 
             var unavailableProduct = products.Values.FirstOrDefault(x =>
@@ -251,8 +324,8 @@ public sealed class PosSalesService : IPosSalesService
                 OccurredAtUtc = occurredAtUtc,
                 Currency = "MXN",
                 CreatedByUserId = userId,
-                CorrelationId = correlationId,
-                ClientSaleId = request.ClientSaleId,
+                CorrelationId = requestHash,
+                ClientSaleId = clientOperationId,
                 ShiftId = openShiftId,
                 StoreId = storeId,
                 TenantId = tenantId,
@@ -403,19 +476,6 @@ public sealed class PosSalesService : IPosSalesService
             IDbContextTransaction tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct).ConfigureAwait(false);
             try
             {
-                await _inventoryConsumptionService.ConsumeForSaleAsync(
-                    tenantId,
-                    storeId,
-                    sale.Id,
-                    userId,
-                    request.Items,
-                    products,
-                    extras,
-                    settings.ShowOnlyInStock,
-                    storeOverrides,
-                    tenantDisabled.Select(x => (x.ItemType, x.ItemId)).ToHashSet(),
-                    ct).ConfigureAwait(false);
-
                 await _auditLogger.LogAsync(new AuditEntry(
                     Action: "Create",
                     UserId: userId,
@@ -431,11 +491,11 @@ public sealed class PosSalesService : IPosSalesService
                 await _db.SaveChangesAsync(ct).ConfigureAwait(false);
                 await tx.CommitAsync(ct).ConfigureAwait(false);
             }
-            catch (DbUpdateException) when (request.ClientSaleId.HasValue)
+            catch (DbUpdateException)
             {
                 await tx.RollbackAsync(ct).ConfigureAwait(false);
                 LogAction("CreateConflict", "Sale", sale.Id, correlationId);
-                throw new ConflictException("A sale with the same clientSaleId already exists.");
+                throw new ConflictException("IDEMPOTENCY_CONFLICT");
             }
             finally
             {
@@ -475,6 +535,72 @@ public sealed class PosSalesService : IPosSalesService
         LogAction("DailySummary", "SaleReport", null, GetCorrelationId());
 
         return new DailySummaryDto(forDate, totalTickets, totalAmount, totalItems, avgTicket);
+    }
+
+    public async Task<PagedResult<SaleListItemDto>> GetSalesAsync(int page, int pageSize, DateTimeOffset? from, DateTimeOffset? to, string? q, Guid? storeId, CancellationToken ct)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var tenantId = RequireEffectiveTenantId();
+        var (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(storeId, ct).ConfigureAwait(false);
+
+        var query = _db.Sales.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.StoreId == resolvedStoreId);
+
+        if (from.HasValue)
+        {
+            query = query.Where(x => x.OccurredAtUtc >= from.Value);
+        }
+
+        if (to.HasValue)
+        {
+            query = query.Where(x => x.OccurredAtUtc <= to.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var normalized = q.Trim();
+            query = query.Where(x => x.Folio.Contains(normalized));
+        }
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var items = await query.OrderByDescending(x => x.OccurredAtUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => new SaleListItemDto(x.Id, x.Folio, x.OccurredAtUtc, x.Total, x.Status))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return new PagedResult<SaleListItemDto>(total, items);
+    }
+
+    public async Task<SaleDetailDto> GetSaleByIdAsync(Guid saleId, CancellationToken ct)
+    {
+        var tenantId = RequireEffectiveTenantId();
+        var sale = await _db.Sales.AsNoTracking()
+            .Where(x => x.Id == saleId && x.TenantId == tenantId)
+            .Select(x => new { x.Id, x.Folio, x.OccurredAtUtc, x.Subtotal, x.Total, x.Currency, x.StoreId, x.Status })
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false)
+            ?? throw new NotFoundException("Sale not found.");
+
+        var lines = await _db.SaleItems.AsNoTracking()
+            .Where(x => x.SaleId == saleId)
+            .OrderBy(x => x.Id)
+            .Select(x => new CreateSaleReceiptLineDto(
+                x.ProductId,
+                x.ProductExternalCode,
+                x.ProductNameSnapshot,
+                x.Quantity,
+                x.UnitPriceSnapshot,
+                x.UnitPriceSnapshot,
+                x.LineTotal,
+                x.NotesSnapshot,
+                x.NotesSnapshot))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return new SaleDetailDto(sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Subtotal, sale.Total, sale.Currency, sale.StoreId, sale.Status, lines);
     }
 
     public async Task<IReadOnlyList<TopProductDto>> GetTopProductsAsync(DateOnly dateFrom, DateOnly dateTo, int top, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct)
@@ -1299,6 +1425,30 @@ public sealed class PosSalesService : IPosSalesService
     }
 
     private static decimal RoundMoney(decimal amount) => decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
+
+    private static string ComputeSaleRequestHash(CreateSaleRequestDto request, Guid storeId)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            storeId,
+            lines = request.Items
+                .OrderBy(x => x.ProductId)
+                .Select(x => new
+                {
+                    x.ProductId,
+                    x.Quantity,
+                    baseUnitPrice = x.PricingSnapshot?.BaseUnitPrice,
+                    appliedUnitPrice = x.PricingSnapshot?.AppliedUnitPrice
+                }),
+            payments = ResolvePayments(request)
+                .OrderBy(x => x.Method)
+                .ThenBy(x => x.Amount)
+                .Select(x => new { x.Method, x.Amount, x.Reference })
+        });
+
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(bytes);
+    }
 
     private static ValidationException ValidationError(string key, string message)
     {
