@@ -1,10 +1,13 @@
 using CobranzaDigital.Application.Contracts.PosSales;
+using CobranzaDigital.Application.Contracts.Admin;
 
 namespace CobranzaDigital.Application.Interfaces.PosSales;
 
 public interface IPosSalesService
 {
     Task<CreateSaleResponseDto> CreateSaleAsync(CreateSaleRequestDto request, CancellationToken ct);
+    Task<PagedResult<SaleListItemDto>> GetSalesAsync(int page, int pageSize, DateTimeOffset? from, DateTimeOffset? to, string? q, Guid? storeId, CancellationToken ct);
+    Task<SaleDetailDto> GetSaleByIdAsync(Guid saleId, CancellationToken ct);
     Task<VoidSaleResponseDto> VoidSaleAsync(Guid saleId, VoidSaleRequestDto request, CancellationToken ct);
     Task<DailySummaryDto> GetDailySummaryAsync(DateOnly forDate, CancellationToken ct);
     Task<IReadOnlyList<TopProductDto>> GetTopProductsAsync(DateOnly dateFrom, DateOnly dateTo, int top, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct);

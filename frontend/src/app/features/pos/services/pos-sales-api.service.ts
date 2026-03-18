@@ -9,6 +9,7 @@ import {
   SaleVoidResponseDto,
   SaleResponseDto,
   TopProductDto,
+  SaleListItemUi,
 } from '../models/pos.models';
 
 @Injectable({ providedIn: 'root' })
@@ -59,5 +60,23 @@ export class PosSalesApiService {
         `${this.baseUrl}/v1/pos/reports/top-products?dateFrom=${dateFrom}&dateTo=${dateTo}&top=${top}`,
       ),
     );
+  }
+
+  listSales(page = 1, pageSize = 20, q?: string) {
+    const query = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+      ...(q ? { q } : {}),
+    }).toString();
+
+    return firstValueFrom(
+      this.http.get<{ total: number; items: SaleListItemUi[] }>(
+        `${this.baseUrl}/v1/pos/sales?${query}`,
+      ),
+    );
+  }
+
+  getSaleDetail(saleId: string) {
+    return firstValueFrom(this.http.get(`${this.baseUrl}/v1/pos/sales/${saleId}`));
   }
 }

@@ -1,6 +1,7 @@
 using Asp.Versioning;
 
 using CobranzaDigital.Application.Contracts.PosSales;
+using CobranzaDigital.Application.Contracts.Admin;
 using CobranzaDigital.Application.Interfaces;
 using CobranzaDigital.Application.Interfaces.PosSales;
 
@@ -35,6 +36,37 @@ public sealed class PosSalesController : ControllerBase
         }
 
         return await _service.CreateSaleAsync(request, ct);
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<PagedResult<SaleListItemDto>>> GetSales(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] DateTimeOffset? from = null,
+        [FromQuery] DateTimeOffset? to = null,
+        [FromQuery] string? q = null,
+        [FromQuery] Guid? storeId = null,
+        CancellationToken ct = default)
+    {
+        var validation = PosTenantGuard.EnsureTenantSelectedForOperation(this, _tenantContext);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        return await _service.GetSalesAsync(page, pageSize, from, to, q, storeId, ct);
+    }
+
+    [HttpGet("{saleId:guid}")]
+    public async Task<ActionResult<SaleDetailDto>> GetSaleById(Guid saleId, CancellationToken ct)
+    {
+        var validation = PosTenantGuard.EnsureTenantSelectedForOperation(this, _tenantContext);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        return await _service.GetSaleByIdAsync(saleId, ct);
     }
 
     [HttpPost("{saleId:guid}/void")]

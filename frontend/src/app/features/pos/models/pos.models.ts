@@ -154,6 +154,7 @@ export interface PaymentUiState {
 
 export interface CreateSaleRequestDto {
   clientSaleId: string | null;
+  clientOperationId?: string | null;
   occurredAtUtc: string | null;
   items: CreateSaleItemRequestDto[];
   payments: CreatePaymentRequestDto[];
@@ -164,8 +165,22 @@ export interface CreateSaleRequestDto {
 export interface SaleResponseDto {
   saleId: string;
   folio: string;
+  saleNumber?: string;
   occurredAtUtc: string;
+  createdAtUtc?: string;
+  subtotal?: number;
   total: number;
+  currency?: string;
+  idempotencyReplay?: boolean;
+  lines?: Array<{
+    productId: string;
+    externalCode: string | null;
+    name: string;
+    qty: number;
+    baseUnitPrice: number;
+    appliedUnitPrice: number;
+    lineSubtotal: number;
+  }>;
 }
 
 export interface DailySummaryDto {
@@ -376,7 +391,6 @@ export interface PosPricingQuoteResponseDto {
     total: number;
   };
 }
-
 
 export interface PosInventoryValidateAvailabilityRequestLineDto {
   productId?: string | null;

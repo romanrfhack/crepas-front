@@ -20,9 +20,10 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.Property(x => x.VoidReasonText).HasMaxLength(200);
         builder.Property(x => x.VoidNote).HasMaxLength(500);
         builder.Property(x => x.Status).HasConversion<int>();
-        builder.HasIndex(x => x.OccurredAtUtc);
-        builder.HasIndex(x => x.ClientSaleId).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.OccurredAtUtc });
+        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.ClientSaleId }).IsUnique().HasFilter("[ClientSaleId] IS NOT NULL");
         builder.HasIndex(x => x.ClientVoidId).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.StoreId, x.Folio }).IsUnique();
         builder.HasIndex(x => x.StoreId);
         builder.HasIndex(x => x.TenantId);
         builder.HasIndex(x => x.ShiftId);

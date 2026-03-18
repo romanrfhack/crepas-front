@@ -103,10 +103,14 @@ export class PosCajaPage implements OnDestroy {
   readonly closeShiftError = signal<string | null>(null);
   readonly voidForbiddenError = signal(false);
   readonly tenantWholesalePolicy = signal<TenantWholesalePolicyDto | null>(null);
-  readonly productWholesaleOverrides = signal<Record<string, ProductWholesaleOverrideDto | null>>({});
+  readonly productWholesaleOverrides = signal<Record<string, ProductWholesaleOverrideDto | null>>(
+    {},
+  );
   readonly checkoutValidating = signal(false);
   readonly checkoutPricingUpdated = signal(false);
-  readonly checkoutInsufficientLines = signal<PosInventoryValidateAvailabilityResponseLineDto[]>([]);
+  readonly checkoutInsufficientLines = signal<PosInventoryValidateAvailabilityResponseLineDto[]>(
+    [],
+  );
 
   private autoCollapseTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -193,7 +197,9 @@ export class PosCajaPage implements OnDestroy {
       .filter((product) => (search.length ? product.name.toLowerCase().includes(search) : true));
   });
 
-  readonly ticketItemCount = computed(() => this.cartItems().reduce((sum, item) => sum + item.quantity, 0));
+  readonly ticketItemCount = computed(() =>
+    this.cartItems().reduce((sum, item) => sum + item.quantity, 0),
+  );
   readonly wholesaleAppliedInTicket = computed(() =>
     this.cartItems().some((item) => item.wholesale.isApplied),
   );
@@ -509,11 +515,12 @@ export class PosCajaPage implements OnDestroy {
     this.saleSuccess.set(null);
     this.loading.set(true);
 
-    const clientSaleId = this.inProgressClientSaleId() ?? crypto.randomUUID();
-    this.inProgressClientSaleId.set(clientSaleId);
+    const clientOperationId = this.inProgressClientSaleId() ?? crypto.randomUUID();
+    this.inProgressClientSaleId.set(clientOperationId);
 
     const payload: CreateSaleRequestDto = {
-      clientSaleId,
+      clientSaleId: clientOperationId,
+      clientOperationId,
       occurredAtUtc: null,
       items: this.cartItems().map((item) => ({
         productId: item.productId,
@@ -815,19 +822,31 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
-    if (status === 409 && this.isDuplicateSaleError(payload)) {
-      this.errorMessage.set('Esta venta ya fue registrada.');
+    if (status === 409 && this.getProblemDetail(payload) === 'IDEMPOTENCY_CONFLICT') {
+      this.errorMessage.set('Conflicto de idempotencia: reintenta desde el carrito actual.');
       this.inProgressClientSaleId.set(null);
       return;
     }
 
-    if (status === 409 && this.isOutOfStockError(payload)) {
+    if (
+      status === 409 &&
+      (this.isOutOfStockError(payload) || this.getProblemDetail(payload) === 'INSUFFICIENT_STOCK')
+    ) {
       const outOfStock = this.getOutOfStockData(payload);
       this.outOfStockItemName.set(outOfStock.itemName);
       this.outOfStockAvailableQty.set(outOfStock.availableQty);
       this.errorMessage.set('Sin existencias. Ajusta inventario para continuar.');
       this.showPayment.set(false);
       this.inProgressClientSaleId.set(null);
+      await this.canCheckoutTicket();
+      return;
+    }
+
+    if (status === 409 && this.getProblemDetail(payload) === 'PRICE_MISMATCH') {
+      this.errorMessage.set('El precio cambió. Revalidamos tu ticket antes de continuar.');
+      this.showPayment.set(false);
+      this.inProgressClientSaleId.set(null);
+      await this.canCheckoutTicket();
       return;
     }
 
@@ -867,6 +886,15 @@ export class PosCajaPage implements OnDestroy {
     }
   }
 
+  private getProblemDetail(payload: unknown): string | null {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    const detail = (payload as { detail?: unknown }).detail;
+    return typeof detail === 'string' ? detail : null;
+  }
+
   private quoteWholesale(productId: string, qty: number, basePrice: number) {
     const overrideMap = this.productWholesaleOverrides();
     const override = overrideMap[productId] ?? null;
@@ -891,7 +919,6 @@ export class PosCajaPage implements OnDestroy {
       this.productWholesaleOverrides.update((current) => ({ ...current, [productId]: null }));
     }
   }
-
 
   async revalidatePricing() {
     const storeId = this.storeContext.getActiveStoreId();
@@ -926,7 +953,9 @@ export class PosCajaPage implements OnDestroy {
       });
 
       this.cartItems.update((items) => applyQuoteResponseToCart(items, response));
-      return response.lines.some((line) => previousByProduct.get(line.productId) !== line.appliedUnitPrice);
+      return response.lines.some(
+        (line) => previousByProduct.get(line.productId) !== line.appliedUnitPrice,
+      );
     } catch {
       return false;
     }
@@ -965,7 +994,9 @@ export class PosCajaPage implements OnDestroy {
     this.cartItems.update((items) =>
       items
         .map((item) => {
-          const sameProduct = line.productId ? item.productId === line.productId : item.externalCode === line.externalCode;
+          const sameProduct = line.productId
+            ? item.productId === line.productId
+            : item.externalCode === line.externalCode;
           if (!sameProduct) {
             return item;
           }

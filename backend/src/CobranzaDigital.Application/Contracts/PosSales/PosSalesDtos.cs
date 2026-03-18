@@ -4,6 +4,7 @@ namespace CobranzaDigital.Application.Contracts.PosSales;
 
 public sealed record CreateSaleRequestDto(
     Guid? ClientSaleId,
+    Guid? ClientOperationId,
     DateTimeOffset? OccurredAtUtc,
     IReadOnlyList<CreateSaleItemRequestDto> Items,
     CreatePaymentRequestDto? Payment,
@@ -35,6 +36,53 @@ public sealed record CreateSaleItemExtraRequestDto(Guid ExtraId, int Quantity);
 public sealed record CreatePaymentRequestDto(PaymentMethod Method, decimal Amount, string? Reference);
 
 public sealed record CreateSaleResponseDto(Guid SaleId, string Folio, DateTimeOffset OccurredAtUtc, decimal Total);
+public sealed record CreateSaleReceiptLineDto(
+    Guid ProductId,
+    string? ExternalCode,
+    string Name,
+    decimal Qty,
+    decimal BaseUnitPrice,
+    decimal AppliedUnitPrice,
+    decimal LineSubtotal,
+    string? PricingSnapshotJson,
+    string? NotesSnapshot);
+
+public sealed record CreateSaleReceiptDto(
+    Guid SaleId,
+    string SaleNumber,
+    DateTimeOffset CreatedAtUtc,
+    decimal Subtotal,
+    decimal Total,
+    string Currency,
+    IReadOnlyList<CreateSaleReceiptLineDto> Lines);
+
+public sealed record CreateSaleResponseV2Dto(
+    Guid SaleId,
+    string SaleNumber,
+    DateTimeOffset CreatedAtUtc,
+    decimal Subtotal,
+    decimal Total,
+    string Currency,
+    bool IdempotencyReplay,
+    IReadOnlyList<CreateSaleReceiptLineDto> Lines);
+
+public sealed record SaleListItemDto(
+    Guid SaleId,
+    string SaleNumber,
+    DateTimeOffset CreatedAtUtc,
+    decimal Total,
+    SaleStatus Status);
+
+public sealed record SaleDetailDto(
+    Guid SaleId,
+    string SaleNumber,
+    DateTimeOffset CreatedAtUtc,
+    decimal Subtotal,
+    decimal Total,
+    string Currency,
+    Guid StoreId,
+    SaleStatus Status,
+    IReadOnlyList<CreateSaleReceiptLineDto> Lines);
 
 public sealed record VoidSaleRequestDto(string ReasonCode, string? ReasonText, string? Note, Guid? ClientVoidId);
 
