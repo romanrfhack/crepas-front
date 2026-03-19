@@ -42,6 +42,7 @@ public sealed class PosSalesService : IPosSalesService
     private readonly ITenantContext _tenantContext;
     private readonly IPosPricingQuoteService _pricingQuoteService;
     private readonly IPosCatalogService _catalogService;
+    private readonly InventoryConsumptionService _inventoryConsumptionService;
 
     public PosSalesService(
         CobranzaDigitalDbContext db,
@@ -54,7 +55,8 @@ public sealed class PosSalesService : IPosSalesService
         IPointsReversalService pointsReversalService,
         ITenantContext tenantContext,
         IPosPricingQuoteService pricingQuoteService,
-        IPosCatalogService catalogService)
+        IPosCatalogService catalogService,
+        InventoryConsumptionService inventoryConsumptionService)
     {
         _db = db;
         _auditLogger = auditLogger;
@@ -67,6 +69,7 @@ public sealed class PosSalesService : IPosSalesService
         _tenantContext = tenantContext;
         _pricingQuoteService = pricingQuoteService;
         _catalogService = catalogService;
+        _inventoryConsumptionService = inventoryConsumptionService;
     }
 
     public async Task<CreateSaleResponseDto> CreateSaleAsync(CreateSaleRequestDto request, CancellationToken ct)

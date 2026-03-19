@@ -12,10 +12,12 @@
   z-index: 30;
   padding: 1rem;
   backdrop-filter: blur(2px);
+  overflow-y: auto;
 }
 
 .modal-card {
   width: min(480px, 90vw);
+  max-height: min(92vh, 760px);
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -26,6 +28,7 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  overflow-y: auto;
   animation: fade-in 200ms ease-out;
 }
 
@@ -330,4 +333,3 @@ input[type='number']:focus-visible {
 .checkout-summary { background: rgba(243,182,194,.08); border-radius: 12px; padding: .75rem; }
 .checkout-summary p { margin: .2rem 0; }
 .info { color: #1f2937; font-weight: 600; margin: 0; }
-
