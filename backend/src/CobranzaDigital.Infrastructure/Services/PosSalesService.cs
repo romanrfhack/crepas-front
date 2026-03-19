@@ -537,7 +537,7 @@ public sealed class PosSalesService : IPosSalesService
         return new DailySummaryDto(forDate, totalTickets, totalAmount, totalItems, avgTicket);
     }
 
-    public async Task<PagedResult<SaleListItemDto>> GetSalesAsync(int page, int pageSize, DateTimeOffset? from, DateTimeOffset? to, string? q, Guid? storeId, CancellationToken ct)
+    public async Task<PagedResult<SaleListItemDto>> GetSalesAsync(int page, int pageSize, DateTimeOffset? from, DateTimeOffset? endAt, string? q, Guid? storeId, CancellationToken ct)
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -552,9 +552,9 @@ public sealed class PosSalesService : IPosSalesService
             query = query.Where(x => x.OccurredAtUtc >= from.Value);
         }
 
-        if (to.HasValue)
+        if (endAt.HasValue)
         {
-            query = query.Where(x => x.OccurredAtUtc <= to.Value);
+            query = query.Where(x => x.OccurredAtUtc <= endAt.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(q))

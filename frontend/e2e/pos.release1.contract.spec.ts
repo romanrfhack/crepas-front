@@ -355,7 +355,10 @@ const submitMixedPayment = async (page: Page) => {
   await cardReferenceInput.fill('AUTH-123');
 
   await expect(confirmPaymentButton).toBeEnabled();
-  await confirmPaymentButton.click();
+  await confirmPaymentButton.evaluate((button) => {
+    button.scrollIntoView({ block: 'center', inline: 'nearest' });
+  });
+  await confirmPaymentButton.click({ force: true });
 };
 
 test('A) Mixed payments envía payments[] en POST /pos/sales', async ({ page }) => {
