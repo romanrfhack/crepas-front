@@ -209,7 +209,8 @@ public sealed class PosSalesService : IPosSalesService
                 ct).ConfigureAwait(false);
             var mismatchLine = request.Items
                 .Join(quote.Lines, item => item.ProductId, line => line.ProductId, (item, line) => new { item, line })
-                .FirstOrDefault(x => x.item.PricingSnapshot is null || RoundMoney(x.item.PricingSnapshot.AppliedUnitPrice) != RoundMoney(x.line.AppliedUnitPrice));
+                .FirstOrDefault(x => x.item.PricingSnapshot is not null
+                    && RoundMoney(x.item.PricingSnapshot.AppliedUnitPrice) != RoundMoney(x.line.AppliedUnitPrice));
             if (mismatchLine is not null)
             {
                 throw new ConflictException("PRICE_MISMATCH");
