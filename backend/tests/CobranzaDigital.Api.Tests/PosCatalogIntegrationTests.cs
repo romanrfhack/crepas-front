@@ -1275,15 +1275,15 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     }
 
     [Fact]
-    public async Task InventoryV2_Adjustments_Batch_Validate_Prefers_ItemId_Over_ExternalCode_For_Product()
+    public async Task InventoryV2_Adjustments_Batch_Validate_Product_Uses_ItemId_Before_ExternalCode()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
-        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"batch-validate-precedence-cat-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
-        var byIdProduct = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Batch Validate ById", externalCode = $"BVBID-{Guid.NewGuid():N}"[..12], categoryId = category.Id, basePrice = 11m, isActive = true, isAvailable = true, isInventoryTracked = true });
-        var byCodeProduct = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Batch Validate ByCode", externalCode = $"BVBC-{Guid.NewGuid():N}"[..12], categoryId = category.Id, basePrice = 11m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"batch-validate-precedence-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var byItemId = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Validate Uses ItemId", externalCode = $"BV-ID-{Guid.NewGuid():N}"[..12], categoryId = category.Id, basePrice = 11m, isActive = true, isAvailable = true, isInventoryTracked = true });
+        var byExternalCode = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Validate Uses ExternalCode", externalCode = $"BV-CODE-{Guid.NewGuid():N}"[..12], categoryId = category.Id, basePrice = 11m, isActive = true, isAvailable = true, isInventoryTracked = true });
         var snapshot = await GetSnapshotAsync(token);
-        await UpsertCatalogInventoryAsync(token, snapshot.StoreId, byIdProduct.Id, 5m);
-        await UpsertCatalogInventoryAsync(token, snapshot.StoreId, byCodeProduct.Id, 0m);
+        await UpsertCatalogInventoryAsync(token, snapshot.StoreId, byItemId.Id, 10m);
+        await UpsertCatalogInventoryAsync(token, snapshot.StoreId, byExternalCode.Id, 1m);
 
         using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments/batch/validate", token);
         req.Content = JsonContent.Create(new
@@ -1293,20 +1293,20 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
             batchClientOperationId = Guid.NewGuid(),
             lines = new[]
             {
-                new { lineNo = 1, itemType = "Product", itemId = byIdProduct.Id, externalCode = byCodeProduct.ExternalCode, deltaQty = -1m }
+                new { lineNo = 1, itemType = "Product", itemId = byItemId.Id, externalCode = byExternalCode.ExternalCode, deltaQty = -2m }
             }
         });
 
         using var resp = await _client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         var result = (await resp.Content.ReadFromJsonAsync<InventoryBatchValidationResponse>())!;
-        Assert.Equal(1, result.ValidCount);
-        Assert.Equal(0, result.InvalidCount);
-        Assert.Contains(result.Lines, x => x.LineNo == 1
-            && x.Status == "Valid"
-            && x.ItemResolvedId == byIdProduct.Id
-            && x.QtyBefore == 5m
-            && x.QtyAfter == 4m);
+        var line = Assert.Single(result.Lines);
+        Assert.Equal("Valid", line.Status);
+        Assert.Null(line.ErrorCode);
+        Assert.Equal(byItemId.Id, line.ItemResolvedId);
+        Assert.Equal(byItemId.Id, line.ItemId);
+        Assert.Equal(10m, line.QtyBefore);
+        Assert.Equal(8m, line.QtyAfter);
     }
 
     [Fact]
