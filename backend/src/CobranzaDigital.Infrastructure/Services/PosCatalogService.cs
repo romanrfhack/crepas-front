@@ -2232,14 +2232,14 @@ public sealed class PosCatalogService : IPosCatalogService
 
         if (itemType == CatalogItemType.Product)
         {
-            if (!string.IsNullOrWhiteSpace(line.ExternalCode) && productsByCode.TryGetValue(line.ExternalCode.Trim(), out var byCode))
-            {
-                return byCode;
-            }
-
             if (line.ItemId.HasValue && productsById.TryGetValue(line.ItemId.Value, out var byId))
             {
                 return byId;
+            }
+
+            if (!string.IsNullOrWhiteSpace(line.ExternalCode) && productsByCode.TryGetValue(line.ExternalCode.Trim(), out var byCode))
+            {
+                return byCode;
             }
 
             return null;
