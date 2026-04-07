@@ -568,7 +568,6 @@ export class PosCajaPage implements OnDestroy {
       this.inProgressClientSaleId.set(null);
       await this.refreshClosePreviewWithCashCount();
     } catch (error) {
-      console.log('[confirmPayment] Caught error:', error);
       await this.handleSaleError(error);
     } finally {
       this.loading.set(false);
@@ -796,7 +795,6 @@ export class PosCajaPage implements OnDestroy {
   }
 
   private async handleSaleError(error: unknown) {
-    console.log('[handleSaleError] Entered with error:', error);
     const status = this.getHttpStatus(error);
     const payload = this.extractErrorPayload(error);
 
@@ -809,11 +807,7 @@ export class PosCajaPage implements OnDestroy {
     }
 
     if (status === 409 && this.isItemUnavailableError(payload)) {
-      console.log('[handleSaleError] Entered item unavailable branch');
-      console.log('[handleSaleError] status:', status);
-      console.log('[handleSaleError] payload:', payload);
       const unavailable = this.getUnavailableItemData(payload);
-      console.log('[handleSaleError] unavailable data:', unavailable);
       this.unavailableItemName.set(unavailable.itemName);
       this.errorMessage.set('No disponible. Actualiza catálogo e intenta de nuevo.');
       this.canRefreshCatalogAfterUnavailable.set(true);
@@ -851,9 +845,7 @@ export class PosCajaPage implements OnDestroy {
     }
 
     if (status === 409) {
-      console.log('[handleSaleError] Entered generic 409 branch');
       const unavailable = this.getUnavailableItemData(payload);
-      console.log('[handleSaleError] unavailable data from generic:', unavailable);
       this.unavailableItemName.set(unavailable.itemName);
       this.errorMessage.set('No disponible. Actualiza catálogo e intenta de nuevo.');
       this.canRefreshCatalogAfterUnavailable.set(true);
