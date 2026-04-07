@@ -192,7 +192,29 @@ public sealed class PosSalesService : IPosSalesService
             var insufficient = availability.Lines.FirstOrDefault(x => !x.Ok);
             if (insufficient is not null)
             {
-                throw new ConflictException("INSUFFICIENT_STOCK");
+                Product? insufficientProduct = null;
+                if (insufficient.ProductId.HasValue)
+                {
+                    products.TryGetValue(insufficient.ProductId.Value, out insufficientProduct);
+                }
+
+                if (insufficientProduct is null && !string.IsNullOrWhiteSpace(insufficient.ExternalCode))
+                {
+                    insufficientProduct = products.Values.FirstOrDefault(x =>
+                        string.Equals(x.ExternalCode, insufficient.ExternalCode, StringComparison.Ordinal));
+                }
+
+                if (insufficientProduct is null)
+                {
+                    throw new ConflictException("INSUFFICIENT_STOCK");
+                }
+
+                throw new ItemUnavailableException(
+                    "Product",
+                    insufficientProduct.Id,
+                    insufficientProduct.Name,
+                    "OutOfStock",
+                    insufficient.OnHandQty);
             }
 
             var quote = await _pricingQuoteService.QuoteAsync(
@@ -480,6 +502,19 @@ public sealed class PosSalesService : IPosSalesService
             IDbContextTransaction tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct).ConfigureAwait(false);
             try
             {
+                await _inventoryConsumptionService.ConsumeForSaleAsync(
+                    tenantId,
+                    storeId,
+                    sale.Id,
+                    userId,
+                    request.Items,
+                    products,
+                    extras,
+                    enforceStockForAllItems: false,
+                    storeOverrides,
+                    tenantDisabled.Select(x => (x.ItemType, x.ItemId)).ToHashSet(),
+                    ct).ConfigureAwait(false);
+
                 await _auditLogger.LogAsync(new AuditEntry(
                     Action: "Create",
                     UserId: userId,
