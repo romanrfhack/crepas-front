@@ -4,7 +4,6 @@
 
 El pipeline de CI vive en `/.github/workflows/ci.yml` y se ejecuta en:
 
-- `pull_request` hacia `main`
 - `push` a `main`
 - `workflow_dispatch` manual
 
@@ -29,6 +28,12 @@ Ambos se disparan por:
 
 - `workflow_run` del workflow `CI` cuando termina en `success`
 - `workflow_dispatch` manual para redeploy
+
+## Configuración operativa fuera del repo
+
+- El deploy API asume que el host ya tiene configurado su `EnvironmentFile` o variables de entorno con `ConnectionStrings__DefaultConnection` y `Jwt__SigningKey`.
+- El workflow de deploy publica artefactos; no inyecta secretos de aplicación dentro del repositorio ni dentro de `appsettings*.json`.
+- Contrato operativo vigente: [release-config.md](./release-config.md)
 
 Además, en modo `workflow_run`, cada deploy valida cambios en su carpeta:
 

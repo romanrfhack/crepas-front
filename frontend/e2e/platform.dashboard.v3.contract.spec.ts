@@ -25,6 +25,23 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
     stockoutDetails: [] as string[],
     adminUsers: [] as string[],
   };
+  const gotoDashboard = async () => {
+    const summaryResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/v1/platform/dashboard/summary') &&
+        response.request().method() === 'GET' &&
+        response.status() === 200,
+    );
+    const alertsResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/v1/platform/dashboard/alerts') &&
+        response.request().method() === 'GET' &&
+        response.status() === 200,
+    );
+    await page.goto('/app/platform/dashboard');
+    await Promise.all([summaryResponse, alertsResponse]);
+    await expect(page.getByTestId('platform-dashboard-page')).toBeVisible({ timeout: 15000 });
+  };
 
   await page.route('**/api/v1/admin/roles', (route) =>
     route.fulfill({
@@ -422,14 +439,21 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
     return route.fulfill({ status: 404, body: '{}' });
   });
 
-  await page.goto('/app/platform/dashboard');
-  await expect(page.getByTestId('platform-dashboard-page')).toBeVisible();
+  await gotoDashboard();
 
-  await page.getByTestId('platform-alert-drilldown-open-STORE_WITHOUT_ADMINSTORE').click();
-  await page.getByTestId('platform-alert-drilldown-action-create-adminstore-0').click();
-  await expect(page).toHaveURL(
-    /\/app\/admin\/users\?tenantId=tenant-1&storeId=store-1&intent=create-user&suggestedRole=AdminStore/
+  const openStoreWithoutAdminDrilldown = page.getByTestId(
+    'platform-alert-drilldown-open-STORE_WITHOUT_ADMINSTORE',
   );
+  await expect(openStoreWithoutAdminDrilldown).toBeVisible();
+  await openStoreWithoutAdminDrilldown.click({ force: true });
+  await expect(page.getByTestId('platform-alert-drilldown')).toBeVisible();
+  await Promise.all([
+    page.waitForURL(
+      /\/app\/admin\/users\?tenantId=tenant-1&storeId=store-1&intent=create-user&suggestedRole=AdminStore/,
+    ),
+    page.getByTestId('platform-alert-drilldown-action-create-adminstore-0').click({ force: true }),
+  ]);
+  await expect(page.getByTestId('admin-users-page')).toBeVisible();
   await expect(page.getByTestId('admin-users-create-intent-active')).toBeVisible();
   await expect(page.getByTestId('admin-users-filter-tenant')).toHaveValue('tenant-1');
   await expect(page.getByTestId('admin-users-filter-store')).toHaveValue('store-1');
@@ -437,28 +461,57 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
   await expect(page.getByTestId('admin-users-create-context-store')).toContainText('store-1');
   await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('AdminStore');
 
-  await page.goto('/app/platform/dashboard');
-  await page.getByTestId('platform-alert-drilldown-open-STORE_SCOPED_USER_WITHOUT_STORE').click();
-  await page
-    .getByTestId('platform-alert-drilldown-action-STORE_SCOPED_USER_WITHOUT_STORE-0')
-    .click();
-  await expect(page).toHaveURL(/\/app\/admin\/users\?tenantId=tenant-2/);
+  await gotoDashboard();
+  const openStoreScopedUserDrilldown = page.getByTestId(
+    'platform-alert-drilldown-open-STORE_SCOPED_USER_WITHOUT_STORE',
+  );
+  await expect(openStoreScopedUserDrilldown).toBeVisible();
+  await openStoreScopedUserDrilldown.click({ force: true });
+  await expect(page.getByTestId('platform-alert-drilldown')).toBeVisible();
+  await Promise.all([
+    page.waitForURL(/\/app\/admin\/users\?tenantId=tenant-2/),
+    page
+      .getByTestId('platform-alert-drilldown-action-STORE_SCOPED_USER_WITHOUT_STORE-0')
+      .click({ force: true }),
+  ]);
+  await expect(page.getByTestId('admin-users-page')).toBeVisible();
   await expect(page.getByTestId('admin-users-filter-tenant')).toHaveValue('tenant-2');
   await page.getByTestId('admin-users-create-open').click();
-  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('tenant-2');
+  await expect(page.getByTestId('admin-users-create-context-badge')).toBeVisible();
+  await expect(page.getByTestId('admin-users-create-context-badge')).toContainText(
+    'Tenant: tenant-2',
+  );
 
-  await page.goto('/app/platform/dashboard');
-  await page.getByTestId('platform-tenant-overview-open-tenant-1').click();
-  await expect(page.getByTestId('platform-tenant-overview-action-create-tenantadmin')).toBeVisible();
-  await page.getByTestId('platform-tenant-overview-action-create-tenantadmin').click();
-  await expect(page).toHaveURL(/\/app\/admin\/users\?tenantId=tenant-1&intent=create-user&suggestedRole=TenantAdmin/);
+  await gotoDashboard();
+  const openTenantOverview = page.getByTestId('platform-tenant-overview-open-tenant-1');
+  await expect(openTenantOverview).toBeVisible();
+  await openTenantOverview.click({ force: true });
+  await expect(page.getByTestId('platform-tenant-overview')).toBeVisible();
+  await expect(
+    page.getByTestId('platform-tenant-overview-action-create-tenantadmin'),
+  ).toBeVisible();
+  await Promise.all([
+    page.waitForURL(
+      /\/app\/admin\/users\?tenantId=tenant-1&intent=create-user&suggestedRole=TenantAdmin/,
+    ),
+    page.getByTestId('platform-tenant-overview-action-create-tenantadmin').click({ force: true }),
+  ]);
+  await expect(page.getByTestId('admin-users-page')).toBeVisible();
   await expect(page.getByTestId('admin-users-filter-tenant')).toHaveValue('tenant-1');
   await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('TenantAdmin');
 
-  await page.goto('/app/platform/dashboard');
-  await page.getByTestId('platform-store-stockout-open-store-1').click();
-  await page.getByTestId('platform-store-stockout-action-create-user').click();
-  await expect(page).toHaveURL(/\/app\/admin\/users\?tenantId=tenant-1&storeId=store-1&intent=create-user&suggestedRole=Cashier/);
+  await gotoDashboard();
+  const openStoreStockout = page.getByTestId('platform-store-stockout-open-store-1');
+  await expect(openStoreStockout).toBeVisible();
+  await openStoreStockout.click({ force: true });
+  await expect(page.getByTestId('platform-store-stockout-details')).toBeVisible();
+  await Promise.all([
+    page.waitForURL(
+      /\/app\/admin\/users\?tenantId=tenant-1&storeId=store-1&intent=create-user&suggestedRole=Cashier/,
+    ),
+    page.getByTestId('platform-store-stockout-action-create-user').click({ force: true }),
+  ]);
+  await expect(page.getByTestId('admin-users-page')).toBeVisible();
   await expect(page.getByTestId('admin-users-filter-tenant')).toHaveValue('tenant-1');
   await expect(page.getByTestId('admin-users-filter-store')).toHaveValue('store-1');
 

@@ -8,7 +8,7 @@
 ```bash
 docker run --name cobranzadigital-sql-test \
   -e ACCEPT_EULA=Y \
-  -e MSSQL_SA_PASSWORD='YourStrong!Passw0rd' \
+  -e MSSQL_SA_PASSWORD='<per-session-test-password>' \
   -p 1433:1433 \
   -d mcr.microsoft.com/mssql/server:2022-latest
 ```
@@ -23,13 +23,13 @@ docker start cobranzadigital-sql-test
 ### Bash / zsh
 ```bash
 export TESTS_USE_SQLSERVER=1
-export ConnectionStrings__DefaultConnection='Server=localhost,1433;Database=CrepasDB_Test_Base;User Id=sa;Password=YourStrong!Passw0rd;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True'
+export ConnectionStrings__DefaultConnection='Server=localhost,1433;Database=CrepasDB_Test_Base;User Id=sa;Password=<per-session-test-password>;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True'
 ```
 
 ### PowerShell (Process scope)
 ```powershell
 [Environment]::SetEnvironmentVariable('TESTS_USE_SQLSERVER', '1', 'Process')
-[Environment]::SetEnvironmentVariable('ConnectionStrings__DefaultConnection', 'Server=localhost,1433;Database=CrepasDB_Test_Base;User Id=sa;Password=YourStrong!Passw0rd;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True', 'Process')
+[Environment]::SetEnvironmentVariable('ConnectionStrings__DefaultConnection', 'Server=localhost,1433;Database=CrepasDB_Test_Base;User Id=sa;Password=<per-session-test-password>;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True', 'Process')
 ```
 
 > No uses scope `User` para estas variables: el backend en Visual Studio también hereda variables persistentes y puede arrancar con una conexión de tests.
@@ -57,3 +57,6 @@ Variables requeridas en GitHub Actions (env del job):
 - `TESTS_USE_SQLSERVER=1`.
 - `ConnectionStrings__DefaultConnection`.
 - Credenciales de deploy ya existentes para jobs de despliegue.
+
+Referencia operativa de release/configuración:
+- [release-config.md](../../docs/release-config.md)

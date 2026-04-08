@@ -154,6 +154,11 @@ public static class JwtConfigurationExtensions
 
 internal sealed class JwtOptionsValidator : IValidateOptions<JwtOptions>
 {
+    private static readonly string[] ForbiddenSigningKeys =
+    [
+        "CHANGE_ME_TO_A_SECURE_32_CHAR_MIN_KEY"
+    ];
+
     public ValidateOptionsResult Validate(string? name, JwtOptions options)
     {
         if (string.IsNullOrWhiteSpace(options.SigningKey))
@@ -164,6 +169,12 @@ internal sealed class JwtOptionsValidator : IValidateOptions<JwtOptions>
         if (options.SigningKey.Length < 32)
         {
             return ValidateOptionsResult.Fail("Jwt:SigningKey must be at least 32 characters.");
+        }
+
+        if (ForbiddenSigningKeys.Contains(options.SigningKey, StringComparer.Ordinal))
+        {
+            return ValidateOptionsResult.Fail(
+                "Jwt:SigningKey must be configured via user-secrets, CI variables, or the host EnvironmentFile.");
         }
 
         return ValidateOptionsResult.Success;

@@ -41,22 +41,22 @@ jobs:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
+    env:
+      TESTS_USE_SQLSERVER: "1"
+      ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=CrepasDB_CI_${{ github.run_id }}_${{ github.run_attempt }};User Id=sa;Password=${{ format('CiSqlRun{0}Try{1}!Aa1', github.run_id, github.run_attempt) }};Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;"
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
         env:
           ACCEPT_EULA: Y
-          MSSQL_SA_PASSWORD: Strong_Passw0rd_2026!
+          MSSQL_SA_PASSWORD: "${{ format('CiSqlRun{0}Try{1}!Aa1', github.run_id, github.run_attempt) }}"
         ports:
           - 1433:1433
         options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Strong_Passw0rd_2026! -C -Q 'SELECT 1'"
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P ${{ format('CiSqlRun{0}Try{1}!Aa1', github.run_id, github.run_attempt) }} -C -Q 'SELECT 1'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 20
-    env:
-      TESTS_USE_SQLSERVER: "1"
-      ConnectionStrings__DefaultConnection: Server=localhost,1433;Database=CrepasDB_CI_${{ github.run_id }}_${{ github.run_attempt }};User Id=sa;Password=Strong_Passw0rd_2026!;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;
     steps:
       - uses: actions/checkout@v4
 

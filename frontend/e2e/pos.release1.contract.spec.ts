@@ -37,7 +37,7 @@ const seedAuth = async (page: Page, role: Role) => {
   await page.addInitScript((accessToken: string) => {
     localStorage.setItem('access_token', accessToken);
     localStorage.setItem('refresh_token', 'refresh-token-e2e');
-    localStorage.removeItem('pos_active_store_id');
+    localStorage.setItem('pos_active_store_id', 'store-e2e');
   }, token);
 };
 
@@ -106,6 +106,99 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
           includedItems: [],
           overrides: [],
           versionStamp: 'e2e-v1',
+        }),
+      });
+    }
+
+    if (pathname.endsWith('/wholesale/policy') && method === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          isEnabled: false,
+          name: 'Mayoreo deshabilitado',
+          tiers: [],
+        }),
+      });
+    }
+
+    if (pathname.endsWith('/wholesale/products/P1/override') && method === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          productId: 'P1',
+          mode: 'UseTenantDefault',
+          tiers: [],
+        }),
+      });
+    }
+
+    if (pathname.endsWith('/pricing/quote') && method === 'POST') {
+      const lines = Array.isArray(body.lines)
+        ? body.lines.map((line) => {
+            const requestedQty = Number((line as Record<string, unknown>).qty ?? 0);
+            const baseUnitPrice = Number((line as Record<string, unknown>).basePrice ?? 0);
+            const appliedUnitPrice = Number(
+              (line as Record<string, unknown>).requestedUnitPrice ?? baseUnitPrice,
+            );
+
+            return {
+              productId: String((line as Record<string, unknown>).productId ?? 'P1'),
+              externalCode:
+                typeof (line as Record<string, unknown>).externalCode === 'string'
+                  ? ((line as Record<string, unknown>).externalCode as string)
+                  : null,
+              qty: requestedQty,
+              baseUnitPrice,
+              appliedUnitPrice,
+              tierApplied: null,
+              lineSubtotal: appliedUnitPrice * requestedQty,
+              isMismatch: false,
+              expectedUnitPrice: appliedUnitPrice,
+            };
+          })
+        : [];
+
+      const total = lines.reduce((sum, line) => sum + Number(line.lineSubtotal ?? 0), 0);
+
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          lines,
+          totals: {
+            subtotal: total,
+            total,
+          },
+        }),
+      });
+    }
+
+    if (pathname.endsWith('/inventory/validate-availability') && method === 'POST') {
+      const lines = Array.isArray(body.lines)
+        ? body.lines.map((line) => ({
+            productId: String((line as Record<string, unknown>).productId ?? 'P1'),
+            externalCode:
+              typeof (line as Record<string, unknown>).externalCode === 'string'
+                ? ((line as Record<string, unknown>).externalCode as string)
+                : null,
+            requestedQty: Number((line as Record<string, unknown>).qty ?? 0),
+            onHandQty: 10,
+            ok: true,
+            message: null,
+          }))
+        : [];
+
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          lines,
+          summary: {
+            insufficientCount: 0,
+          },
         }),
       });
     }
@@ -338,6 +431,7 @@ const submitMixedPayment = async (page: Page) => {
   const amountCashInput = page.getByTestId('payment-amount-0');
   const addPaymentButton = page.getByTestId('add-payment');
   const confirmPaymentButton = page.getByTestId('confirm-payment');
+  const paymentModal = page.locator('section[aria-label="Cobro de venta"]');
 
   await expect(amountCashInput).toBeVisible();
   await amountCashInput.fill('20');
@@ -359,6 +453,7 @@ const submitMixedPayment = async (page: Page) => {
     button.scrollIntoView({ block: 'center', inline: 'nearest' });
   });
   await confirmPaymentButton.click({ force: true });
+  await expect(paymentModal).toBeHidden();
 };
 
 test('A) Mixed payments envía payments[] en POST /pos/sales', async ({ page }) => {
@@ -452,7 +547,7 @@ test('E) Cache stale: create sale 409 unavailable y actualización de catálogo 
 
   await page.addInitScript(() => {
     localStorage.setItem(
-      'pos_catalog_snapshot_cache:default',
+      'pos_catalog_snapshot_cache:store-e2e',
       JSON.stringify({
         etag: '"snapshot-stale"',
         snapshot: {

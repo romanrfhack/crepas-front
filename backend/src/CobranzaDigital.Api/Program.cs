@@ -169,6 +169,8 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+app.ValidateReleaseConfiguration();
+
 var isTestingEnvironment = app.Environment.IsEnvironment("Testing");
 var applyMigrationsOnStartup =
     string.Equals(app.Configuration["APPLY_MIGRATIONS_ON_STARTUP"], "1", StringComparison.Ordinal);
@@ -221,13 +223,14 @@ var swaggerEnabled =
     app.Environment.IsDevelopment() ||
     app.Configuration.GetValue<bool>("Swagger:Enabled");
 
+if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"))
+{
+    app.UseHsts();
+}
+
 if (swaggerEnabled)
 {
     app.UseSwaggerWithApiVersioning();
-}
-else
-{
-    app.UseHsts();
 }
 
 app.UseCorrelationId();

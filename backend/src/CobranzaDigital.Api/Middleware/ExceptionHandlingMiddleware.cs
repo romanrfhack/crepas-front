@@ -107,7 +107,23 @@ public sealed partial class ExceptionHandlingMiddleware
         }
         else
         {
-            problemDetails.Detail = problemDetails.Status switch
+            problemDetails.Detail = ResolveSafeDetail(exception, problemDetails.Status ?? StatusCodes.Status500InternalServerError);
+        }
+
+        return problemDetails;
+    }
+
+    private static string ResolveSafeDetail(Exception exception, int statusCode)
+    {
+        return exception switch
+        {
+            ConflictException conflictException when !string.IsNullOrWhiteSpace(conflictException.Message) =>
+                conflictException.Message,
+            ItemUnavailableException unavailableException when string.Equals(unavailableException.Reason, "OutOfStock", StringComparison.Ordinal) =>
+                "INSUFFICIENT_STOCK",
+            InventoryAdjustmentConflictException inventoryConflictException when !string.IsNullOrWhiteSpace(inventoryConflictException.Reason) =>
+                inventoryConflictException.Reason,
+            _ => statusCode switch
             {
                 StatusCodes.Status400BadRequest => "Validation failed.",
                 StatusCodes.Status401Unauthorized => "Authentication required.",
@@ -115,10 +131,8 @@ public sealed partial class ExceptionHandlingMiddleware
                 StatusCodes.Status404NotFound => "Resource was not found.",
                 StatusCodes.Status409Conflict => "A conflict occurred.",
                 _ => "An unexpected error occurred."
-            };
-        }
-
-        return problemDetails;
+            }
+        };
     }
 
     private ValidationProblemDetails CreateValidationProblemDetails(HttpContext context, ValidationException exception)

@@ -31,7 +31,10 @@ dotnet tool install --global dotnet-ef
 ## Bootstrap de ambiente desde cero (BD limpia)
 
 1. **Configura la conexión a la base de datos.**
-   - Edita `src/CobranzaDigital.Api/appsettings.json` o usa variables de entorno/secretos para definir `ConnectionStrings:DefaultConnection` y el `DatabaseOptions:ConnectionStringName`.
+   - En `Development`, usa `dotnet user-secrets` para definir `ConnectionStrings:DefaultConnection`.
+   - En `Production`, usa variables de entorno o `EnvironmentFile` del host.
+   - No guardes secretos en `appsettings*.json`.
+   - Referencia operativa: [release-config.md](../../docs/release-config.md).
 
 2. **(Opcional) Elimina la base de datos existente para arrancar limpia.**
    ```bash
@@ -65,15 +68,11 @@ Para habilitar seed de datos al inicio (incluye seed de identidad fuera de `Test
 
 Para crear el usuario admin automáticamente:
 
-1. Define en configuración los valores `IdentitySeed:AdminEmail` y `IdentitySeed:AdminPassword`.
-   - Ejemplo en `appsettings.Development.json`:
-     ```json
-     {
-       "IdentitySeed": {
-         "AdminEmail": "admin@local",
-         "AdminPassword": "P@ssw0rd!"
-       }
-     }
+1. Define `IdentitySeed:AdminEmail` y `IdentitySeed:AdminPassword` por `user-secrets` o variables del proceso.
+   - Ejemplo:
+     ```bash
+     dotnet user-secrets set "IdentitySeed:AdminEmail" "admin@local"
+     dotnet user-secrets set "IdentitySeed:AdminPassword" "<solo-para-seed-local>"
      ```
 2. Arranca la API en `Development` y el usuario se crea/asigna al rol `Admin`.
 
@@ -86,7 +85,7 @@ Para evitar conflictos, usa **solo un modo de autenticación por cadena**:
 
 - **SQL Server Authentication** (usuario/contraseña):
   ```text
-  Server=PC\SQLEXPRESS;Database=CrepasDB;User Id=sa;Password=Admin123!;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;
+  Server=PC\SQLEXPRESS;Database=CrepasDB;User Id=<sql-user>;Password=<sql-password>;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;
   ```
 - **Windows Integrated Security**:
   ```text

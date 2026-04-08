@@ -19,9 +19,13 @@
     <PackageReference Include="Microsoft.OpenApi" />
   </ItemGroup>
 
-		<ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\\CobranzaDigital.Application\\CobranzaDigital.Application.csproj" />
     <ProjectReference Include="..\\CobranzaDigital.Infrastructure\\CobranzaDigital.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
 </Project>
