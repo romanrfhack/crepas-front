@@ -303,6 +303,59 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     }
 
     [Fact]
+    public async Task CreateSale_IdempotencyConflict_When_TicketCompositionChanges()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"IdemComp-{Guid.NewGuid():N}", sortOrder = 3, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Mocha deluxe", categoryId = category.Id, basePrice = 90m, isActive = true, isInventoryTracked = false });
+        var extra = await PostAsync<ExtraResponse>("/api/v1/pos/admin/extras", token, new { name = "Shot extra", price = 10m, isActive = true, isAvailable = true, isInventoryTracked = false });
+        var clientOperationId = Guid.NewGuid();
+
+        using var firstReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        firstReq.Content = JsonContent.Create(new
+        {
+            clientOperationId,
+            items = new[]
+            {
+                new
+                {
+                    productId = product.Id,
+                    quantity = 1,
+                    selections = Array.Empty<object>(),
+                    extras = new[] { new { extraId = extra.Id, quantity = 1 } }
+                }
+            },
+            payment = new { method = "Cash", amount = 100m }
+        });
+        using var firstResp = await _client.SendAsync(firstReq);
+        Assert.Equal(HttpStatusCode.OK, firstResp.StatusCode);
+
+        using var mutatedReq = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        mutatedReq.Content = JsonContent.Create(new
+        {
+            clientOperationId,
+            items = new[]
+            {
+                new
+                {
+                    productId = product.Id,
+                    quantity = 1,
+                    selections = Array.Empty<object>(),
+                    extras = new[] { new { extraId = extra.Id, quantity = 2 } }
+                }
+            },
+            payment = new { method = "Cash", amount = 110m }
+        });
+        using var mutatedResp = await _client.SendAsync(mutatedReq);
+        var mutatedPayload = await mutatedResp.Content.ReadFromJsonAsync<JsonObject>();
+
+        Assert.Equal(HttpStatusCode.Conflict, mutatedResp.StatusCode);
+        Assert.Equal("IDEMPOTENCY_CONFLICT", mutatedPayload?["detail"]?.GetValue<string>());
+    }
+
+    [Fact]
     public async Task CreateSale_ReturnsConflict_OnPriceMismatch()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
@@ -554,6 +607,31 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     }
 
     [Fact]
+    public async Task CreateSale_Concurrent_IdenticalReplay_Returns_SingleSale_WithStableReplay()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local");
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"IdemRace-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Replay race", categoryId = category.Id, basePrice = 45m, isActive = true, isInventoryTracked = false });
+        var clientOperationId = Guid.NewGuid();
+
+        var t1 = SendCreateSaleReplayAsync(token, clientOperationId, product.Id, 1, 45m);
+        var t2 = SendCreateSaleReplayAsync(token, clientOperationId, product.Id, 1, 45m);
+        var responses = await Task.WhenAll(t1, t2);
+
+        Assert.All(responses, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
+        Assert.Equal(responses[0].SaleId, responses[1].SaleId);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var tenantId = Guid.Parse(_tenantHeaderValue);
+        var storedSales = await db.Sales.AsNoTracking()
+            .CountAsync(x => x.TenantId == tenantId && x.ClientSaleId == clientOperationId);
+        Assert.Equal(1, storedSales);
+    }
+
+    [Fact]
     public async Task CreateSale_Returns_OutOfStock_When_InventoryTracked_Even_When_ShowOnlyInStock_Disabled()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
@@ -713,7 +791,74 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         using var voidReq2 = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{created.SaleId}/void", token);
         voidReq2.Content = JsonContent.Create(body);
         using var voidResp2 = await _client.SendAsync(voidReq2);
+        var replay = await voidResp2.Content.ReadFromJsonAsync<VoidSaleResponse>();
         Assert.Equal(HttpStatusCode.OK, voidResp2.StatusCode);
+        Assert.NotNull(replay);
+        Assert.Equal(created.SaleId, replay!.SaleId);
+    }
+
+    [Fact]
+    public async Task VoidSale_ReturnsConflict_When_ClientVoidId_IsReused_ForAnotherSale()
+    {
+        await CloseAnyOpenShiftAsync();
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local", initialCash: 0m);
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"VoidScope-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Scope void", categoryId = category.Id, basePrice = 70m, isActive = true });
+
+        var saleA = await CreateSimpleSaleAsync(token, product.Id, 1, 70m);
+        var saleB = await CreateSimpleSaleAsync(token, product.Id, 1, 70m);
+        var clientVoidId = Guid.NewGuid();
+
+        using (var voidReqA = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{saleA.SaleId}/void", token))
+        {
+            voidReqA.Content = JsonContent.Create(new { reasonCode = "CashierError", reasonText = "error", note = "scope", clientVoidId });
+            using var voidRespA = await _client.SendAsync(voidReqA);
+            Assert.Equal(HttpStatusCode.OK, voidRespA.StatusCode);
+        }
+
+        using var voidReqB = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{saleB.SaleId}/void", token);
+        voidReqB.Content = JsonContent.Create(new { reasonCode = "CashierError", reasonText = "error", note = "scope", clientVoidId });
+        using var voidRespB = await _client.SendAsync(voidReqB);
+        var conflictPayload = await voidRespB.Content.ReadFromJsonAsync<JsonObject>();
+
+        Assert.Equal(HttpStatusCode.Conflict, voidRespB.StatusCode);
+        Assert.Equal("IDEMPOTENCY_CONFLICT", conflictPayload?["detail"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task VoidSale_Concurrent_Replay_DoesNotDuplicateReversal_OrReturn500()
+    {
+        await CloseAnyOpenShiftAsync();
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        await EnsureOpenShiftAsync(token, "admin@test.local", initialCash: 0m);
+
+        var category = await PostAsync<CategoryResponse>("/api/v1/pos/admin/categories", token, new { name = $"VoidRace-{Guid.NewGuid():N}", sortOrder = 1, isActive = true });
+        var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "Void race tracked", categoryId = category.Id, basePrice = 30m, isActive = true, isInventoryTracked = true });
+        var storeId = await GetDefaultStoreIdAsync();
+        await AdjustCatalogInventoryAsync(token, storeId, "Product", product.Id, 5m, "InitialLoad");
+
+        var sale = await CreateSimpleSaleAsync(token, product.Id, 1, 30m);
+        var clientVoidId = Guid.NewGuid();
+
+        var t1 = SendVoidSaleAsync(token, sale.SaleId, clientVoidId);
+        var t2 = SendVoidSaleAsync(token, sale.SaleId, clientVoidId);
+        var responses = await Task.WhenAll(t1, t2);
+
+        Assert.All(responses, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
+        Assert.All(responses, response => Assert.Equal(sale.SaleId, response.SaleId));
+        Assert.Equal(5m, await GetCatalogStockAsync(storeId, "Product", product.Id));
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var voidRows = await db.CatalogInventoryAdjustments.AsNoTracking()
+            .CountAsync(x => x.StoreId == storeId
+                             && x.ItemType.ToString() == "Product"
+                             && x.ItemId == product.Id
+                             && x.Reason == "VoidReversal"
+                             && x.ReferenceId == sale.SaleId.ToString());
+        Assert.Equal(1, voidRows);
     }
 
 
@@ -829,6 +974,47 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
 
         using var resp = await _client.SendAsync(req);
         return resp.StatusCode;
+    }
+
+    private async Task<CreateSaleResponse> CreateSimpleSaleAsync(string token, Guid productId, int quantity, decimal total)
+    {
+        using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        req.Content = JsonContent.Create(new
+        {
+            clientSaleId = Guid.NewGuid(),
+            items = new[] { new { productId, quantity, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
+            payment = new { method = "Cash", amount = total }
+        });
+
+        using var resp = await _client.SendAsync(req);
+        var sale = await resp.Content.ReadFromJsonAsync<CreateSaleResponse>();
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        return sale!;
+    }
+
+    private async Task<(HttpStatusCode StatusCode, Guid SaleId)> SendCreateSaleReplayAsync(string token, Guid clientOperationId, Guid productId, int quantity, decimal total)
+    {
+        using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/pos/sales", token);
+        req.Content = JsonContent.Create(new
+        {
+            clientOperationId,
+            items = new[] { new { productId, quantity, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
+            payment = new { method = "Cash", amount = total }
+        });
+
+        using var resp = await _client.SendAsync(req);
+        var sale = await resp.Content.ReadFromJsonAsync<CreateSaleResponse>();
+        return (resp.StatusCode, sale?.SaleId ?? Guid.Empty);
+    }
+
+    private async Task<(HttpStatusCode StatusCode, Guid SaleId)> SendVoidSaleAsync(string token, Guid saleId, Guid clientVoidId)
+    {
+        using var req = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/pos/sales/{saleId}/void", token);
+        req.Content = JsonContent.Create(new { reasonCode = "CashierError", note = "concurrency", clientVoidId });
+
+        using var resp = await _client.SendAsync(req);
+        var payload = await resp.Content.ReadFromJsonAsync<VoidSaleResponse>();
+        return (resp.StatusCode, payload?.SaleId ?? Guid.Empty);
     }
 
     private async Task UpdateInventorySettingsAsync(string token, bool showOnlyInStock)
@@ -1003,6 +1189,7 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
     private sealed record OptionSetResponse(Guid Id, string Name, bool IsActive);
     private sealed record OptionItemResponse(Guid Id, Guid OptionSetId, string Name, bool IsActive, bool IsAvailable, int SortOrder);
     private sealed record CreateSaleResponse(Guid SaleId, string Folio, DateTimeOffset OccurredAtUtc, decimal Total);
+    private sealed record VoidSaleResponse(Guid SaleId, JsonElement Status, DateTimeOffset VoidedAtUtc);
     private sealed record PosShiftResponse(Guid Id, DateTimeOffset OpenedAtUtc, DateTimeOffset? ClosedAtUtc, decimal OpeningCashAmount, decimal? ClosingCashAmount, string? Notes, Guid StoreId);
     private sealed record SnapshotResponse(Guid TenantId, Guid VerticalId, Guid CatalogTemplateId, Guid StoreId, string TimeZoneId, DateTimeOffset GeneratedAtUtc, string CatalogVersion, string EtagSeed, List<ProductResponse> Products, List<SnapshotOverride> Overrides, string VersionStamp);
     private sealed record SnapshotOverride(Guid Id, Guid ProductId, string GroupKey, bool IsActive, List<Guid> AllowedOptionItemIds);

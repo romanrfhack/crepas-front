@@ -109,47 +109,10 @@ public sealed class PosSalesService : IPosSalesService
                 }
             }
 
-            var existingSale = await _db.Sales.AsNoTracking()
-                .Where(x => x.ClientSaleId == clientOperationId &&
-                            x.TenantId == tenantId &&
-                            x.StoreId == storeId)
-                .Select(x => new
-                {
-                    x.Id,
-                    x.Folio,
-                    x.OccurredAtUtc,
-                    x.Subtotal,
-                    x.Total,
-                    x.Currency,
-                    x.CorrelationId
-                })
-                .FirstOrDefaultAsync(ct)
-                .ConfigureAwait(false);
-
+            var existingSale = await TryGetExistingSaleResponseAsync(tenantId, storeId, clientOperationId, requestHash, correlationId, ct).ConfigureAwait(false);
             if (existingSale is not null)
             {
-                if (!string.Equals(existingSale.CorrelationId, requestHash, StringComparison.Ordinal))
-                {
-                    throw new ConflictException("IDEMPOTENCY_CONFLICT");
-                }
-
-                var existingLines = await _db.SaleItems.AsNoTracking()
-                    .Where(x => x.SaleId == existingSale.Id)
-                    .Select(x => new CreateSaleReceiptLineDto(
-                        x.ProductId,
-                        x.ProductExternalCode,
-                        x.ProductNameSnapshot,
-                        x.Quantity,
-                        x.UnitPriceSnapshot,
-                        x.UnitPriceSnapshot,
-                        x.LineTotal,
-                        x.NotesSnapshot,
-                        x.NotesSnapshot))
-                    .ToListAsync(ct)
-                    .ConfigureAwait(false);
-
-                LogAction("IdempotentHit", "Sale", existingSale.Id, correlationId);
-                return new CreateSaleResponseDto(existingSale.Id, existingSale.Folio, existingSale.OccurredAtUtc, existingSale.Total);
+                return existingSale;
             }
 
             var tenantTemplateId = await _db.TenantCatalogTemplates.AsNoTracking()
@@ -533,6 +496,14 @@ public sealed class PosSalesService : IPosSalesService
             catch (DbUpdateException)
             {
                 await tx.RollbackAsync(ct).ConfigureAwait(false);
+                _db.ChangeTracker.Clear();
+
+                var replay = await TryGetExistingSaleResponseAsync(tenantId, storeId, clientOperationId, requestHash, correlationId, ct).ConfigureAwait(false);
+                if (replay is not null)
+                {
+                    return replay;
+                }
+
                 LogAction("CreateConflict", "Sale", sale.Id, correlationId);
                 throw new ConflictException("IDEMPOTENCY_CONFLICT");
             }
@@ -1057,28 +1028,6 @@ public sealed class PosSalesService : IPosSalesService
         }
 
         var tenantId = RequireEffectiveTenantId();
-        var sale = await _db.Sales.FirstOrDefaultAsync(x => x.Id == saleId && x.TenantId == tenantId, ct).ConfigureAwait(false)
-            ?? throw new NotFoundException("Sale not found.");
-
-        if (sale.Status == SaleStatus.Void)
-        {
-            if (request.ClientVoidId.HasValue && sale.ClientVoidId == request.ClientVoidId)
-            {
-                return new VoidSaleResponseDto(sale.Id, sale.Status, sale.VoidedAtUtc ?? _businessTime.UtcNow);
-            }
-
-            throw new ConflictException("Sale has already been voided.");
-        }
-
-        if (request.ClientVoidId.HasValue)
-        {
-            var existing = await _db.Sales.AsNoTracking().FirstOrDefaultAsync(x => x.ClientVoidId == request.ClientVoidId && x.TenantId == tenantId, ct).ConfigureAwait(false);
-            if (existing is not null)
-            {
-                return new VoidSaleResponseDto(existing.Id, existing.Status, existing.VoidedAtUtc ?? _businessTime.UtcNow);
-            }
-        }
-
         if (!Enum.TryParse<VoidReasonCode>(request.ReasonCode, true, out _))
         {
             throw ValidationError("reasonCode", "Unknown void reason code.");
@@ -1087,50 +1036,105 @@ public sealed class PosSalesService : IPosSalesService
         var userId = GetCurrentUserId() ?? throw new UnauthorizedException("Authenticated user is required.");
         var user = _httpContextAccessor.HttpContext?.User;
         var isManager = user?.IsInRole("Manager") == true || user?.IsInRole("AdminStore") == true || user?.IsInRole("TenantAdmin") == true || user?.IsInRole("SuperAdmin") == true;
-        if (!isManager)
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            var isOwnShift = sale.ShiftId.HasValue && await _db.PosShifts.AsNoTracking().AnyAsync(
-                x => x.Id == sale.ShiftId.Value && x.OpenedByUserId == userId && x.TenantId == tenantId,
-                ct).ConfigureAwait(false);
-
-            if (!isOwnShift || _businessTime.ToBusinessDate(sale.OccurredAtUtc) != _businessTime.BusinessDate)
+            var tx = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct).ConfigureAwait(false);
+            await using (tx.ConfigureAwait(false))
             {
-                throw new ForbiddenException("Cashier can only void own-shift sales from current business day.");
+                try
+                {
+                    var sale = await _db.Sales.FirstOrDefaultAsync(x => x.Id == saleId && x.TenantId == tenantId, ct).ConfigureAwait(false)
+                        ?? throw new NotFoundException("Sale not found.");
+
+                    var replay = await TryResolveVoidReplayAsync(tenantId, saleId, request.ClientVoidId, ct).ConfigureAwait(false);
+                    if (replay is not null)
+                    {
+                        return replay;
+                    }
+
+                    if (sale.Status == SaleStatus.Void)
+                    {
+                        throw new ConflictException("Sale has already been voided.");
+                    }
+
+                    if (!isManager)
+                    {
+                        var isOwnShift = sale.ShiftId.HasValue && await _db.PosShifts.AsNoTracking().AnyAsync(
+                            x => x.Id == sale.ShiftId.Value && x.OpenedByUserId == userId && x.TenantId == tenantId,
+                            ct).ConfigureAwait(false);
+
+                        if (!isOwnShift || _businessTime.ToBusinessDate(sale.OccurredAtUtc) != _businessTime.BusinessDate)
+                        {
+                            throw new ForbiddenException("Cashier can only void own-shift sales from current business day.");
+                        }
+                    }
+
+                    sale.Status = SaleStatus.Void;
+                    sale.VoidedAtUtc = _businessTime.UtcNow;
+                    sale.VoidedByUserId = userId;
+                    sale.VoidReasonCode = request.ReasonCode.Trim();
+                    sale.VoidReasonText = request.ReasonText?.Trim();
+                    sale.VoidNote = request.Note?.Trim();
+                    sale.ClientVoidId = request.ClientVoidId;
+
+                    if (sale.LoyaltyPointsAwarded.HasValue && sale.LoyaltyPointsAwarded.Value > 0)
+                    {
+                        await _pointsReversalService.ReversePointsForSaleAsync(sale.Id, sale.LoyaltyPointsAwarded.Value, userId, _businessTime.UtcNow, ct).ConfigureAwait(false);
+                    }
+
+                    await _inventoryConsumptionService.ReverseForVoidAsync(tenantId, sale.StoreId, sale.Id, userId, ct).ConfigureAwait(false);
+
+                    await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+                    await tx.CommitAsync(ct).ConfigureAwait(false);
+
+                    var voidedAtUtc = sale.VoidedAtUtc!.Value;
+
+                    await _auditLogger.LogAsync(new AuditEntry(
+                        Action: "SaleVoid",
+                        UserId: userId,
+                        CorrelationId: GetCorrelationId(),
+                        EntityType: "Sale",
+                        EntityId: sale.Id.ToString("D"),
+                        Before: new { Status = SaleStatus.Completed },
+                        After: new { sale.Status, sale.VoidedAtUtc, sale.VoidReasonCode, sale.VoidReasonText },
+                        Source: "POS",
+                        Notes: "Sale voided",
+                        OccurredAtUtc: DateTime.UtcNow), ct).ConfigureAwait(false);
+
+                    return new VoidSaleResponseDto(sale.Id, sale.Status, voidedAtUtc);
+                }
+                catch (DbUpdateException)
+                {
+                    await tx.RollbackAsync(ct).ConfigureAwait(false);
+                    _db.ChangeTracker.Clear();
+
+                    var resolved = await TryResolveVoidReplayAsync(tenantId, saleId, request.ClientVoidId, ct).ConfigureAwait(false);
+                    if (resolved is not null)
+                    {
+                        return resolved;
+                    }
+
+                    var currentSale = await _db.Sales.AsNoTracking()
+                        .Where(x => x.Id == saleId && x.TenantId == tenantId)
+                        .Select(x => new { x.Status })
+                        .FirstOrDefaultAsync(ct)
+                        .ConfigureAwait(false);
+
+                    if (currentSale?.Status == SaleStatus.Void)
+                    {
+                        throw new ConflictException("Sale has already been voided.");
+                    }
+
+                    throw;
+                }
+                catch
+                {
+                    await tx.RollbackAsync(ct).ConfigureAwait(false);
+                    throw;
+                }
             }
-        }
-
-        sale.Status = SaleStatus.Void;
-        sale.VoidedAtUtc = _businessTime.UtcNow;
-        sale.VoidedByUserId = userId;
-        sale.VoidReasonCode = request.ReasonCode.Trim();
-        sale.VoidReasonText = request.ReasonText?.Trim();
-        sale.VoidNote = request.Note?.Trim();
-        sale.ClientVoidId = request.ClientVoidId;
-
-        if (sale.LoyaltyPointsAwarded.HasValue && sale.LoyaltyPointsAwarded.Value > 0)
-        {
-            await _pointsReversalService.ReversePointsForSaleAsync(sale.Id, sale.LoyaltyPointsAwarded.Value, userId, _businessTime.UtcNow, ct).ConfigureAwait(false);
-        }
-
-        await _inventoryConsumptionService.ReverseForVoidAsync(tenantId, sale.StoreId, sale.Id, userId, ct).ConfigureAwait(false);
-
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-
-        var voidedAtUtc = sale.VoidedAtUtc!.Value;
-
-        await _auditLogger.LogAsync(new AuditEntry(
-            Action: "SaleVoid",
-            UserId: userId,
-            CorrelationId: GetCorrelationId(),
-            EntityType: "Sale",
-            EntityId: sale.Id.ToString("D"),
-            Before: new { Status = SaleStatus.Completed },
-            After: new { sale.Status, sale.VoidedAtUtc, sale.VoidReasonCode, sale.VoidReasonText },
-            Source: "POS",
-            Notes: "Sale voided",
-            OccurredAtUtc: DateTime.UtcNow), ct).ConfigureAwait(false);
-
-        return new VoidSaleResponseDto(sale.Id, sale.Status, voidedAtUtc);
+        }).ConfigureAwait(false);
     }
 
 
@@ -1465,25 +1469,127 @@ public sealed class PosSalesService : IPosSalesService
 
     private static decimal RoundMoney(decimal amount) => decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
 
+    private async Task<CreateSaleResponseDto?> TryGetExistingSaleResponseAsync(Guid tenantId, Guid storeId, Guid clientOperationId, string requestHash, string correlationId, CancellationToken ct)
+    {
+        var existingSale = await _db.Sales.AsNoTracking()
+            .Where(x => x.ClientSaleId == clientOperationId &&
+                        x.TenantId == tenantId &&
+                        x.StoreId == storeId)
+            .Select(x => new
+            {
+                x.Id,
+                x.Folio,
+                x.OccurredAtUtc,
+                x.Total,
+                x.CorrelationId
+            })
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        if (existingSale is null)
+        {
+            return null;
+        }
+
+        if (!string.Equals(existingSale.CorrelationId, requestHash, StringComparison.Ordinal))
+        {
+            throw new ConflictException("IDEMPOTENCY_CONFLICT");
+        }
+
+        LogAction("IdempotentHit", "Sale", existingSale.Id, correlationId);
+        return new CreateSaleResponseDto(existingSale.Id, existingSale.Folio, existingSale.OccurredAtUtc, existingSale.Total);
+    }
+
+    private async Task<VoidSaleResponseDto?> TryResolveVoidReplayAsync(Guid tenantId, Guid saleId, Guid? clientVoidId, CancellationToken ct)
+    {
+        if (!clientVoidId.HasValue)
+        {
+            return null;
+        }
+
+        var existingVoid = await _db.Sales.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.ClientVoidId == clientVoidId.Value)
+            .Select(x => new
+            {
+                x.Id,
+                x.Status,
+                x.VoidedAtUtc
+            })
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        if (existingVoid is null)
+        {
+            return null;
+        }
+
+        if (existingVoid.Id != saleId)
+        {
+            throw new ConflictException("IDEMPOTENCY_CONFLICT");
+        }
+
+        if (existingVoid.Status != SaleStatus.Void)
+        {
+            return null;
+        }
+
+        return new VoidSaleResponseDto(existingVoid.Id, existingVoid.Status, existingVoid.VoidedAtUtc ?? _businessTime.UtcNow);
+    }
+
     private static string ComputeSaleRequestHash(CreateSaleRequestDto request, Guid storeId)
     {
-        var payload = JsonSerializer.Serialize(new
-        {
+        var lines = request.Items
+            .Select(item =>
+            {
+                var selections = (item.Selections ?? [])
+                    .Select(selection => new SaleRequestHashSelection(selection.GroupKey, selection.OptionItemId))
+                    .OrderBy(selection => selection.GroupKey, StringComparer.Ordinal)
+                    .ThenBy(selection => selection.OptionItemId)
+                    .ToArray();
+
+                var extras = (item.Extras ?? [])
+                    .Select(extra => new SaleRequestHashExtra(extra.ExtraId, extra.Quantity))
+                    .OrderBy(extra => extra.ExtraId)
+                    .ThenBy(extra => extra.Quantity)
+                    .ToArray();
+
+                var pricingSnapshot = item.PricingSnapshot is null
+                    ? null
+                    : new SaleRequestHashPricingSnapshot(
+                        RoundMoney(item.PricingSnapshot.BaseUnitPrice),
+                        RoundMoney(item.PricingSnapshot.AppliedUnitPrice),
+                        item.PricingSnapshot.Wholesale is null
+                            ? null
+                            : new SaleRequestHashWholesale(
+                                item.PricingSnapshot.Wholesale.IsApplied,
+                                item.PricingSnapshot.Wholesale.MinQty,
+                                item.PricingSnapshot.Wholesale.DiscountType,
+                                item.PricingSnapshot.Wholesale.DiscountValue,
+                                item.PricingSnapshot.Wholesale.Source),
+                        item.PricingSnapshot.PricingCalculatedAtUtc?.ToUniversalTime());
+
+                return new SaleRequestHashLine(item.ProductId, item.Quantity, pricingSnapshot, selections, extras);
+            })
+            .Select(line => new { SortKey = JsonSerializer.Serialize(line), Line = line })
+            .OrderBy(x => x.SortKey, StringComparer.Ordinal)
+            .Select(x => x.Line)
+            .ToArray();
+
+        var payments = ResolvePayments(request)
+            .Select(payment => new SaleRequestHashPayment(
+                payment.Method,
+                RoundMoney(payment.Amount),
+                payment.Reference?.Trim()))
+            .Select(payment => new { SortKey = JsonSerializer.Serialize(payment), Payment = payment })
+            .OrderBy(x => x.SortKey, StringComparer.Ordinal)
+            .Select(x => x.Payment)
+            .ToArray();
+
+        var payload = JsonSerializer.Serialize(new SaleRequestHashPayload(
             storeId,
-            lines = request.Items
-                .OrderBy(x => x.ProductId)
-                .Select(x => new
-                {
-                    x.ProductId,
-                    x.Quantity,
-                    baseUnitPrice = x.PricingSnapshot?.BaseUnitPrice,
-                    appliedUnitPrice = x.PricingSnapshot?.AppliedUnitPrice
-                }),
-            payments = ResolvePayments(request)
-                .OrderBy(x => x.Method)
-                .ThenBy(x => x.Amount)
-                .Select(x => new { x.Method, x.Amount, x.Reference })
-        });
+            request.OccurredAtUtc?.ToUniversalTime(),
+            lines,
+            payments));
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
         return Convert.ToHexString(bytes);
@@ -1531,6 +1637,36 @@ public sealed class PosSalesService : IPosSalesService
             entityId?.ToString("D") ?? "-",
             correlationId ?? Activity.Current?.TraceId.ToString() ?? "-");
     }
+
+    private sealed record SaleRequestHashPayload(
+        Guid StoreId,
+        DateTimeOffset? OccurredAtUtc,
+        IReadOnlyList<SaleRequestHashLine> Items,
+        IReadOnlyList<SaleRequestHashPayment> Payments);
+
+    private sealed record SaleRequestHashLine(
+        Guid ProductId,
+        int Quantity,
+        SaleRequestHashPricingSnapshot? PricingSnapshot,
+        IReadOnlyList<SaleRequestHashSelection> Selections,
+        IReadOnlyList<SaleRequestHashExtra> Extras);
+
+    private sealed record SaleRequestHashPricingSnapshot(
+        decimal BaseUnitPrice,
+        decimal AppliedUnitPrice,
+        SaleRequestHashWholesale? Wholesale,
+        DateTimeOffset? PricingCalculatedAtUtc);
+
+    private sealed record SaleRequestHashWholesale(
+        bool IsApplied,
+        decimal? MinQty,
+        string? DiscountType,
+        decimal? DiscountValue,
+        string? Source);
+
+    private sealed record SaleRequestHashSelection(string GroupKey, Guid OptionItemId);
+    private sealed record SaleRequestHashExtra(Guid ExtraId, int Quantity);
+    private sealed record SaleRequestHashPayment(PaymentMethod Method, decimal Amount, string? Reference);
 
 }
 
