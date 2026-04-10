@@ -86,6 +86,53 @@ describe('PosShiftApiService', () => {
     httpMock.verify();
   });
 
+  it('maps openShift request with store and clientOperationId', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        PosShiftApiService,
+        {
+          provide: StoreContextService,
+          useValue: {
+            getActiveStoreId: () => 'store-123',
+          },
+        },
+      ],
+    });
+
+    const service = TestBed.inject(PosShiftApiService);
+    const httpMock = TestBed.inject(HttpTestingController);
+
+    const promise = service.openShift(150, 'Inicio', 'op-123');
+
+    const req = httpMock.expectOne('/api/v1/pos/shifts/open');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      startingCashAmount: 150,
+      notes: 'Inicio',
+      clientOperationId: 'op-123',
+      storeId: 'store-123',
+    });
+
+    req.flush({
+      id: 'shift-1',
+      openedAtUtc: '2026-02-12T10:00:00Z',
+      openedByUserId: 'u1',
+      openedByEmail: 'cashier@local',
+      openingCashAmount: 150,
+      closedAtUtc: null,
+      closedByUserId: null,
+      closedByEmail: null,
+      closingCashAmount: null,
+      openNotes: 'Inicio',
+      closeNotes: null,
+    });
+
+    await promise;
+    httpMock.verify();
+  });
+
   it('applies breakdown fallback when response omits breakdown', async () => {
     TestBed.configureTestingModule({
       providers: [

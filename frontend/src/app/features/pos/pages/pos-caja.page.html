@@ -52,7 +52,8 @@
         <button
           type="button"
           class="btn-icon-small"
-          (click)="loadSnapshot(true)"
+          (click)="refreshCatalog()"
+          [disabled]="loading()"
           title="Refrescar catálogo"
           aria-label="Refrescar catálogo"
           data-testid="refresh-catalog"
@@ -62,9 +63,11 @@
         <button
           type="button"
           class="btn-icon-small"
-          (click)="loadCurrentShift()"
+          (click)="refreshShiftStatus()"
+          [disabled]="loading()"
           title="Actualizar turno"
           aria-label="Actualizar turno"
+          data-testid="refresh-shift"
         >
           ⏱️
         </button>
@@ -162,6 +165,7 @@
               type="button"
               [attr.data-testid]="'void-sale-' + sale.saleId"
               (click)="openVoidModal(sale)"
+              [disabled]="loading()"
             >
               Cancelar
             </button>
@@ -177,6 +181,7 @@
       class="cart-floating-button"
       [class.has-items]="cartItems().length > 0"
       (click)="toggleCart()"
+      [disabled]="loading()"
       aria-label="Carrito de compras"
     >
       🛒 <span class="cart-floating-badge">{{ cartItems().length }}</span>
@@ -187,12 +192,19 @@
     <div class="cart-panel">
       <div class="cart-panel-header">
         <span>🛒 Tu pedido</span>
-        <button type="button" class="close-button" (click)="cartExpanded.set(false)">✕</button>
+        <button
+          type="button"
+          class="close-button"
+          (click)="cartExpanded.set(false)"
+          [disabled]="loading()"
+        >
+          ✕
+        </button>
       </div>
       <app-pos-cart
         [items]="cartItems()"
         [estimatedTotal]="estimatedTotal()"
-        [checkoutDisabled]="!canCheckout()"
+        [checkoutDisabled]="!canCheckout() || loading()"
         checkoutTestId="open-payment"
         (increase)="increaseQty($event)"
         (decrease)="decreaseQty($event)"
@@ -227,7 +239,7 @@
       [insufficientLines]="checkoutInsufficientLines()"
       (retryValidation)="canCheckoutTicket()"
       (adjustLineToAvailable)="adjustLineToAvailable($event)"
-      (cancelAction)="showPayment.set(false)"
+      (cancelAction)="dismissPaymentModal()"
       (submitPayment)="confirmPayment($event)"
     />
   }
@@ -254,8 +266,9 @@
           <div class="modal-actions">
             <button
               type="button"
-              (click)="showOpenShiftModal.set(false)"
-              [disabled]="requireOpenShift"
+              (click)="dismissOpenShiftModal()"
+              [disabled]="requireOpenShift || loading()"
+              data-testid="cancel-open-shift"
             >
               Cancelar
             </button>
@@ -347,12 +360,23 @@
             }
 
             <label for="closeEvidence">Notas de cierre (opcional)</label>
-            <textarea id="closeEvidence" rows="2" formControlName="evidence"></textarea>
+            <textarea
+              id="closeEvidence"
+              rows="2"
+              formControlName="evidence"
+            ></textarea>
           </div>
         </div>
 
         <div class="modal-actions modal-actions--sticky">
-          <button type="button" (click)="showCloseShiftModal.set(false)">Cancelar</button>
+          <button
+            type="button"
+            (click)="dismissCloseShiftModal()"
+            [disabled]="loading()"
+            data-testid="cancel-close-shift"
+          >
+            Cancelar
+          </button>
           <button
             type="button"
             data-testid="confirm-close-shift"
@@ -377,7 +401,11 @@
         }
         <div [formGroup]="voidForm" class="void-form">
           <label for="void-reason-code">Motivo</label>
-          <select id="void-reason-code" data-testid="void-reason" formControlName="reasonCode">
+          <select
+            id="void-reason-code"
+            data-testid="void-reason"
+            formControlName="reasonCode"
+          >
             <option value="CashierError">CashierError</option>
             <option value="CustomerRequest">CustomerRequest</option>
             <option value="DuplicateSale">DuplicateSale</option>
@@ -401,7 +429,14 @@
           }
         </div>
         <div class="modal-actions">
-          <button type="button" (click)="showVoidModal.set(false)">Cerrar</button>
+          <button
+            type="button"
+            (click)="dismissVoidModal()"
+            [disabled]="loading()"
+            data-testid="cancel-void"
+          >
+            Cerrar
+          </button>
           <button
             type="button"
             data-testid="confirm-void"

@@ -201,6 +201,7 @@ export interface TopProductDto {
 export interface OpenShiftRequestDto {
   startingCashAmount: number;
   notes: string | null;
+  clientOperationId?: string | null;
   storeId?: string;
 }
 

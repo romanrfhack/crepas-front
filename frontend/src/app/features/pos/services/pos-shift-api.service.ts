@@ -46,11 +46,12 @@ export class PosShiftApiService {
     );
   }
 
-  openShift(startingCashAmount: number, notes?: string | null) {
+  openShift(startingCashAmount: number, notes?: string | null, clientOperationId?: string | null) {
     const storeId = this.storeContext.getActiveStoreId();
     const payload: OpenShiftRequestDto = {
       startingCashAmount,
       notes: notes?.trim() ? notes.trim() : null,
+      ...(clientOperationId ? { clientOperationId } : {}),
       ...(storeId ? { storeId } : {}),
     };
 

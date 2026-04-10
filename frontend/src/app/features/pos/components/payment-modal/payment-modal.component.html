@@ -48,6 +48,7 @@
                 [id]="'payment-method-' + line.id"
                 [attr.data-testid]="'payment-method-' + index"
                 [value]="line.method"
+                [disabled]="loading()"
                 (change)="updateMethod(line.id, $any($event.target).value)"
               >
                 @for (method of getAvailableMethods(line.id); track method) {
@@ -65,6 +66,7 @@
                 min="0"
                 step="0.01"
                 [value]="line.amount"
+                [disabled]="loading()"
                 (input)="updateAmount(line.id, +$any($event.target).value || 0)"
               />
             </div>
@@ -76,13 +78,13 @@
                 [attr.data-testid]="'payment-ref-' + index"
                 type="text"
                 [value]="line.reference"
-                [disabled]="line.method === 'Cash'"
+                [disabled]="line.method === 'Cash' || loading()"
                 (input)="updateReference(line.id, $any($event.target).value)"
                 placeholder="Voucher / folio"
               />
             </div>
           </div>
-          <button type="button" class="btn-link" (click)="removePaymentLine(line.id)">
+          <button type="button" class="btn-link" (click)="removePaymentLine(line.id)" [disabled]="loading()">
             Eliminar línea
           </button>
         </div>
@@ -94,7 +96,7 @@
       class="btn-add"
       data-testid="add-payment"
       (click)="addPaymentLine()"
-      [disabled]="getAvailableMethods(null).length === 0"
+      [disabled]="getAvailableMethods(null).length === 0 || loading()"
     >
       + Agregar pago
     </button>
@@ -130,7 +132,9 @@
     </div>
 
     <div class="modal-actions">
-      <button type="button" (click)="cancelAction.emit()">Cancelar</button>
+      <button type="button" (click)="cancelAction.emit()" [disabled]="loading()" data-testid="cancel-payment">
+        Cancelar
+      </button>
       <button
         type="button"
         data-testid="confirm-payment"

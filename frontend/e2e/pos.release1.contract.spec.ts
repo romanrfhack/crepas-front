@@ -15,6 +15,8 @@ interface FakeServerOptions {
   voidFirstAttemptForbidden?: boolean;
   unavailableProductOnSnapshot?: boolean;
   staleUnavailableOnCreateSale?: boolean;
+  openShiftNetworkErrorOnce?: boolean;
+  closeConflictOnce?: boolean;
 }
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -45,11 +47,14 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
   const shiftId = 'SHIFT-E2E-1';
   let shiftOpen = false;
   let voidAttempts = 0;
+  let openShiftAttempts = 0;
+  let closeAttempts = 0;
   let snapshotCalls = 0;
   let createSaleCalls = 0;
   const sales: FakeSale[] = [];
 
   const captured = {
+    openRequests: [] as Record<string, unknown>[],
     saleRequests: [] as Record<string, unknown>[],
     closePreviewRequests: [] as Array<{ method: string; body: Record<string, unknown> }>,
     closeRequests: [] as Record<string, unknown>[],
@@ -229,7 +234,13 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
     }
 
     if (pathname.endsWith('/shifts/open') && method === 'POST') {
+      openShiftAttempts += 1;
+      captured.openRequests.push(body);
       shiftOpen = true;
+      if (options.openShiftNetworkErrorOnce && openShiftAttempts === 1) {
+        return route.abort('failed');
+      }
+
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -324,12 +335,25 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
     }
 
     if (pathname.endsWith('/shifts/close') && method === 'POST') {
+      closeAttempts += 1;
       captured.closeRequests.push(body);
       const counted = (
         (body.countedDenominations as Array<{ denominationValue: number; count: number }>) ?? []
       ).reduce((sum, line) => sum + Number(line.denominationValue) * Number(line.count), 0);
       const difference = counted - 20;
       const reason = String(body.closeReason ?? '').trim();
+
+      if (options.closeConflictOnce && closeAttempts === 1) {
+        shiftOpen = false;
+        return route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            title: 'Conflict',
+            detail: 'No open shift found.',
+          }),
+        });
+      }
 
       if (Math.abs(difference) >= 20 && !reason) {
         return route.fulfill({
@@ -606,4 +630,73 @@ test('E) Cache stale: create sale 409 unavailable y actualización de catálogo 
   await expect(page.getByTestId('product-unavailable-P1')).toBeVisible();
   expect(captured.snapshotCalls()).toBeGreaterThan(callsBeforeRefresh);
   expect(captured.createSaleCalls()).toBe(1);
+});
+
+test('F) Open shift se recupera tras error ambiguo y conserva clientOperationId', async ({
+  page,
+}) => {
+  const captured = await setupFakePosApi(page, {
+    role: 'Cashier',
+    openShiftNetworkErrorOnce: true,
+  });
+  await seedAuth(page, 'Cashier');
+  await openPosCaja(page);
+
+  const openShiftModal = page.getByTestId('open-shift-modal');
+  const confirmOpenShiftButton = page.getByTestId('confirm-open-shift');
+
+  await expect(openShiftModal).toBeVisible();
+  await confirmOpenShiftButton.click();
+
+  await expect(openShiftModal).toBeHidden();
+  await expect(page.getByText('Turno abierto')).toBeVisible();
+  expect(captured.openRequests).toHaveLength(1);
+  expect(String(captured.openRequests[0]?.clientOperationId ?? '')).toMatch(uuidRegex);
+});
+
+test('G) Close shift 409 stale recarga estado y muestra feedback útil', async ({ page }) => {
+  await setupFakePosApi(page, {
+    role: 'Cashier',
+    closeConflictOnce: true,
+  });
+  await seedAuth(page, 'Cashier');
+  await openPosCaja(page);
+  await ensureShiftOpen(page);
+
+  await page.getByTestId('open-close-shift').click();
+  await expect(page.getByText('Cierre de turno')).toBeVisible();
+  await page.getByTestId('close-reason').fill('Cierre reconciliado tras conflicto');
+  await page.getByTestId('confirm-close-shift').click();
+
+  await expect(page.getByText('El turno ya no está abierto. Actualizamos el estado de caja.')).toBeVisible();
+  await expect(page.getByText('Turno cerrado')).toBeVisible();
+  await expect(page.getByText('Cierre de turno')).toBeHidden();
+});
+
+test('H) Modal operativo queda por encima del carrito expandido', async ({ page }) => {
+  await setupFakePosApi(page, { role: 'Cashier' });
+  await seedAuth(page, 'Cashier');
+  await openPosCaja(page);
+  await ensureShiftOpen(page);
+
+  await page.getByRole('button', { name: /Agregar Café americano al carrito/i }).click();
+  await page.getByTestId('open-close-shift').click();
+  await expect(page.getByText('Cierre de turno')).toBeVisible();
+
+  const layers = await page.evaluate(() => {
+    const modal = document.querySelector('section[aria-label="Cerrar turno"]');
+    const cartPanel = document.querySelector('.cart-panel');
+    const floatingButton = document.querySelector('.cart-floating-button');
+    return {
+      modal: Number.parseInt(modal ? getComputedStyle(modal).zIndex || '0' : '0', 10),
+      cartPanel: Number.parseInt(cartPanel ? getComputedStyle(cartPanel).zIndex || '0' : '0', 10),
+      floatingButton: Number.parseInt(
+        floatingButton ? getComputedStyle(floatingButton).zIndex || '0' : '0',
+        10,
+      ),
+    };
+  });
+
+  expect(layers.modal).toBeGreaterThan(layers.cartPanel);
+  expect(layers.modal).toBeGreaterThan(layers.floatingButton);
 });

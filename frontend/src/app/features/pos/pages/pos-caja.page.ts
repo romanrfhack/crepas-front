@@ -4,6 +4,7 @@ import {
   Component,
   OnDestroy,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -11,6 +12,7 @@ import {
   FormArray,
   FormBuilder,
   FormControl,
+  FormGroup,
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
@@ -116,6 +118,7 @@ export class PosCajaPage implements OnDestroy {
 
   readonly correlationId = signal(crypto.randomUUID());
   readonly inProgressClientSaleId = signal<string | null>(null);
+  readonly inProgressOpenShiftOperationId = signal<string | null>(null);
   readonly inProgressCloseOperationId = signal<string | null>(null);
   readonly inProgressVoidOperationId = signal<string | null>(null);
   readonly requireOpenShift = environment.posRequireOpenShift;
@@ -155,6 +158,13 @@ export class PosCajaPage implements OnDestroy {
     ),
     { initialValue: this.denominations.map(() => 0) },
   );
+
+  private readonly syncFormDisabledState = effect(() => {
+    const disabled = this.loading();
+    this.toggleFormDisabledState(this.openShiftForm, disabled);
+    this.toggleFormDisabledState(this.closeShiftForm, disabled);
+    this.toggleFormDisabledState(this.voidForm, disabled);
+  });
 
   readonly categories = computed(
     () => this.snapshot()?.categories.filter((item) => item.isActive) ?? [],
@@ -269,7 +279,7 @@ export class PosCajaPage implements OnDestroy {
 
   async loadCurrentShift() {
     try {
-      const shift = await this.shiftApi.getCurrentShift();
+      const shift = await this.readCurrentShift();
       this.currentShift.set(shift ?? null);
       this.showOpenShiftModal.set(this.requireOpenShift && !shift);
     } catch {
@@ -278,6 +288,10 @@ export class PosCajaPage implements OnDestroy {
   }
 
   openPaymentModal() {
+    if (this.loading()) {
+      return;
+    }
+
     if (!this.canCheckout()) {
       this.showOpenShiftModal.set(true);
       this.errorMessage.set('Debes abrir turno para confirmar cobros.');
@@ -295,14 +309,28 @@ export class PosCajaPage implements OnDestroy {
 
     this.loading.set(true);
     this.errorMessage.set(null);
+    const { startingCashAmount, notes } = this.openShiftForm.getRawValue();
+    const clientOperationId = this.inProgressOpenShiftOperationId() ?? crypto.randomUUID();
+    this.inProgressOpenShiftOperationId.set(clientOperationId);
+
     try {
-      const { startingCashAmount, notes } = this.openShiftForm.getRawValue();
-      const shift = await this.shiftApi.openShift(startingCashAmount, notes);
-      this.currentShift.set(shift);
-      this.showOpenShiftModal.set(false);
-      this.openShiftForm.patchValue({ notes: '' });
-    } catch {
-      this.errorMessage.set('No se pudo abrir el turno.');
+      const shift = await this.shiftApi.openShift(startingCashAmount, notes, clientOperationId);
+      this.applyOpenedShift(shift);
+    } catch (error) {
+      const recoveredShift = await this.reconcileOpenShiftAfterFailure();
+      if (recoveredShift) {
+        this.applyOpenedShift(recoveredShift);
+        return;
+      }
+
+      if (this.getHttpStatus(error) === 0) {
+        this.errorMessage.set(
+          'Error de red. Puedes reintentar y se reutilizará el mismo clientOperationId para evitar duplicados.',
+        );
+      } else {
+        this.inProgressOpenShiftOperationId.set(null);
+        this.errorMessage.set('No se pudo abrir el turno.');
+      }
     } finally {
       this.loading.set(false);
     }
@@ -403,6 +431,8 @@ export class PosCajaPage implements OnDestroy {
         this.closeShiftError.set(
           'Error de red. Puedes reintentar y se reutilizará el mismo clientOperationId para evitar duplicados.',
         );
+      } else if (httpError.status === 409) {
+        await this.recoverCloseShiftConflict(this.extractErrorPayload(error));
       } else {
         this.closeShiftError.set('No se pudo cerrar el turno.');
       }
@@ -416,10 +446,18 @@ export class PosCajaPage implements OnDestroy {
   }
 
   toggleCart() {
+    if (this.loading()) {
+      return;
+    }
+
     this.cartExpanded.update((prev) => !prev);
   }
 
   async onProductSelected(product: ProductDto) {
+    if (this.loading()) {
+      return;
+    }
+
     if (!product.isAvailable) {
       return;
     }
@@ -575,6 +613,10 @@ export class PosCajaPage implements OnDestroy {
   }
 
   openVoidModal(sale: SaleListItemUi) {
+    if (this.loading()) {
+      return;
+    }
+
     this.selectedSaleForVoid.set(sale);
     this.voidForm.reset({
       reasonCode: 'CashierError',
@@ -702,6 +744,17 @@ export class PosCajaPage implements OnDestroy {
 
   private centsToMoney(cents: number) {
     return cents / 100;
+  }
+
+  private toggleFormDisabledState(form: FormGroup, disabled: boolean) {
+    if (disabled && form.enabled) {
+      form.disable({ emitEvent: false });
+      return;
+    }
+
+    if (!disabled && form.disabled) {
+      form.enable({ emitEvent: false });
+    }
   }
 
   private isVoidForbiddenError(error: unknown) {
@@ -869,6 +922,39 @@ export class PosCajaPage implements OnDestroy {
     this.errorMessage.set('No fue posible registrar la venta.');
   }
 
+  dismissOpenShiftModal() {
+    if (this.loading()) {
+      return;
+    }
+
+    this.showOpenShiftModal.set(false);
+    this.inProgressOpenShiftOperationId.set(null);
+  }
+
+  dismissPaymentModal() {
+    if (this.loading()) {
+      return;
+    }
+
+    this.showPayment.set(false);
+  }
+
+  dismissCloseShiftModal() {
+    if (this.loading()) {
+      return;
+    }
+
+    this.showCloseShiftModal.set(false);
+  }
+
+  dismissVoidModal() {
+    if (this.loading()) {
+      return;
+    }
+
+    this.showVoidModal.set(false);
+  }
+
   private async loadWholesalePolicy() {
     try {
       const policy = await this.wholesaleApi.getTenantWholesalePolicy();
@@ -1022,6 +1108,22 @@ export class PosCajaPage implements OnDestroy {
     await this.loadSnapshot(true);
   }
 
+  refreshCatalog() {
+    if (this.loading()) {
+      return;
+    }
+
+    void this.loadSnapshot(true);
+  }
+
+  refreshShiftStatus() {
+    if (this.loading()) {
+      return;
+    }
+
+    void this.loadCurrentShift();
+  }
+
   private isItemUnavailableError(payload: unknown) {
     if (this.isOutOfStockError(payload)) {
       return false;
@@ -1082,6 +1184,79 @@ export class PosCajaPage implements OnDestroy {
       itemName,
       availableQty: availableQty != null && Number.isFinite(availableQty) ? availableQty : null,
     };
+  }
+
+  private async readCurrentShift() {
+    return this.shiftApi.getCurrentShift();
+  }
+
+  private applyOpenedShift(shift: PosShiftDto) {
+    this.currentShift.set(shift);
+    this.showOpenShiftModal.set(false);
+    this.openShiftForm.patchValue({ notes: '' });
+    this.inProgressOpenShiftOperationId.set(null);
+  }
+
+  private async reconcileOpenShiftAfterFailure() {
+    try {
+      const shift = await this.readCurrentShift();
+      this.currentShift.set(shift ?? null);
+      if (shift && shift.closedAtUtc == null) {
+        return shift;
+      }
+    } catch {
+      // Preserve the original network error for the user when reconciliation fails.
+    }
+
+    return null;
+  }
+
+  private async recoverCloseShiftConflict(payload: unknown) {
+    const refreshedShift = await this.readCurrentShiftAfterConflict();
+    const noOpenShift = this.isNoOpenShiftError(payload);
+
+    if (!refreshedShift) {
+      this.currentShift.set(null);
+      this.closePreview.set(null);
+      this.showCloseShiftModal.set(false);
+      this.inProgressCloseOperationId.set(null);
+      this.errorMessage.set(
+        noOpenShift
+          ? 'El turno ya no está abierto. Actualizamos el estado de caja.'
+          : 'La caja cambió de estado y ya no permite este cierre. Actualizamos la información.',
+      );
+      this.closeShiftError.set(null);
+      return;
+    }
+
+    this.currentShift.set(refreshedShift);
+    this.inProgressCloseOperationId.set(null);
+    await this.refreshClosePreviewAfterConflict(refreshedShift.id);
+    this.closeShiftError.set(
+      noOpenShift
+        ? 'El turno cambió de estado. Recargamos el cierre antes de reintentar.'
+        : 'La caja cambió de estado. Revisa el cierre actualizado antes de reintentar.',
+    );
+  }
+
+  private async readCurrentShiftAfterConflict() {
+    try {
+      return await this.readCurrentShift();
+    } catch {
+      return null;
+    }
+  }
+
+  private async refreshClosePreviewAfterConflict(shiftId: string) {
+    try {
+      const preview = await this.shiftApi.closePreviewV2({
+        shiftId,
+        cashCount: this.buildCountedDenominations(),
+      });
+      this.closePreview.set(this.normalizePreview(preview));
+    } catch {
+      this.closePreview.set(null);
+    }
   }
 
   private isDuplicateSaleError(payload: unknown) {

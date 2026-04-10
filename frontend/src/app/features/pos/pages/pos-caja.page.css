@@ -207,7 +207,7 @@
   display: grid;
   place-items: center;
   padding: 1rem;
-  z-index: 20;
+  z-index: 60;
 }
 
 .modal-card {

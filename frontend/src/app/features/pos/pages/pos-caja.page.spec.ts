@@ -12,6 +12,12 @@ import { PosCajaPage } from './pos-caja.page';
 
 describe('PosCajaPage', () => {
   let fixture: ComponentFixture<PosCajaPage>;
+  let currentShiftResponse: Record<string, unknown> | null;
+  let openShiftCalls: Array<{
+    startingCashAmount: number;
+    notes?: string | null;
+    clientOperationId?: string | null;
+  }>;
   let salesCalls: { payload: CreateSaleRequestDto; correlationId: string }[];
   let voidCalls: { saleId: string; payload: { clientVoidId: string }; correlationId: string }[];
   let closePreviewCalls: unknown[];
@@ -20,6 +26,20 @@ describe('PosCajaPage', () => {
   let validateAvailabilityCalls = 0;
 
   beforeEach(async () => {
+    currentShiftResponse = {
+      id: 'shift-1',
+      openedAtUtc: '2026-02-12T10:00:00Z',
+      openedByUserId: 'u1',
+      openedByEmail: 'cashier@local',
+      openingCashAmount: 0,
+      closedAtUtc: null,
+      closedByUserId: null,
+      closedByEmail: null,
+      closingCashAmount: null,
+      openNotes: null,
+      closeNotes: null,
+    };
+    openShiftCalls = [];
     salesCalls = [];
     voidCalls = [];
     closePreviewCalls = [];
@@ -57,32 +77,27 @@ describe('PosCajaPage', () => {
         {
           provide: PosShiftApiService,
           useValue: {
-            getCurrentShift: async () => ({
-              id: 'shift-1',
-              openedAtUtc: '2026-02-12T10:00:00Z',
-              openedByUserId: 'u1',
-              openedByEmail: 'cashier@local',
-              openingCashAmount: 0,
-              closedAtUtc: null,
-              closedByUserId: null,
-              closedByEmail: null,
-              closingCashAmount: null,
-              openNotes: null,
-              closeNotes: null,
-            }),
-            openShift: async () => ({
-              id: 'shift-2',
-              openedAtUtc: '2026-02-12T11:00:00Z',
-              openedByUserId: 'u1',
-              openedByEmail: 'cashier@local',
-              openingCashAmount: 100,
-              closedAtUtc: null,
-              closedByUserId: null,
-              closedByEmail: null,
-              closingCashAmount: null,
-              openNotes: null,
-              closeNotes: null,
-            }),
+            getCurrentShift: async () => currentShiftResponse,
+            openShift: async (
+              startingCashAmount: number,
+              notes?: string | null,
+              clientOperationId?: string | null,
+            ) => {
+              openShiftCalls.push({ startingCashAmount, notes, clientOperationId });
+              return {
+                id: 'shift-2',
+                openedAtUtc: '2026-02-12T11:00:00Z',
+                openedByUserId: 'u1',
+                openedByEmail: 'cashier@local',
+                openingCashAmount: 100,
+                closedAtUtc: null,
+                closedByUserId: null,
+                closedByEmail: null,
+                closingCashAmount: null,
+                openNotes: null,
+                closeNotes: null,
+              };
+            },
             closePreviewV2: async (payload: unknown) => {
               closePreviewCalls.push(payload);
               return {
@@ -237,6 +252,94 @@ describe('PosCajaPage', () => {
     expect(fixture.componentInstance.cartItems().length).toBe(0);
   });
 
+  it('reuses the same open-shift clientOperationId when retrying after ambiguous network error', async () => {
+    const shiftApi = TestBed.inject(PosShiftApiService) as unknown as {
+      getCurrentShift: () => Promise<unknown>;
+      openShift: (
+        startingCashAmount: number,
+        notes?: string | null,
+        clientOperationId?: string | null,
+      ) => Promise<unknown>;
+    };
+
+    let attempts = 0;
+    currentShiftResponse = null;
+    shiftApi.getCurrentShift = async () => null;
+    shiftApi.openShift = async (startingCashAmount, notes, clientOperationId) => {
+      openShiftCalls.push({ startingCashAmount, notes, clientOperationId });
+      attempts += 1;
+      if (attempts === 1) {
+        throw new HttpErrorResponse({ status: 0 });
+      }
+
+      return {
+        id: 'shift-2',
+        openedAtUtc: '2026-02-12T11:00:00Z',
+        openedByUserId: 'u1',
+        openedByEmail: 'cashier@local',
+        openingCashAmount: 100,
+        closedAtUtc: null,
+        closedByUserId: null,
+        closedByEmail: null,
+        closingCashAmount: null,
+        openNotes: null,
+        closeNotes: null,
+      };
+    };
+
+    fixture.componentInstance.currentShift.set(null);
+    fixture.componentInstance.showOpenShiftModal.set(true);
+
+    await fixture.componentInstance.submitOpenShift();
+    await fixture.componentInstance.submitOpenShift();
+
+    expect(openShiftCalls.length).toBe(2);
+    expect(openShiftCalls[0]?.clientOperationId).toBeTruthy();
+    expect(openShiftCalls[0]?.clientOperationId).toBe(openShiftCalls[1]?.clientOperationId);
+    expect(fixture.componentInstance.currentShift()?.id).toBe('shift-2');
+    expect(fixture.componentInstance.showOpenShiftModal()).toBe(false);
+  });
+
+  it('reconciles open-shift state after ambiguous failure when backend already opened the shift', async () => {
+    const shiftApi = TestBed.inject(PosShiftApiService) as unknown as {
+      getCurrentShift: () => Promise<unknown>;
+      openShift: (
+        startingCashAmount: number,
+        notes?: string | null,
+        clientOperationId?: string | null,
+      ) => Promise<unknown>;
+    };
+
+    shiftApi.openShift = async (startingCashAmount, notes, clientOperationId) => {
+      openShiftCalls.push({ startingCashAmount, notes, clientOperationId });
+      throw new HttpErrorResponse({ status: 0 });
+    };
+
+    shiftApi.getCurrentShift = async () => ({
+      id: 'shift-recovered',
+      openedAtUtc: '2026-02-12T11:30:00Z',
+      openedByUserId: 'u1',
+      openedByEmail: 'cashier@local',
+      openingCashAmount: 50,
+      closedAtUtc: null,
+      closedByUserId: null,
+      closedByEmail: null,
+      closingCashAmount: null,
+      openNotes: null,
+      closeNotes: null,
+    });
+
+    fixture.componentInstance.currentShift.set(null);
+    fixture.componentInstance.showOpenShiftModal.set(true);
+
+    await fixture.componentInstance.submitOpenShift();
+
+    expect(openShiftCalls.length).toBe(1);
+    expect(fixture.componentInstance.currentShift()?.id).toBe('shift-recovered');
+    expect(fixture.componentInstance.showOpenShiftModal()).toBe(false);
+    expect(fixture.componentInstance.inProgressOpenShiftOperationId()).toBeNull();
+  });
+
   it('updates counted total and difference in real time from denomination counts', async () => {
     await fixture.componentInstance.startCloseShift();
 
@@ -251,6 +354,59 @@ describe('PosCajaPage', () => {
 
     expect(fixture.componentInstance.countedTotal()).toBe(201.5);
     expect(fixture.componentInstance.closeDifference()).toBe(-148.5);
+  });
+
+  it('recovers close-shift conflict by reconciling stale state', async () => {
+    const shiftApi = TestBed.inject(PosShiftApiService) as unknown as {
+      getCurrentShift: () => Promise<unknown>;
+      closeShift: () => Promise<unknown>;
+    };
+
+    shiftApi.closeShift = async () => {
+      throw new HttpErrorResponse({
+        status: 409,
+        error: { detail: 'No open shift found.' },
+      });
+    };
+    shiftApi.getCurrentShift = async () => null;
+
+    fixture.componentInstance.currentShift.set({
+      id: 'shift-1',
+      openedAtUtc: '2026-02-12T10:00:00Z',
+      openedByUserId: 'u1',
+      openedByEmail: 'cashier@local',
+      openingCashAmount: 100,
+      closedAtUtc: null,
+      closedByUserId: null,
+      closedByEmail: null,
+      closingCashAmount: null,
+      openNotes: null,
+      closeNotes: null,
+    });
+    fixture.componentInstance.closePreview.set({
+      shiftId: 'shift-1',
+      openedAtUtc: '2026-02-12T10:00:00Z',
+      openingCashAmount: 100,
+      salesCashTotal: 25,
+      expectedCashAmount: 125,
+      countedCashAmount: null,
+      difference: null,
+      breakdown: {
+        cashAmount: 25,
+        cardAmount: 0,
+        transferAmount: 0,
+        totalSalesCount: 1,
+      },
+    });
+    fixture.componentInstance.showCloseShiftModal.set(true);
+    fixture.componentInstance.closeShiftForm.patchValue({ reason: 'Arqueo reconciliado' });
+
+    await fixture.componentInstance.submitCloseShift();
+
+    expect(fixture.componentInstance.currentShift()).toBeNull();
+    expect(fixture.componentInstance.closePreview()).toBeNull();
+    expect(fixture.componentInstance.showCloseShiftModal()).toBe(false);
+    expect(fixture.componentInstance.errorMessage()).toContain('ya no está abierto');
   });
 
   it('builds CreateSaleRequest with payments[] and leaves legacy payment undefined', async () => {
@@ -296,6 +452,39 @@ describe('PosCajaPage', () => {
     expect(voidCalls[0]?.saleId).toBe('sale-void-1');
     expect(voidCalls[0]?.payload.clientVoidId).toBeTruthy();
     expect(closePreviewCalls.length).toBe(1);
+  });
+
+  it('disables critical caja actions while loading is active', () => {
+    fixture.componentInstance.cartExpanded.set(true);
+    fixture.componentInstance.showPayment.set(true);
+    fixture.componentInstance.showCloseShiftModal.set(true);
+    fixture.componentInstance.showVoidModal.set(true);
+    fixture.componentInstance.loading.set(true);
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement.querySelector('[data-testid="refresh-catalog"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (fixture.nativeElement.querySelector('[data-testid="refresh-shift"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (fixture.nativeElement.querySelector('[data-testid="open-payment"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (fixture.nativeElement.querySelector('[data-testid="cancel-payment"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (fixture.nativeElement.querySelector('[data-testid="cancel-close-shift"]') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (fixture.nativeElement.querySelector('[data-testid="cancel-void"]') as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   it('keeps void modal open and exposes 403 state before succeeding on retry', async () => {
