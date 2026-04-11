@@ -99,7 +99,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
         var snapshot = await GetSnapshotAsync(token);
 
-        await UpdateInventorySettingsAsync(token, true);
+        await SetInventorySettingsAsync(true);
 
         try
         {
@@ -121,7 +121,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         }
         finally
         {
-            await UpdateInventorySettingsAsync(token, false);
+            await SetInventorySettingsAsync(false);
         }
     }
 
@@ -142,6 +142,20 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
     }
 
     [Fact]
+    public async Task InventorySettings_UpdateEndpoint_IsDisabled_In_ContainedRelease()
+    {
+        var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var before = await GetShowOnlyInStockAsync();
+
+        using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory/settings", token);
+        request.Content = JsonContent.Create(new { showOnlyInStock = !before });
+        using var response = await _client.SendAsync(request);
+
+        await AssertStatusAsync(response, HttpStatusCode.Conflict);
+        Assert.Equal(before, await GetShowOnlyInStockAsync());
+    }
+
+    [Fact]
     public async Task Snapshot_Uses_Etag_And_Changes_When_Availability_Changes()
     {
         var token = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
@@ -149,7 +163,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         var p1 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "P1", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true });
         var p2 = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "P2", categoryId = category.Id, basePrice = 11m, isActive = true, isAvailable = true });
 
-        await UpdateInventorySettingsAsync(token, false);
+        await SetInventorySettingsAsync(false);
 
         var snapshot = await GetSnapshotAsync(token);
         var etag = await GetSnapshotEtagAsync(token);
@@ -761,12 +775,23 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         return (await response.Content.ReadFromJsonAsync<List<StoreInventoryItemResponse>>())!;
     }
 
-    private async Task UpdateInventorySettingsAsync(string token, bool showOnlyInStock)
+    private async Task SetInventorySettingsAsync(bool showOnlyInStock)
     {
-        using var request = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory/settings", token);
-        request.Content = JsonContent.Create(new { showOnlyInStock });
-        using var response = await _client.SendAsync(request);
-        await AssertStatusAsync(response, HttpStatusCode.OK);
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var settings = await db.PosSettings.OrderBy(x => x.Id).FirstAsync();
+        settings.ShowOnlyInStock = showOnlyInStock;
+        await db.SaveChangesAsync();
+    }
+
+    private async Task<bool> GetShowOnlyInStockAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        return await db.PosSettings.AsNoTracking()
+            .OrderBy(x => x.Id)
+            .Select(x => x.ShowOnlyInStock)
+            .FirstAsync();
     }
 
     private async Task UpsertInventoryAsync(string token, Guid storeId, Guid productId, decimal onHand)
@@ -1459,10 +1484,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
     {
-        using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return payload!.AccessToken;
+        await _factory.CreateDefaultUserAsync(email, password);
+        return await LoginAndGetAccessTokenAsync(email, password);
     }
 
     private async Task SetUserRolesAsync(string adminToken, string email, string[] roles)

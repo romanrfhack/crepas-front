@@ -142,8 +142,7 @@ public sealed class AdminAuditIntegrationTests : IClassFixture<CobranzaDigitalAp
 
     private async Task RegisterAsync(string email, string password)
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        response.EnsureSuccessStatusCode();
+        await _factory.CreateDefaultUserAsync(email, password);
     }
 
     private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)

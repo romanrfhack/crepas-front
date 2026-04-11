@@ -1019,10 +1019,12 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
 
     private async Task UpdateInventorySettingsAsync(string token, bool showOnlyInStock)
     {
-        using var req = CreateAuthorizedRequest(HttpMethod.Put, "/api/v1/pos/admin/inventory/settings", token);
-        req.Content = JsonContent.Create(new { showOnlyInStock });
-        using var resp = await _client.SendAsync(req);
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        _ = token;
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var settings = await db.PosSettings.OrderBy(x => x.Id).FirstAsync();
+        settings.ShowOnlyInStock = showOnlyInStock;
+        await db.SaveChangesAsync();
     }
 
     private async Task UpsertInventoryAsync(string token, Guid storeId, Guid productId, decimal onHand)

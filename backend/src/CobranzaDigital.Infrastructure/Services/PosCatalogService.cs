@@ -1823,11 +1823,9 @@ public sealed class PosCatalogService : IPosCatalogService
 
     public async Task<PosInventorySettingsDto> UpdateInventorySettingsAsync(UpdatePosInventorySettingsRequest request, CancellationToken ct)
     {
+        _ = request;
         _ = RequireTenantId();
-        var settings = await _db.PosSettings.OrderBy(x => x.Id).FirstAsync(ct).ConfigureAwait(false);
-        settings.ShowOnlyInStock = request.ShowOnlyInStock;
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return new PosInventorySettingsDto(settings.ShowOnlyInStock);
+        throw new ConflictException("Inventory settings updates are disabled in contained release mode.");
     }
 
     public async Task<CatalogSnapshotDto> GetSnapshotAsync(Guid? storeId, CancellationToken ct)

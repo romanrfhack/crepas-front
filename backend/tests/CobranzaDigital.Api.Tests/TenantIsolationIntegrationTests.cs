@@ -90,6 +90,32 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     }
 
     [Fact]
+    public async Task DailySummary_Is_Scoped_To_CurrentTenant_And_ContextStore()
+    {
+        var setup = await SeedIsolationDataAsync();
+        var managerAToken = await LoginAndGetAccessTokenAsync(setup.ManagerAEmail, setup.Password);
+        var managerBToken = await LoginAndGetAccessTokenAsync(setup.ManagerBEmail, setup.Password);
+
+        using var managerARequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/daily-summary?date={setup.SalesDate:yyyy-MM-dd}", managerAToken);
+        using var managerAResponse = await _client.SendAsync(managerARequest);
+        var managerASummary = await managerAResponse.Content.ReadFromJsonAsync<DailySummaryDto>();
+
+        Assert.Equal(HttpStatusCode.OK, managerAResponse.StatusCode);
+        Assert.NotNull(managerASummary);
+        Assert.Equal(1, managerASummary!.TotalTickets);
+        Assert.Equal(10m, managerASummary.TotalAmount);
+
+        using var managerBRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/reports/daily-summary?date={setup.SalesDate:yyyy-MM-dd}", managerBToken);
+        using var managerBResponse = await _client.SendAsync(managerBRequest);
+        var managerBSummary = await managerBResponse.Content.ReadFromJsonAsync<DailySummaryDto>();
+
+        Assert.Equal(HttpStatusCode.OK, managerBResponse.StatusCode);
+        Assert.NotNull(managerBSummary);
+        Assert.Equal(1, managerBSummary!.TotalTickets);
+        Assert.Equal(20m, managerBSummary.TotalAmount);
+    }
+
+    [Fact]
     public async Task SuperAdmin_OperationalEndpoints_RequireTenantSelectionInPlatformMode()
     {
         var setup = await SeedIsolationDataAsync();
@@ -229,7 +255,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     }
 
     [Fact]
-    public async Task Snapshot_Uses_Contextual_Store_Before_Global_PosSettings_Default()
+    public async Task Snapshot_Uses_Contextual_Store_Before_Tenant_Default_Store()
     {
         var setup = await SeedIsolationDataAsync();
 
@@ -253,7 +279,7 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
     }
 
     [Fact]
-    public async Task Snapshot_Fallback_To_PosSettings_Default_Is_Rejected_When_Default_Belongs_To_Other_Tenant()
+    public async Task Snapshot_Falls_Back_To_Tenant_Default_When_User_Has_No_Store_Context()
     {
         var setup = await SeedIsolationDataAsync();
 
@@ -273,7 +299,11 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
 
         using var implicitRequest = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/pos/catalog/snapshot", managerBToken);
         using var implicitResponse = await _client.SendAsync(implicitRequest);
-        Assert.Equal(HttpStatusCode.NotFound, implicitResponse.StatusCode);
+        var implicitSnapshot = await implicitResponse.Content.ReadFromJsonAsync<SnapshotScopeResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, implicitResponse.StatusCode);
+        Assert.NotNull(implicitSnapshot);
+        Assert.Equal(setup.StoreBId, implicitSnapshot!.StoreId);
 
         using var explicitRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/pos/catalog/snapshot?storeId={setup.StoreBId:D}", managerBToken);
         using var explicitResponse = await _client.SendAsync(explicitRequest);
@@ -404,11 +434,8 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
 
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
     {
-        using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
-        Assert.NotNull(payload);
-        return payload!.AccessToken;
+        await _factory.CreateDefaultUserAsync(email, password);
+        return await LoginAndGetAccessTokenAsync(email, password);
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)

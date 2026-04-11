@@ -668,7 +668,7 @@ public sealed partial class SmokeTests : IClassFixture<CobranzaDigitalApiFactory
     [Fact]
     public async Task AdminUsersWithNormalUserTokenReturnsForbidden()
     {
-        var accessToken = await RegisterAndGetAccessTokenAsync("normal.user@test.local", "User1234!");
+        var accessToken = await CreateDefaultUserAndLoginAsync("normal.user@test.local", "User1234!");
         var response = await GetWithBearerTokenAsync("/api/v1/admin/users", accessToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -686,25 +686,51 @@ public sealed partial class SmokeTests : IClassFixture<CobranzaDigitalApiFactory
     }
 
     [Fact]
-    public async Task RegisterAssignsUserRole()
+    public async Task PublicRegister_IsDisabled_And_DoesNotCreateUser()
     {
-        var _ = await RegisterAndGetAccessTokenAsync("role.check@test.local", "User1234!");
-        var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
-        AssertTokenHasRole(adminToken, "AdminStore");
+        var email = $"public.register.blocked.{Guid.NewGuid():N}@test.local";
+        using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password = "User1234!" });
 
-        var response = await GetWithBearerTokenAsync("/api/v1/admin/users?search=role.check@test.local", adminToken);
-        var payload = await response.Content.ReadFromJsonAsync<PagedResponse>();
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(payload);
-        Assert.Single(payload!.Items);
-        Assert.Contains("User", payload.Items[0].Roles);
+        using var scope = _factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.FindByEmailAsync(email);
+        Assert.Null(user);
+    }
+
+    [Fact]
+    public async Task IdentityService_CreateUser_DoesNotAssignDefaultTenant_And_AssignsUserRole()
+    {
+        var email = $"identity.no-tenant.{Guid.NewGuid():N}@test.local";
+
+        using var scope = _factory.Services.CreateScope();
+        var identityService = scope.ServiceProvider.GetRequiredService<IIdentityService>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var firstTenantId = await dbContext.Tenants.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync();
+
+        var result = await identityService.CreateUserAsync(email, "User1234!");
+
+        Assert.True(result.Success, string.Join("; ", result.Errors));
+
+        var user = await userManager.FindByEmailAsync(email);
+        Assert.NotNull(user);
+        Assert.Null(user!.TenantId);
+        Assert.Null(user.StoreId);
+        Assert.NotEqual(firstTenantId, user.TenantId);
+
+        var roles = await userManager.GetRolesAsync(user);
+        Assert.Contains("User", roles);
     }
 
     [Fact]
     public async Task PutRolesWithEmptyRolesReturnsBadRequest()
     {
-        var userToken = await RegisterAndGetAccessTokenAsync("empty.roles@test.local", "User1234!");
+        var userToken = await CreateDefaultUserAndLoginAsync("empty.roles@test.local", "User1234!");
         Assert.False(string.IsNullOrWhiteSpace(userToken));
 
         var adminToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
@@ -725,23 +751,10 @@ public sealed partial class SmokeTests : IClassFixture<CobranzaDigitalApiFactory
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
+    private async Task<string> CreateDefaultUserAndLoginAsync(string email, string password)
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        await LogUnauthorizedResponseAsync(response, "/api/v1/auth/register", authorizationHeader: null);
-        var rawBody = await response.Content.ReadAsStringAsync();
-
-        Assert.True(
-            response.IsSuccessStatusCode,
-            $"Expected register to return 200 for {email} but got {(int)response.StatusCode} ({response.StatusCode}). Body: {rawBody}");
-
-        var body = JsonSerializer.Deserialize<AuthTokensResponse>(rawBody, JsonOptions);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(body);
-        Assert.False(body!.AccessToken.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase));
-
-        return body!.AccessToken;
+        await _factory.CreateDefaultUserAsync(email, password);
+        return await LoginAndGetAccessTokenAsync(email, password);
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)

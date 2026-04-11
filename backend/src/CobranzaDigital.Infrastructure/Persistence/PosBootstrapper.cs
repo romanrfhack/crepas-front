@@ -156,6 +156,31 @@ public static class PosBootstrapper
                 ShowOnlyInStock = false
             });
             await db.SaveChangesAsync().ConfigureAwait(false);
+            return;
+        }
+
+        var settingsChanged = false;
+        if (settings.MultiStoreEnabled)
+        {
+            settings.MultiStoreEnabled = false;
+            settingsChanged = true;
+        }
+
+        if (settings.MaxStoresAllowed != 1)
+        {
+            settings.MaxStoresAllowed = 1;
+            settingsChanged = true;
+        }
+
+        if (settings.DefaultStoreId == Guid.Empty)
+        {
+            settings.DefaultStoreId = defaultStore.Id;
+            settingsChanged = true;
+        }
+
+        if (settingsChanged)
+        {
+            await db.SaveChangesAsync().ConfigureAwait(false);
         }
     }
 

@@ -42,6 +42,12 @@ public sealed class PosStoreContextService
             throw new ForbiddenException("Tenant context is required.");
         }
 
+        var tenantDefaultStoreId = await _db.Tenants.AsNoTracking()
+            .Where(x => x.Id == tenantId.Value)
+            .Select(x => x.DefaultStoreId)
+            .SingleOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
         var contextualStoreId = await ResolveContextStoreIdAsync(ct).ConfigureAwait(false);
 
         var candidates = new List<Guid>();
@@ -56,9 +62,10 @@ public sealed class PosStoreContextService
                 candidates.Add(contextualStoreId.Value);
             }
 
-            if (settings.DefaultStoreId != Guid.Empty && !candidates.Contains(settings.DefaultStoreId))
+            // Contained release mode resolves the implicit store only from the tenant-scoped default.
+            if (tenantDefaultStoreId.HasValue && !candidates.Contains(tenantDefaultStoreId.Value))
             {
-                candidates.Add(settings.DefaultStoreId);
+                candidates.Add(tenantDefaultStoreId.Value);
             }
         }
 

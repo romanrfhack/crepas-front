@@ -519,8 +519,11 @@ public sealed class PosSalesService : IPosSalesService
 
     public async Task<DailySummaryDto> GetDailySummaryAsync(DateOnly forDate, CancellationToken ct)
     {
+        var tenantId = RequireEffectiveTenantId();
+        var (resolvedStoreId, _) = await _storeContext.ResolveStoreAsync(null, ct).ConfigureAwait(false);
+
         var rawSales = await _db.Sales.AsNoTracking()
-            .Where(x => x.Status == SaleStatus.Completed)
+            .Where(x => x.Status == SaleStatus.Completed && x.TenantId == tenantId && x.StoreId == resolvedStoreId)
             .Select(x => new { x.Id, x.Total, x.OccurredAtUtc })
             .ToListAsync(ct)
             .ConfigureAwait(false);

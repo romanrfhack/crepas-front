@@ -14,8 +14,7 @@ export const routes: Routes = [
   },
   {
     path: 'register',
-    loadComponent: () =>
-      import('./features/auth/pages/register/register.component').then((m) => m.RegisterComponent),
+    redirectTo: 'login',
   },
   {
     path: 'app',

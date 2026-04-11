@@ -205,8 +205,7 @@ public sealed class AdminUsersTemporaryPasswordIntegrationTests : IClassFixture<
 
     private async Task RegisterAsync(string email, string password)
     {
-        using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await _factory.CreateDefaultUserAsync(email, password);
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)

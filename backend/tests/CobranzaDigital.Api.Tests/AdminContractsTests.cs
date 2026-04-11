@@ -6,10 +6,12 @@ namespace CobranzaDigital.Api.Tests;
 
 public sealed class AdminContractsTests : IClassFixture<CobranzaDigitalApiFactory>
 {
+    private readonly CobranzaDigitalApiFactory _factory;
     private readonly HttpClient _client;
 
     public AdminContractsTests(CobranzaDigitalApiFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -62,12 +64,7 @@ public sealed class AdminContractsTests : IClassFixture<CobranzaDigitalApiFactor
 
     private async Task RegisterAsync(string email, string password)
     {
-        using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        var rawBody = await response.Content.ReadAsStringAsync();
-
-        Assert.True(
-            response.IsSuccessStatusCode,
-            $"Expected register to return success for {email} but got {(int)response.StatusCode} ({response.StatusCode}). Body: {rawBody}");
+        await _factory.CreateDefaultUserAsync(email, password);
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)

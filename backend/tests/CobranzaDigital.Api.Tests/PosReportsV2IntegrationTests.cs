@@ -294,10 +294,8 @@ public sealed class PosReportsV2IntegrationTests : IClassFixture<CobranzaDigital
 
     private async Task<string> RegisterAndGetAccessTokenAsync(string email, string password)
     {
-        using var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password });
-        var payload = await response.Content.ReadFromJsonAsync<AuthTokensResponse>();
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return payload!.AccessToken;
+        await _factory.CreateDefaultUserAsync(email, password);
+        return await LoginAndGetAccessTokenAsync(email, password);
     }
 
     private async Task<string> LoginAndGetAccessTokenAsync(string email, string password)

@@ -24,30 +24,14 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("register")]
     [AllowAnonymous]
-    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public IActionResult Register(RegisterRequest request)
     {
-        var result = await _identityService.CreateUserAsync(request.Email, request.Password).ConfigureAwait(false);
-        if (!result.Success)
-        {
-            return Problem(
-                title: "Registration failed",
-                detail: "Unable to register user.",
-                statusCode: StatusCodes.Status400BadRequest);
-        }
-
-        var user = await _identityService.GetUserByIdAsync(result.UserId).ConfigureAwait(false);
-        if (user is null)
-        {
-            return Problem(
-                title: "Registration failed",
-                detail: "Unable to create session.",
-                statusCode: StatusCodes.Status500InternalServerError);
-        }
-
-        var tokens = await _tokenService.CreateTokensAsync(user, cancellationToken).ConfigureAwait(false);
-        return Ok(tokens);
+        _ = request;
+        return Problem(
+            title: "Public registration is disabled",
+            detail: "Use controlled onboarding to create users.",
+            statusCode: StatusCodes.Status403Forbidden);
     }
 
     [HttpPost("login")]
