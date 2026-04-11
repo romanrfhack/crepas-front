@@ -402,7 +402,11 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         {
             clientOperationId = Guid.NewGuid(),
             items = new[] { new { productId = product.Id, quantity = 1, selections = Array.Empty<object>(), extras = Array.Empty<object>() } },
-            payment = new { method = "Cash", amount = 40m }
+            payments = new object[]
+            {
+                new { method = "Cash", amount = 15m, reference = (string?)null },
+                new { method = "Card", amount = 25m, reference = "AUTH-40" }
+            }
         });
         using var createResp = await _client.SendAsync(createReq);
         var created = await createResp.Content.ReadFromJsonAsync<CreateSaleResponse>();
@@ -422,6 +426,11 @@ public sealed class PosSalesIntegrationTests : IClassFixture<CobranzaDigitalApiF
         Assert.Equal(HttpStatusCode.OK, detailResp.StatusCode);
         Assert.Equal(created.SaleId, detailPayload?["saleId"]?.GetValue<Guid>());
         Assert.NotNull(detailPayload?["lines"]?.AsArray());
+        var payments = detailPayload?["payments"]?.AsArray();
+        Assert.NotNull(payments);
+        Assert.Equal(2, payments!.Count);
+        Assert.Contains(payments, x => x?["method"]?.GetValue<string>() == "Cash" && x?["amount"]?.GetValue<decimal>() == 15m);
+        Assert.Contains(payments, x => x?["method"]?.GetValue<string>() == "Card" && x?["reference"]?.GetValue<string>() == "AUTH-40");
     }
 
     [Fact]

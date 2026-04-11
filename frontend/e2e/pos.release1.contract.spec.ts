@@ -8,6 +8,16 @@ interface FakeSale {
   status: 'Completed' | 'Void';
   payments: Array<{ method: string; amount: number; reference?: string | null }>;
   total: number;
+  occurredAtUtc: string;
+  lines: Array<{
+    productId: string;
+    externalCode: string | null;
+    name: string;
+    qty: number;
+    baseUnitPrice: number;
+    appliedUnitPrice: number;
+    lineSubtotal: number;
+  }>;
 }
 
 interface FakeServerOptions {
@@ -45,6 +55,9 @@ const seedAuth = async (page: Page, role: Role) => {
 
 const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
   const shiftId = 'SHIFT-E2E-1';
+  const todayOccurredAt = new Date();
+  todayOccurredAt.setUTCHours(18, 0, 0, 0);
+  const todayOccurredAtIso = todayOccurredAt.toISOString();
   let shiftOpen = false;
   let voidAttempts = 0;
   let openShiftAttempts = 0;
@@ -287,8 +300,27 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
       captured.saleRequests.push(body);
       const payments = (body.payments as FakeSale['payments']) ?? [];
       const saleId = `S${sales.length + 1}`;
+      const occurredAtUtc = todayOccurredAtIso;
       const total = payments.reduce((sum, payment) => sum + Number(payment.amount ?? 0), 0);
-      sales.unshift({ saleId, folio: `FOL-${saleId}`, status: 'Completed', payments, total });
+      sales.unshift({
+        saleId,
+        folio: `FOL-${saleId}`,
+        status: 'Completed',
+        payments,
+        total,
+        occurredAtUtc,
+        lines: [
+          {
+            productId: 'P1',
+            externalCode: null,
+            name: 'Café americano',
+            qty: 1,
+            baseUnitPrice: total,
+            appliedUnitPrice: total,
+            lineSubtotal: total,
+          },
+        ],
+      });
 
       return route.fulfill({
         status: 200,
@@ -296,8 +328,51 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
         body: JSON.stringify({
           saleId,
           folio: `FOL-${saleId}`,
-          occurredAtUtc: '2026-01-01T09:00:00Z',
+          occurredAtUtc,
           total,
+        }),
+      });
+    }
+
+    if (pathname.endsWith('/sales') && method === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          total: sales.length,
+          items: sales.map((sale) => ({
+            saleId: sale.saleId,
+            folio: sale.folio,
+            total: sale.total,
+            occurredAtUtc: sale.occurredAtUtc,
+            status: sale.status,
+          })),
+        }),
+      });
+    }
+
+    const saleDetailMatch = pathname.match(/\/(?:api\/)?v1\/pos\/sales\/([^/]+)$/);
+    if (saleDetailMatch && method === 'GET') {
+      const saleId = saleDetailMatch[1] ?? '';
+      const sale = sales.find((current) => current.saleId === saleId);
+      if (!sale) {
+        return route.fulfill({ status: 404, body: '' });
+      }
+
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          saleId: sale.saleId,
+          saleNumber: sale.folio,
+          createdAtUtc: sale.occurredAtUtc,
+          subtotal: sale.total,
+          total: sale.total,
+          currency: 'MXN',
+          storeId: 'store-e2e',
+          status: sale.status,
+          lines: sale.lines,
+          payments: sale.payments,
         }),
       });
     }
@@ -699,4 +774,41 @@ test('H) Modal operativo queda por encima del carrito expandido', async ({ page 
 
   expect(layers.modal).toBeGreaterThan(layers.cartPanel);
   expect(layers.modal).toBeGreaterThan(layers.floatingButton);
+});
+
+test('I) Comprobante y cancelacion sobreviven refresh usando ventas persistidas del dia', async ({
+  page,
+}) => {
+  const captured = await setupFakePosApi(page, { role: 'Cashier' });
+  await seedAuth(page, 'Cashier');
+  await openPosCaja(page);
+  await ensureShiftOpen(page);
+
+  await addSingleProductToCart(page);
+  await submitMixedPayment(page);
+
+  await expect(page.getByTestId('sale-receipt')).toBeVisible();
+  await expect(page.getByTestId('receipt-folio')).toContainText('FOL-S1');
+
+  await page.reload();
+  await expect(page.getByTestId('sale-row-S1')).toBeVisible();
+  await page.getByTestId('view-receipt-S1').click();
+  await expect(page.getByTestId('receipt-folio')).toContainText('FOL-S1');
+
+  await page.getByTestId('void-sale-S1').click();
+  await page.getByTestId('void-reason').selectOption('DuplicateCharge');
+  await page.getByTestId('confirm-void').click();
+
+  await expect(page.getByTestId('sale-row-S1')).toContainText('ANULADA');
+  expect(captured.voidRequests.at(-1)?.reasonCode).toBe('DuplicateCharge');
+});
+
+test('J) MVP minimo no expone mayoreo en surface visible de caja', async ({ page }) => {
+  await setupFakePosApi(page, { role: 'Cashier' });
+  await seedAuth(page, 'Cashier');
+  await openPosCaja(page);
+  await ensureShiftOpen(page);
+
+  await addSingleProductToCart(page);
+  await expect(page.locator('body')).not.toContainText('Mayoreo aplicado');
 });

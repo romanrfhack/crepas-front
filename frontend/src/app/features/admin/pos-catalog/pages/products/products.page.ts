@@ -195,25 +195,7 @@ import { firstValueFrom } from 'rxjs';
                       <input type="checkbox" [checked]="isSnapshotAvailable('Product', item.id)" [disabled]="!isOverrideEnabled(item.id)" (change)="onToggleAvailability(item.id, $event)" [attr.data-testid]="'availability-toggle-Product-' + item.id" />
                       Disponible en sucursal
                     </label>
-                    <label>
-                      Mayoreo
-                      <select
-                        [value]="getWholesaleMode(item.id)"
-                        (change)="onWholesaleModeChange(item.id, $event)"
-                        [attr.data-testid]="'wholesale-mode-' + item.id"
-                      >
-                        <option value="UseTenantDefault">Default tenant</option>
-                        <option value="Disabled">Desactivado</option>
-                        <option value="CustomTiers">Tiers custom</option>
-                      </select>
-                    </label>
-                    <button type="button" class="btn-outline btn-small" (click)="saveWholesaleOverride(item.id)">
-                      Guardar mayoreo
-                    </button>
                   </div>
-                  @if (getWholesaleMode(item.id) === 'CustomTiers') {
-                    <p>Custom tiers se configuran en API (MVP).</p>
-                  }
                   <div class="product-category">
                     <span class="meta-label">Categoría:</span>
                     {{ getCategoryName(item.categoryId) }}
@@ -795,7 +777,7 @@ export class ProductsPage {
         await this.api.createProduct(payload);
       }
       this.resetForm();
-      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability(), this.loadWholesaleOverrides()]);
+      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability()]);
     } catch {
       this.errorMessage.set('No fue posible guardar el producto.');
     }
@@ -901,7 +883,7 @@ export class ProductsPage {
     this.errorMessage.set('');
     try {
       await this.api.deactivateProduct(item.id);
-      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability(), this.loadWholesaleOverrides()]);
+      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability()]);
     } catch {
       this.errorMessage.set('No fue posible desactivar el producto.');
     }
@@ -947,7 +929,7 @@ export class ProductsPage {
         this.categoryIdControl.setValue(categories[0].id);
       }
 
-      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability(), this.loadWholesaleOverrides()]);
+      await Promise.all([this.loadProducts(), this.loadOverrides(), this.loadSnapshotAvailability()]);
     } catch {
       this.errorMessage.set('No fue posible cargar catálogos base.');
     }

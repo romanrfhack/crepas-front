@@ -6,7 +6,6 @@
       <p>Artículos: <strong>{{ itemCount() }}</strong></p>
       <p>Subtotal: <strong>${{ (subtotal() ?? total()).toFixed(2) }}</strong></p>
       <p>Total: <strong>${{ total().toFixed(2) }}</strong></p>
-      <p>Mayoreo aplicado: <strong>{{ wholesaleApplied() ? 'Sí' : 'No' }}</strong></p>
     </div>
 
     @if (validating()) {

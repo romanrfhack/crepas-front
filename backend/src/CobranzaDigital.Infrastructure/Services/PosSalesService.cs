@@ -613,7 +613,25 @@ public sealed class PosSalesService : IPosSalesService
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        return new SaleDetailDto(sale.Id, sale.Folio, sale.OccurredAtUtc, sale.Subtotal, sale.Total, sale.Currency, sale.StoreId, sale.Status, lines);
+        var payments = await _db.Payments.AsNoTracking()
+            .Where(x => x.SaleId == saleId)
+            .OrderBy(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id)
+            .Select(x => new SaleReceiptPaymentDto(x.Method, x.Amount, x.Reference))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return new SaleDetailDto(
+            sale.Id,
+            sale.Folio,
+            sale.OccurredAtUtc,
+            sale.Subtotal,
+            sale.Total,
+            sale.Currency,
+            sale.StoreId,
+            sale.Status,
+            lines,
+            payments);
     }
 
     public async Task<IReadOnlyList<TopProductDto>> GetTopProductsAsync(DateOnly dateFrom, DateOnly dateTo, int top, Guid? storeId, Guid? cashierUserId, Guid? shiftId, CancellationToken ct)

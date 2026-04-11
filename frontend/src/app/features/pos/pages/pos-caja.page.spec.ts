@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
-import { CreateSaleRequestDto } from '../models/pos.models';
+import { CreateSaleRequestDto, SaleDetailDto, SaleListItemUi } from '../models/pos.models';
 import { PosCatalogSnapshotService } from '../services/pos-catalog-snapshot.service';
 import { PosSalesApiService } from '../services/pos-sales-api.service';
 import { PosShiftApiService } from '../services/pos-shift-api.service';
@@ -19,13 +19,19 @@ describe('PosCajaPage', () => {
     clientOperationId?: string | null;
   }>;
   let salesCalls: { payload: CreateSaleRequestDto; correlationId: string }[];
-  let voidCalls: { saleId: string; payload: { clientVoidId: string }; correlationId: string }[];
+  let voidCalls: { saleId: string; payload: { clientVoidId: string; reasonCode?: string }; correlationId: string }[];
   let closePreviewCalls: unknown[];
   let invalidateCalls: (string | undefined)[];
+  let persistedSales: SaleListItemUi[];
+  let saleDetailsById: Record<string, SaleDetailDto>;
+  let todayOccurredAtIso: string;
   let quotePricingCalls = 0;
   let validateAvailabilityCalls = 0;
 
   beforeEach(async () => {
+    const todayOccurredAt = new Date();
+    todayOccurredAt.setUTCHours(18, 0, 0, 0);
+    todayOccurredAtIso = todayOccurredAt.toISOString();
     currentShiftResponse = {
       id: 'shift-1',
       openedAtUtc: '2026-02-12T10:00:00Z',
@@ -44,6 +50,39 @@ describe('PosCajaPage', () => {
     voidCalls = [];
     closePreviewCalls = [];
     invalidateCalls = [];
+    persistedSales = [
+      {
+        saleId: 'sale-existing',
+        folio: 'POS-HIST-1',
+        total: 42,
+        occurredAtUtc: todayOccurredAtIso,
+        status: 'Completed',
+      },
+    ];
+    saleDetailsById = {
+      'sale-existing': {
+        saleId: 'sale-existing',
+        saleNumber: 'POS-HIST-1',
+        createdAtUtc: todayOccurredAtIso,
+        subtotal: 42,
+        total: 42,
+        currency: 'MXN',
+        storeId: 'store-1',
+        status: 'Completed',
+        lines: [
+          {
+            productId: 'product-1',
+            externalCode: null,
+            name: 'Latte',
+            qty: 1,
+            baseUnitPrice: 42,
+            appliedUnitPrice: 42,
+            lineSubtotal: 42,
+          },
+        ],
+        payments: [{ method: 'Cash', amount: 42, reference: null }],
+      },
+    };
     quotePricingCalls = 0;
     validateAvailabilityCalls = 0;
 
@@ -130,35 +169,78 @@ describe('PosCajaPage', () => {
                 throw new HttpErrorResponse({ status: 0 });
               }
 
+              const saleId = 'sale-1';
+              const occurredAtUtc = todayOccurredAtIso;
+              const total = 10;
+              const payments = payload.payments.map((payment) => ({
+                method: payment.method,
+                amount: payment.amount,
+                reference: payment.reference ?? null,
+              }));
+
+              persistedSales = [
+                {
+                  saleId,
+                  folio: 'POS-001',
+                  total,
+                  occurredAtUtc,
+                  status: 'Completed',
+                },
+                ...persistedSales.filter((sale) => sale.saleId !== saleId),
+              ];
+              saleDetailsById[saleId] = {
+                saleId,
+                saleNumber: 'POS-001',
+                createdAtUtc: occurredAtUtc,
+                subtotal: total,
+                total,
+                currency: 'MXN',
+                storeId: 'store-1',
+                status: 'Completed',
+                lines: [
+                  {
+                    productId: 'product-1',
+                    externalCode: null,
+                    name: 'Latte',
+                    qty: 1,
+                    baseUnitPrice: 10,
+                    appliedUnitPrice: 10,
+                    lineSubtotal: 10,
+                  },
+                ],
+                payments,
+              };
+
               return {
-                saleId: 'sale-1',
+                saleId,
                 folio: 'POS-001',
-                occurredAtUtc: '2026-02-12T16:04:00Z',
-                total: 10,
+                occurredAtUtc,
+                total,
               };
             },
+            listSales: async () => ({
+              total: persistedSales.length,
+              items: persistedSales,
+            }),
+            getSaleDetail: async (saleId: string) => saleDetailsById[saleId],
             voidSale: async (
               saleId: string,
-              payload: { clientVoidId: string },
+              payload: { clientVoidId: string; reasonCode?: string },
               correlationId: string,
             ) => {
               voidCalls.push({ saleId, payload, correlationId });
+              persistedSales = persistedSales.map((sale) =>
+                sale.saleId === saleId ? { ...sale, status: 'Void' } : sale,
+              );
+              if (saleDetailsById[saleId]) {
+                saleDetailsById[saleId] = { ...saleDetailsById[saleId], status: 'Void' };
+              }
             },
           },
         },
         {
           provide: PosWholesaleApiService,
           useValue: {
-            getTenantWholesalePolicy: async () => ({
-              isEnabled: true,
-              name: 'Mayoreo base',
-              tiers: [{ minQty: 10, discountType: 'Percent', discountValue: 10 }],
-            }),
-            getProductWholesaleOverride: async () => ({
-              productId: 'product-1',
-              mode: 'UseTenantDefault',
-              tiers: [],
-            }),
             quotePricing: async () => {
               quotePricingCalls += 1;
               return {
@@ -250,6 +332,36 @@ describe('PosCajaPage', () => {
     expect(salesCalls[0]?.payload.clientOperationId).toBe(salesCalls[0]?.payload.clientSaleId);
     expect(salesCalls[1]?.payload.clientOperationId).toBe(salesCalls[1]?.payload.clientSaleId);
     expect(fixture.componentInstance.cartItems().length).toBe(0);
+  });
+
+  it('loads persisted day sales and can open a minimal commercial receipt', async () => {
+    await fixture.whenStable();
+    await fixture.componentInstance.openSaleReceipt('sale-existing');
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.daySales().some((sale) => sale.saleId === 'sale-existing')).toBe(
+      true,
+    );
+    expect(fixture.componentInstance.selectedSaleDetail()?.payments.length).toBe(1);
+    expect(fixture.nativeElement.querySelector('[data-testid="sale-receipt"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-testid="receipt-folio"]')?.textContent).toContain(
+      'POS-HIST-1',
+    );
+  });
+
+  it('opens receipt automatically after a successful sale and keeps it recoverable from persisted state', async () => {
+    await fixture.componentInstance.confirmPayment({
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
+    });
+
+    await fixture.componentInstance.confirmPayment({
+      payments: [{ method: 'Cash', amount: 10, reference: null }],
+    });
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.selectedSaleDetail()?.saleId).toBe('sale-1');
+    expect(fixture.componentInstance.selectedSaleDetail()?.payments[0]?.method).toBe('Cash');
+    expect(fixture.componentInstance.daySales()[0]?.saleId).toBe('sale-1');
   });
 
   it('reuses the same open-shift clientOperationId when retrying after ambiguous network error', async () => {
@@ -442,7 +554,7 @@ describe('PosCajaPage', () => {
       saleId: 'sale-void-1',
       folio: 'POS-VOID-1',
       total: 10,
-      occurredAtUtc: '2026-02-12T16:04:00Z',
+      occurredAtUtc: todayOccurredAtIso,
       status: 'Completed',
     });
 
@@ -452,6 +564,29 @@ describe('PosCajaPage', () => {
     expect(voidCalls[0]?.saleId).toBe('sale-void-1');
     expect(voidCalls[0]?.payload.clientVoidId).toBeTruthy();
     expect(closePreviewCalls.length).toBe(1);
+  });
+
+  it('uses DuplicateCharge as visible void reason code', async () => {
+    fixture.componentInstance.openVoidModal({
+      saleId: 'sale-existing',
+      folio: 'POS-HIST-1',
+      total: 42,
+      occurredAtUtc: todayOccurredAtIso,
+      status: 'Completed',
+    });
+    fixture.detectChanges();
+
+    const options = Array.from(
+      fixture.nativeElement.querySelectorAll('#void-reason-code option'),
+    ).map((option) => (option as HTMLOptionElement).value);
+    expect(options).toContain('DuplicateCharge');
+    expect(options).not.toContain('DuplicateSale');
+
+    fixture.componentInstance.voidForm.patchValue({ reasonCode: 'DuplicateCharge' });
+
+    await fixture.componentInstance.confirmVoidSale();
+
+    expect(voidCalls[0]?.payload.reasonCode).toBe('DuplicateCharge');
   });
 
   it('disables critical caja actions while loading is active', () => {
@@ -528,7 +663,7 @@ describe('PosCajaPage', () => {
       saleId: 'sale-void-2',
       folio: 'POS-VOID-2',
       total: 12,
-      occurredAtUtc: '2026-02-12T16:04:00Z',
+      occurredAtUtc: todayOccurredAtIso,
       status: 'Completed',
     });
 
@@ -570,7 +705,7 @@ describe('PosCajaPage', () => {
     ).toBe(false);
   });
 
-  it('applies and reverts wholesale tier when quantity changes', async () => {
+  it('keeps base pricing visible when quantity changes in MVP minimo', async () => {
     fixture.componentInstance.cartItems.set([
       {
         id: 'cart-1',
@@ -596,14 +731,21 @@ describe('PosCajaPage', () => {
     ]);
 
     fixture.componentInstance.increaseQty('cart-1');
-    expect(fixture.componentInstance.cartItems()[0]?.appliedUnitPrice).toBe(9);
+    expect(fixture.componentInstance.cartItems()[0]?.appliedUnitPrice).toBe(10);
 
     fixture.componentInstance.increaseQty('cart-1');
-    expect(fixture.componentInstance.cartItems()[0]?.appliedUnitPrice).toBe(9);
+    expect(fixture.componentInstance.cartItems()[0]?.appliedUnitPrice).toBe(10);
 
     fixture.componentInstance.decreaseQty('cart-1');
     fixture.componentInstance.decreaseQty('cart-1');
     expect(fixture.componentInstance.cartItems()[0]?.appliedUnitPrice).toBe(10);
+  });
+
+  it('does not render wholesale messaging in payment modal for MVP minimo', () => {
+    fixture.componentInstance.showPayment.set(true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('Mayoreo aplicado');
   });
 
   it('shows out-of-stock alert with available qty when sale returns 409 OutOfStock', async () => {

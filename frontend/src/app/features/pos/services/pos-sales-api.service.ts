@@ -5,11 +5,12 @@ import { environment } from '../../../../environments/environment';
 import {
   CreateSaleRequestDto,
   DailySummaryDto,
+  SaleDetailDto,
+  SaleListItemUi,
   SaleVoidRequestDto,
   SaleVoidResponseDto,
   SaleResponseDto,
   TopProductDto,
-  SaleListItemUi,
 } from '../models/pos.models';
 
 @Injectable({ providedIn: 'root' })
@@ -62,11 +63,22 @@ export class PosSalesApiService {
     );
   }
 
-  listSales(page = 1, pageSize = 20, q?: string) {
+  listSales(options?: {
+    page?: number;
+    pageSize?: number;
+    q?: string;
+    from?: string;
+    to?: string;
+    storeId?: string;
+  }) {
+    const { page = 1, pageSize = 20, q, from, to, storeId } = options ?? {};
     const query = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize),
       ...(q ? { q } : {}),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+      ...(storeId ? { storeId } : {}),
     }).toString();
 
     return firstValueFrom(
@@ -77,6 +89,6 @@ export class PosSalesApiService {
   }
 
   getSaleDetail(saleId: string) {
-    return firstValueFrom(this.http.get(`${this.baseUrl}/v1/pos/sales/${saleId}`));
+    return firstValueFrom(this.http.get<SaleDetailDto>(`${this.baseUrl}/v1/pos/sales/${saleId}`));
   }
 }

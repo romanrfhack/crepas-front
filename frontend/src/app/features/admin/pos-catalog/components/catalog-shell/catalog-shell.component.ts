@@ -10,7 +10,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
       <header class="page-header">
         <h1>📦 POS Catálogo</h1>
         <p class="page-subtitle">
-          Administra categorías, productos, esquemas y reglas de personalización
+          Administra categorías, productos, esquemas, disponibilidad e inventario del MVP mínimo
         </p>
         <div class="header-decoration"></div>
       </header>
@@ -66,13 +66,6 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
           class="catalog-nav__link"
         >
           Overrides
-        </a>
-        <a
-          routerLink="wholesale"
-          routerLinkActive="catalog-nav__link--active"
-          class="catalog-nav__link"
-        >
-          Mayoreo
         </a>
         <a
           routerLink="inventory"

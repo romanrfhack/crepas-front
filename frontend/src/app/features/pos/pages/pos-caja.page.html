@@ -120,7 +120,7 @@
 
   @if (saleSuccess(); as sale) {
     <p class="success" role="status">
-      Venta registrada: {{ sale.folio }} · Total final: ${{ sale.total.toFixed(2) }}
+      Venta registrada: {{ sale.folio }} · Total final: ${{ sale.total.toFixed(2) }} · Comprobante comercial no fiscal listo.
     </p>
   }
 
@@ -131,6 +131,82 @@
       }}
       · Diferencia: ${{ closeResult.difference.toFixed(2) }}
     </p>
+  }
+
+  @if (receiptLoading() || selectedSaleDetail()) {
+    <section class="receipt-panel" aria-label="Comprobante comercial" data-testid="sale-receipt">
+      <div class="receipt-panel__header">
+        <div>
+          <h3>Comprobante comercial</h3>
+          <p>No fiscal · Recuperable desde caja</p>
+        </div>
+        @if (selectedSaleDetail()) {
+          <button
+            type="button"
+            class="btn-link"
+            (click)="clearSelectedSaleDetail()"
+            [disabled]="loading() || receiptLoading()"
+            data-testid="close-receipt"
+          >
+            Cerrar
+          </button>
+        }
+      </div>
+
+      @if (receiptLoading()) {
+        <p class="receipt-panel__loading">Cargando comprobante…</p>
+      } @else if (selectedSaleDetail(); as saleDetail) {
+        <div class="receipt-summary">
+          <div>
+            <span class="receipt-label">Folio</span>
+            <strong data-testid="receipt-folio">{{ saleDetail.saleNumber }}</strong>
+          </div>
+          <div>
+            <span class="receipt-label">Fecha</span>
+            <strong>{{ formatDateTime(saleDetail.createdAtUtc) }}</strong>
+          </div>
+          <div>
+            <span class="receipt-label">Estado</span>
+            <strong>{{ saleDetail.status === 'Void' ? 'ANULADA' : 'COMPLETADA' }}</strong>
+          </div>
+        </div>
+
+        <div class="receipt-block">
+          <h4>Items</h4>
+          <ul class="receipt-lines">
+            @for (line of saleDetail.lines; track $index) {
+              <li>
+                <div>
+                  <strong>{{ line.name }}</strong>
+                  <p>Cant. {{ line.qty }} · Unitario ${{ line.appliedUnitPrice.toFixed(2) }}</p>
+                </div>
+                <strong>${{ line.lineSubtotal.toFixed(2) }}</strong>
+              </li>
+            }
+          </ul>
+        </div>
+
+        <div class="receipt-block">
+          <h4>Formas de pago</h4>
+          <ul class="receipt-payments">
+            @for (payment of saleDetail.payments; track $index) {
+              <li>
+                <span>{{ payment.method }}</span>
+                <span>${{ payment.amount.toFixed(2) }}</span>
+                @if (payment.reference) {
+                  <small>Ref: {{ payment.reference }}</small>
+                }
+              </li>
+            }
+          </ul>
+        </div>
+
+        <div class="receipt-total">
+          <span>Total</span>
+          <strong>${{ saleDetail.total.toFixed(2) }}</strong>
+        </div>
+      }
+    </section>
   }
 
   <div class="layout">
@@ -145,10 +221,28 @@
     </div>
   </div>
 
-  @if (shiftSales().length > 0) {
-    <section class="sales-list" aria-label="Ventas del turno actual">
-      <h3>Ventas registradas en esta sesión</h3>
-      @for (sale of shiftSales(); track sale.saleId) {
+  <section class="sales-list" aria-label="Ventas del día">
+    <div class="sales-list__header">
+      <div>
+        <h3>Ventas del día</h3>
+        <p>Consulta ventas persistidas del día y reabre su comprobante comercial.</p>
+      </div>
+      <button
+        type="button"
+        class="btn-link"
+        (click)="loadDaySales(selectedSaleDetail()?.saleId)"
+        [disabled]="loading() || salesLoading()"
+        data-testid="refresh-day-sales"
+      >
+        Actualizar
+      </button>
+    </div>
+    @if (salesLoading()) {
+      <p class="sales-empty">Cargando ventas del día…</p>
+    } @else if (daySales().length === 0) {
+      <p class="sales-empty">No hay ventas registradas hoy.</p>
+    } @else {
+      @for (sale of daySales(); track sale.saleId) {
         <div class="sale-item" [attr.data-testid]="'sale-row-' + sale.saleId">
           <div>
             <strong>{{ sale.folio }}</strong>
@@ -160,20 +254,30 @@
               sale.status === 'Void' ? 'ANULADA' : 'COMPLETADA'
             }}</span>
           </div>
-          @if (sale.status !== 'Void') {
+          <div class="sale-item__actions">
             <button
               type="button"
-              [attr.data-testid]="'void-sale-' + sale.saleId"
-              (click)="openVoidModal(sale)"
+              [attr.data-testid]="'view-receipt-' + sale.saleId"
+              (click)="openSaleReceipt(sale.saleId)"
               [disabled]="loading()"
             >
-              Cancelar
+              Comprobante
             </button>
-          }
+            @if (sale.status !== 'Void') {
+              <button
+                type="button"
+                [attr.data-testid]="'void-sale-' + sale.saleId"
+                (click)="openVoidModal(sale)"
+                [disabled]="loading()"
+              >
+                Cancelar
+              </button>
+            }
+          </div>
         </div>
       }
-    </section>
-  }
+    }
+  </section>
 
   @if (cartItems().length > 0) {
     <button
@@ -232,7 +336,6 @@
       [total]="estimatedTotal()"
       [subtotal]="estimatedTotal()"
       [itemCount]="ticketItemCount()"
-      [wholesaleApplied]="wholesaleAppliedInTicket()"
       [loading]="loading()"
       [validating]="checkoutValidating()"
       [pricingUpdated]="checkoutPricingUpdated()"
@@ -408,7 +511,7 @@
           >
             <option value="CashierError">CashierError</option>
             <option value="CustomerRequest">CustomerRequest</option>
-            <option value="DuplicateSale">DuplicateSale</option>
+            <option value="DuplicateCharge">DuplicateCharge</option>
             <option value="Other">Other</option>
           </select>
           <label for="void-reason-text">Descripción (opcional)</label>

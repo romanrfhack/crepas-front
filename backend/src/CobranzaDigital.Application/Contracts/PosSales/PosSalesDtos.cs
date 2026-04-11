@@ -36,6 +36,7 @@ public sealed record CreateSaleItemExtraRequestDto(Guid ExtraId, int Quantity);
 public sealed record CreatePaymentRequestDto(PaymentMethod Method, decimal Amount, string? Reference);
 
 public sealed record CreateSaleResponseDto(Guid SaleId, string Folio, DateTimeOffset OccurredAtUtc, decimal Total);
+public sealed record SaleReceiptPaymentDto(PaymentMethod Method, decimal Amount, string? Reference);
 public sealed record CreateSaleReceiptLineDto(
     Guid ProductId,
     string? ExternalCode,
@@ -82,7 +83,8 @@ public sealed record SaleDetailDto(
     string Currency,
     Guid StoreId,
     SaleStatus Status,
-    IReadOnlyList<CreateSaleReceiptLineDto> Lines);
+    IReadOnlyList<CreateSaleReceiptLineDto> Lines,
+    IReadOnlyList<SaleReceiptPaymentDto> Payments);
 
 public sealed record VoidSaleRequestDto(string ReasonCode, string? ReasonText, string? Note, Guid? ClientVoidId);
 

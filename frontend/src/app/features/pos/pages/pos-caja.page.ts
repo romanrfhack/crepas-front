@@ -39,12 +39,11 @@ import {
   PosShiftDto,
   ProductDto,
   PosInventoryValidateAvailabilityResponseLineDto,
-  ProductWholesaleOverrideDto,
+  SaleDetailDto,
   SaleListItemUi,
   SaleResponseDto,
   SaleVoidRequestDto,
   ShiftClosePreviewDto,
-  TenantWholesalePolicyDto,
 } from '../models/pos.models';
 import { PosCatalogSnapshotService } from '../services/pos-catalog-snapshot.service';
 import { PosSalesApiService } from '../services/pos-sales-api.service';
@@ -52,7 +51,6 @@ import { PosShiftApiService } from '../services/pos-shift-api.service';
 import { PosTimezoneService } from '../services/pos-timezone.service';
 import { PosWholesaleApiService } from '../services/pos-wholesale-api.service';
 import { StoreContextService } from '../services/store-context.service';
-import { WholesalePricingService } from '../services/wholesale-pricing.service';
 import { roundMoney } from '../utils/pricing-rounding';
 import { applyQuoteResponseToCart } from '../utils/quote-mapping';
 
@@ -78,7 +76,6 @@ export class PosCajaPage implements OnDestroy {
   private readonly timezone = inject(PosTimezoneService);
   private readonly storeContext = inject(StoreContextService);
   private readonly wholesaleApi = inject(PosWholesaleApiService);
-  private readonly wholesalePricing = inject(WholesalePricingService);
 
   readonly snapshot = signal<CatalogSnapshotDto | null>(null);
   readonly selectedCategoryId = signal<string | null>(null);
@@ -99,15 +96,14 @@ export class PosCajaPage implements OnDestroy {
   readonly closePreview = signal<ShiftClosePreviewDto | null>(null);
   readonly closeResult = signal<CloseShiftResultDto | null>(null);
   readonly cartExpanded = signal(false);
-  readonly shiftSales = signal<SaleListItemUi[]>([]);
+  readonly daySales = signal<SaleListItemUi[]>([]);
+  readonly salesLoading = signal(false);
   readonly showVoidModal = signal(false);
   readonly selectedSaleForVoid = signal<SaleListItemUi | null>(null);
+  readonly selectedSaleDetail = signal<SaleDetailDto | null>(null);
+  readonly receiptLoading = signal(false);
   readonly closeShiftError = signal<string | null>(null);
   readonly voidForbiddenError = signal(false);
-  readonly tenantWholesalePolicy = signal<TenantWholesalePolicyDto | null>(null);
-  readonly productWholesaleOverrides = signal<Record<string, ProductWholesaleOverrideDto | null>>(
-    {},
-  );
   readonly checkoutValidating = signal(false);
   readonly checkoutPricingUpdated = signal(false);
   readonly checkoutInsufficientLines = signal<PosInventoryValidateAvailabilityResponseLineDto[]>(
@@ -210,9 +206,6 @@ export class PosCajaPage implements OnDestroy {
   readonly ticketItemCount = computed(() =>
     this.cartItems().reduce((sum, item) => sum + item.quantity, 0),
   );
-  readonly wholesaleAppliedInTicket = computed(() =>
-    this.cartItems().some((item) => item.wholesale.isApplied),
-  );
 
   readonly estimatedTotal = computed(() =>
     roundMoney(
@@ -258,6 +251,7 @@ export class PosCajaPage implements OnDestroy {
     this.storeContext.setActiveStoreId(this.storeContext.getActiveStoreId());
     void this.loadSnapshot();
     void this.loadCurrentShift();
+    void this.loadDaySales();
   }
 
   async loadSnapshot(forceRefresh = false) {
@@ -271,7 +265,6 @@ export class PosCajaPage implements OnDestroy {
     try {
       const data = await firstValueFrom(this.snapshotService.getSnapshot({ forceRefresh }));
       this.snapshot.set(data);
-      await this.loadWholesalePolicy();
     } catch {
       this.errorMessage.set('No se pudo cargar el catálogo. Intenta nuevamente.');
     }
@@ -467,7 +460,6 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
-    await this.ensureProductOverrideLoaded(product.id);
     this.addToCart(product, { selections: [], extras: [] });
   }
 
@@ -477,7 +469,6 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
-    await this.ensureProductOverrideLoaded(product.id);
     this.addToCart(product, payload);
     this.activeCustomizationProduct.set(null);
   }
@@ -494,12 +485,14 @@ export class PosCajaPage implements OnDestroy {
         }
 
         const quantity = item.quantity + 1;
-        const pricing = this.quoteWholesale(item.productId, quantity, item.basePrice);
+        const pricing = this.getBasePricing(item.basePrice);
         return {
           ...item,
           quantity,
           appliedUnitPrice: pricing.appliedUnitPrice,
           wholesaleTierLabel: pricing.tierLabel,
+          wholesale: pricing.wholesale,
+          pricingCalculatedAtUtc: new Date().toISOString(),
         };
       }),
     );
@@ -514,7 +507,7 @@ export class PosCajaPage implements OnDestroy {
           }
 
           const quantity = item.quantity - 1;
-          const pricing = this.quoteWholesale(item.productId, quantity, item.basePrice);
+          const pricing = this.getBasePricing(item.basePrice);
           return {
             ...item,
             quantity,
@@ -591,20 +584,13 @@ export class PosCajaPage implements OnDestroy {
     try {
       const response = await this.salesApi.createSale(payload, this.correlationId());
       this.saleSuccess.set(response);
-      this.shiftSales.update((sales) => [
-        {
-          saleId: response.saleId,
-          folio: response.folio,
-          total: response.total,
-          occurredAtUtc: response.occurredAtUtc,
-          status: 'Completed',
-        },
-        ...sales,
-      ]);
       this.cartItems.set([]);
       this.showPayment.set(false);
       this.inProgressClientSaleId.set(null);
-      await this.refreshClosePreviewWithCashCount();
+      await Promise.all([
+        this.loadDaySales(response.saleId),
+        this.refreshClosePreviewWithCashCount(),
+      ]);
     } catch (error) {
       await this.handleSaleError(error);
     } finally {
@@ -650,15 +636,13 @@ export class PosCajaPage implements OnDestroy {
 
     try {
       await this.salesApi.voidSale(sale.saleId, payload, this.correlationId());
-      this.shiftSales.update((sales) =>
-        sales.map((current) =>
-          current.saleId === sale.saleId ? { ...current, status: 'Void' } : current,
-        ),
-      );
       this.showVoidModal.set(false);
       this.selectedSaleForVoid.set(null);
       this.inProgressVoidOperationId.set(null);
-      await this.refreshClosePreviewWithCashCount();
+      await Promise.all([
+        this.loadDaySales(sale.saleId),
+        this.refreshClosePreviewWithCashCount(),
+      ]);
     } catch (error) {
       if (this.isVoidForbiddenError(error)) {
         this.voidForbiddenError.set(true);
@@ -807,7 +791,7 @@ export class PosCajaPage implements OnDestroy {
   }
 
   private addToCart(product: ProductDto, customization: ProductCustomizationResult) {
-    const pricing = this.quoteWholesale(product.id, 1, product.basePrice);
+    const pricing = this.getBasePricing(product.basePrice);
     this.cartItems.update((items) => [
       ...items,
       {
@@ -955,15 +939,6 @@ export class PosCajaPage implements OnDestroy {
     this.showVoidModal.set(false);
   }
 
-  private async loadWholesalePolicy() {
-    try {
-      const policy = await this.wholesaleApi.getTenantWholesalePolicy();
-      this.tenantWholesalePolicy.set(policy);
-    } catch {
-      this.tenantWholesalePolicy.set(null);
-    }
-  }
-
   private getProblemDetail(payload: unknown): string | null {
     if (!payload || typeof payload !== 'object') {
       return null;
@@ -971,31 +946,6 @@ export class PosCajaPage implements OnDestroy {
 
     const detail = (payload as { detail?: unknown }).detail;
     return typeof detail === 'string' ? detail : null;
-  }
-
-  private quoteWholesale(productId: string, qty: number, basePrice: number) {
-    const overrideMap = this.productWholesaleOverrides();
-    const override = overrideMap[productId] ?? null;
-
-    return this.wholesalePricing.quote({
-      qty,
-      basePrice,
-      policy: this.tenantWholesalePolicy(),
-      override,
-    });
-  }
-
-  private async ensureProductOverrideLoaded(productId: string) {
-    if (productId in this.productWholesaleOverrides()) {
-      return;
-    }
-
-    try {
-      const override = await this.wholesaleApi.getProductWholesaleOverride(productId);
-      this.productWholesaleOverrides.update((current) => ({ ...current, [productId]: override }));
-    } catch {
-      this.productWholesaleOverrides.update((current) => ({ ...current, [productId]: null }));
-    }
   }
 
   async revalidatePricing() {
@@ -1010,23 +960,13 @@ export class PosCajaPage implements OnDestroy {
       );
       const response = await this.wholesaleApi.quotePricing({
         storeId,
-        tenantPolicy: this.tenantWholesalePolicy()
-          ? {
-              isEnabled: this.tenantWholesalePolicy()!.isEnabled,
-              tiers: this.tenantWholesalePolicy()!.tiers,
-            }
-          : null,
+        tenantPolicy: null,
         lines: this.cartItems().map((item) => ({
           productId: item.productId,
           qty: item.quantity,
           basePrice: item.basePrice,
           requestedUnitPrice: item.appliedUnitPrice,
-          override: this.productWholesaleOverrides()[item.productId]
-            ? {
-                mode: this.productWholesaleOverrides()[item.productId]!.mode,
-                tiers: this.productWholesaleOverrides()[item.productId]!.tiers,
-              }
-            : null,
+          override: null,
         })),
       });
 
@@ -1121,7 +1061,10 @@ export class PosCajaPage implements OnDestroy {
       return;
     }
 
-    void this.loadCurrentShift();
+    void Promise.all([
+      this.loadCurrentShift(),
+      this.loadDaySales(this.selectedSaleDetail()?.saleId),
+    ]);
   }
 
   private isItemUnavailableError(payload: unknown) {
@@ -1320,6 +1263,70 @@ export class PosCajaPage implements OnDestroy {
       (item) => item.productId === itemId,
     )?.productName;
     return fallbackFromCart?.trim() ? fallbackFromCart.trim() : null;
+  }
+
+  async loadDaySales(selectSaleId?: string) {
+    this.salesLoading.set(true);
+    try {
+      const today = this.timezone.todayIsoDate();
+      const response = await this.salesApi.listSales({
+        page: 1,
+        pageSize: 100,
+        storeId: this.storeContext.getActiveStoreId() ?? undefined,
+      });
+      const items = response.items.filter(
+        (sale) =>
+          this.timezone.getIsoDateInBusinessTimezone(new Date(sale.occurredAtUtc)) === today,
+      );
+      this.daySales.set(items);
+
+      if (!selectSaleId) {
+        const selectedSaleId = this.selectedSaleDetail()?.saleId;
+        if (selectedSaleId && !items.some((sale) => sale.saleId === selectedSaleId)) {
+          this.selectedSaleDetail.set(null);
+        }
+        return;
+      }
+
+      if (items.some((sale) => sale.saleId === selectSaleId)) {
+        await this.openSaleReceipt(selectSaleId);
+      }
+    } catch {
+      this.errorMessage.set('No se pudieron cargar las ventas del día.');
+    } finally {
+      this.salesLoading.set(false);
+    }
+  }
+
+  async openSaleReceipt(saleId: string) {
+    this.receiptLoading.set(true);
+    try {
+      const detail = await this.salesApi.getSaleDetail(saleId);
+      this.selectedSaleDetail.set(detail);
+    } catch {
+      this.errorMessage.set('No se pudo cargar el comprobante comercial.');
+    } finally {
+      this.receiptLoading.set(false);
+    }
+  }
+
+  clearSelectedSaleDetail() {
+    this.selectedSaleDetail.set(null);
+  }
+
+  private getBasePricing(basePrice: number) {
+    return {
+      baseUnitPrice: basePrice,
+      appliedUnitPrice: basePrice,
+      tierLabel: null as string | null,
+      wholesale: {
+        isApplied: false,
+        minQty: null,
+        discountType: null,
+        discountValue: null,
+        source: null,
+      },
+    };
   }
 
   private getStringValue(

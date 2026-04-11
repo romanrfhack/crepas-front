@@ -26,7 +26,6 @@ export class PaymentModalComponent {
   readonly total = input.required<number>();
   readonly subtotal = input<number | null>(null);
   readonly itemCount = input<number>(0);
-  readonly wholesaleApplied = input<boolean>(false);
   readonly loading = input<boolean>(false);
   readonly validating = input<boolean>(false);
   readonly pricingUpdated = input<boolean>(false);

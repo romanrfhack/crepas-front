@@ -183,6 +183,35 @@ export interface SaleResponseDto {
   }>;
 }
 
+export interface SaleReceiptLineDto {
+  productId: string;
+  externalCode: string | null;
+  name: string;
+  qty: number;
+  baseUnitPrice: number;
+  appliedUnitPrice: number;
+  lineSubtotal: number;
+}
+
+export interface SaleReceiptPaymentDto {
+  method: PaymentMethod;
+  amount: number;
+  reference: string | null;
+}
+
+export interface SaleDetailDto {
+  saleId: string;
+  saleNumber: string;
+  createdAtUtc: string;
+  subtotal: number;
+  total: number;
+  currency: string;
+  storeId: string;
+  status: 'Completed' | 'Void';
+  lines: SaleReceiptLineDto[];
+  payments: SaleReceiptPaymentDto[];
+}
+
 export interface DailySummaryDto {
   date: string;
   totalTickets: number;
