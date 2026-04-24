@@ -1,9 +1,14 @@
+using CobranzaDigital.Infrastructure.Persistence;
+
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace CobranzaDigital.Infrastructure.Migrations
 {
+    [DbContext(typeof(CobranzaDigitalDbContext))]
+    [Migration("20260318120000_Ventas2SalesIndexes")]
     public partial class Ventas2SalesIndexes : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

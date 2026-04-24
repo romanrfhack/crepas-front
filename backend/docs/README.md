@@ -50,15 +50,18 @@ dotnet tool install --global dotnet-ef
      --startup-project src/CobranzaDigital.Api
    ```
 
-4. **(Opcional) Habilita migraciones automáticas al arrancar.**
+4. **(Opcional) Valida migraciones con el mismo binario del release sin arrancar el servidor HTTP.**
    ```bash
-   export APPLY_MIGRATIONS_ON_STARTUP=1
+   export SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING=1
+   dotnet run --project src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -- --migrate-only
    ```
 
 5. **Levanta la API.**
    ```bash
    dotnet run --project src/CobranzaDigital.Api
    ```
+
+> `APPLY_MIGRATIONS_ON_STARTUP` ya no es la vía operativa de release para Production. El flujo formal usa `--migrate-only`.
 
 ## Seed mínimo (admin/roles) — opcional
 

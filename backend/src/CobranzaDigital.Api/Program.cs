@@ -22,6 +22,7 @@ using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+var migrateOnly = args.Contains("--migrate-only", StringComparer.OrdinalIgnoreCase);
 
 var keysPath = builder.Configuration["DataProtection:KeysPath"]
               ?? "/var/www/cobranzadigital/api/keys";
@@ -188,6 +189,14 @@ if (isTestingEnvironment || applyMigrationsOnStartup)
     {
         await dbContext.Database.MigrateAsync().ConfigureAwait(false);
     }
+}
+
+if (migrateOnly)
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+    await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+    return;
 }
 
 var jwtLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("JwtStartup");

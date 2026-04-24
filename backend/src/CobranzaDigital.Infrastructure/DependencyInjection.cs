@@ -37,6 +37,10 @@ public static class DependencyInjection
         {
             var databaseOptions = serviceProvider.GetRequiredService<IOptions<DatabaseOptions>>().Value;
             var connectionString = configuration.GetConnectionString(databaseOptions.ConnectionStringName);
+            var suppressFirstWarning =
+                string.Equals(Environment.GetEnvironmentVariable("SUPPRESS_EF_FIRST_WARNING"), "1", StringComparison.Ordinal);
+            var suppressPendingModelChangesWarning =
+                string.Equals(Environment.GetEnvironmentVariable("SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING"), "1", StringComparison.Ordinal);
 
             if (string.IsNullOrWhiteSpace(connectionString))
             {
@@ -57,9 +61,20 @@ public static class DependencyInjection
                 options.EnableSensitiveDataLogging();
             }
 
-            if (string.Equals(Environment.GetEnvironmentVariable("SUPPRESS_EF_FIRST_WARNING"), "1", StringComparison.Ordinal))
+            if (suppressFirstWarning || suppressPendingModelChangesWarning)
             {
-                options.ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.FirstWithoutOrderByAndFilterWarning));
+                options.ConfigureWarnings(warnings =>
+                {
+                    if (suppressFirstWarning)
+                    {
+                        warnings.Ignore(CoreEventId.FirstWithoutOrderByAndFilterWarning);
+                    }
+
+                    if (suppressPendingModelChangesWarning)
+                    {
+                        warnings.Ignore(RelationalEventId.PendingModelChangesWarning);
+                    }
+                });
             }
         });
 

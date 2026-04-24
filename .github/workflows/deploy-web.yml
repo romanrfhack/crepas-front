@@ -5,131 +5,403 @@ on:
     workflows: ["CI"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      deploy_action:
+        description: Release action
+        required: true
+        default: deploy
+        type: choice
+        options:
+          - deploy
+          - rollback
+      ci_run_id:
+        description: Successful CI run id on main (required for deploy)
+        required: false
+        type: string
+      release_sha:
+        description: Full commit SHA of the approved artifact (required for deploy)
+        required: false
+        type: string
+      rollback_release_id:
+        description: Release id to rollback to (optional, defaults to previous)
+        required: false
+        type: string
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
-  group: deploy-web-main
-  cancel-in-progress: true
+  group: deploy-web-production
+  cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+  deploy:
+    if: >
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref_name == 'main' &&
+       github.event.inputs.deploy_action == 'deploy')
     runs-on: ubuntu-latest
-
+    environment: production
     env:
       CD_SSH_HOST: ${{ secrets.CD_SSH_HOST }}
       CD_SSH_PORT: ${{ secrets.CD_SSH_PORT }}
+      CD_SSH_KEY: ${{ secrets.CD_SSH_KEY_B64 }}
       CD_USER: ${{ secrets.CD_USER }}
       CD_WEB_PATH: ${{ secrets.CD_WEB_PATH }}
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Resolve approved release source
+        id: source
+        uses: actions/github-script@v7
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          MANUAL_CI_RUN_ID: ${{ github.event.inputs.ci_run_id }}
+          MANUAL_RELEASE_SHA: ${{ github.event.inputs.release_sha }}
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-          fetch-depth: 2
+          script: |
+            const eventName = process.env.EVENT_NAME;
+            if (eventName === 'workflow_run') {
+              core.setOutput('ci_run_id', process.env.WORKFLOW_RUN_ID);
+              core.setOutput('ci_run_attempt', process.env.WORKFLOW_RUN_ATTEMPT);
+              core.setOutput('release_sha', process.env.WORKFLOW_RUN_SHA);
+              return;
+            }
 
-      - name: Detect frontend changes for workflow_run
-        if: github.event_name == 'workflow_run'
-        id: changed
-        shell: bash
+            const runIdRaw = (process.env.MANUAL_CI_RUN_ID || '').trim();
+            const releaseSha = (process.env.MANUAL_RELEASE_SHA || '').trim().toLowerCase();
+            if (!runIdRaw || !releaseSha) {
+              core.setFailed('workflow_dispatch deploy requires ci_run_id and release_sha.');
+              return;
+            }
+
+            const runId = Number(runIdRaw);
+            if (!Number.isInteger(runId) || runId <= 0) {
+              core.setFailed(`Invalid ci_run_id: ${runIdRaw}`);
+              return;
+            }
+
+            const { data: run } = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId
+            });
+
+            if (run.name !== 'CI') {
+              core.setFailed(`Run ${runId} is not from the CI workflow.`);
+              return;
+            }
+
+            if (run.conclusion !== 'success') {
+              core.setFailed(`Run ${runId} did not finish successfully.`);
+              return;
+            }
+
+            if (run.head_branch !== 'main') {
+              core.setFailed(`Run ${runId} is not from main.`);
+              return;
+            }
+
+            if ((run.head_sha || '').toLowerCase() !== releaseSha) {
+              core.setFailed(`Run ${runId} SHA ${run.head_sha} does not match ${releaseSha}.`);
+              return;
+            }
+
+            core.setOutput('ci_run_id', String(run.id));
+            core.setOutput('ci_run_attempt', String(run.run_attempt));
+            core.setOutput('release_sha', run.head_sha);
+
+      - name: Download release manifest
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.source.outputs.ci_run_id }}
+          name: release-manifest-${{ steps.source.outputs.release_sha }}
+          path: release-manifest
+
+      - name: Validate frontend release manifest
+        id: manifest
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EXPECTED_SHA: ${{ steps.source.outputs.release_sha }}
         run: |
           set -euo pipefail
-          if git rev-parse HEAD^ >/dev/null 2>&1; then
-            CHANGED=$(git diff --name-only HEAD^ HEAD)
-          else
-            CHANGED=$(git show --pretty='' --name-only HEAD)
-          fi
 
-          echo "Changed files:"
-          echo "$CHANGED"
-
-          if echo "$CHANGED" | grep -q '^frontend/'; then
-            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Skip deploy when frontend did not change
-        if: github.event_name == 'workflow_run' && steps.changed.outputs.frontend_changed != 'true'
-        run: |
-          echo "No frontend/** changes detected. Skipping WEB deploy."
-          exit 0
-
-      - name: Setup Node
-        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: "frontend/package-lock.json"
-
-      - name: Install deps
-        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build (production)
-        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
-        working-directory: frontend
-        run: npm run build -- --configuration production
-
-      - name: Detect build output (folder that contains index.html)
-        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ -f "frontend/dist/cobranza-digital/browser/index.html" ]; then
-            echo "Detected SSR output. Using: frontend/dist/cobranza-digital/browser"
-            echo "DIST_DIR=frontend/dist/cobranza-digital/browser" >> $GITHUB_ENV
-          elif [ -f "frontend/dist/cobranza-digital/index.html" ]; then
-            echo "Detected SPA output. Using: frontend/dist/cobranza-digital"
-            echo "DIST_DIR=frontend/dist/cobranza-digital" >> $GITHUB_ENV
-          else
-            echo "ERROR: No pude encontrar index.html en frontend/dist"
-            find frontend/dist -maxdepth 4 -type f -name index.html -print || true
+          manifest_path="release-manifest/release-manifest.json"
+          if [ ! -f "$manifest_path" ]; then
+            echo "Missing release manifest artifact." >&2
             exit 1
           fi
 
-      - name: Show dist output
-        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "DIST_DIR=$DIST_DIR"
-          ls -la "$DIST_DIR"
+          manifest_sha="$(jq -r '.sha' "$manifest_path")"
+          if [ "$manifest_sha" != "$EXPECTED_SHA" ]; then
+            echo "Manifest SHA $manifest_sha does not match expected SHA $EXPECTED_SHA." >&2
+            exit 1
+          fi
+
+          frontend_release="$(jq -r '.frontendRelease' "$manifest_path")"
+          artifact_name="$(jq -r '.webArtifact // empty' "$manifest_path")"
+          release_id="$(jq -r '.releaseId' "$manifest_path")"
+
+          if [ "$frontend_release" != "true" ] || [ -z "$artifact_name" ]; then
+            if [ "$EVENT_NAME" = "workflow_run" ]; then
+              echo "No frontend release artifact in manifest. Skipping WEB deploy."
+              echo "deploy_required=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "The selected CI run does not contain a frontend release artifact." >&2
+            exit 1
+          fi
+
+          echo "deploy_required=true" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download WEB artifact
+        if: steps.manifest.outputs.deploy_required == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.source.outputs.ci_run_id }}
+          name: ${{ steps.manifest.outputs.artifact_name }}
+          path: web-release
 
       - name: Setup SSH
-        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
-        shell: bash
+        if: steps.manifest.outputs.deploy_required == 'true'
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          echo "${{ secrets.CD_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/id_ed25519
+          printf '%s' "$CD_SSH_KEY" | base64 -d > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
 
-          ssh-keyscan -p "$CD_SSH_PORT" -H "$CD_SSH_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -4 -T 10 -p "${CD_SSH_PORT:-22}" -H "$CD_SSH_HOST" >> ~/.ssh/known_hosts
 
-      - name: Prepare remote folder (clean)
-        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
-        shell: bash
+      - name: Upload WEB release bundle
+        if: steps.manifest.outputs.deploy_required == 'true'
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p "$CD_SSH_PORT" "$CD_USER@$CD_SSH_HOST" \
-            "mkdir -p '$CD_WEB_PATH' && find '$CD_WEB_PATH' -mindepth 1 -maxdepth 1 -exec rm -rf {} +"
+          archive_path="$(find web-release -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          if [ -z "$archive_path" ]; then
+            echo "WEB artifact archive was not downloaded." >&2
+            exit 1
+          fi
 
-      - name: Deploy via rsync
-        if: github.event_name == 'workflow_dispatch' || steps.changed.outputs.frontend_changed == 'true'
-        shell: bash
+          remote_archive="/tmp/web-release-${{ steps.manifest.outputs.release_id }}.tar.gz"
+          remote_manifest="/tmp/web-release-${{ steps.manifest.outputs.release_id }}.json"
+
+          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -P "${CD_SSH_PORT:-22}" \
+            "$archive_path" "$CD_USER@$CD_SSH_HOST:$remote_archive"
+          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -P "${CD_SSH_PORT:-22}" \
+            release-manifest/release-manifest.json "$CD_USER@$CD_SSH_HOST:$remote_manifest"
+
+      - name: Swap WEB atomically
+        if: steps.manifest.outputs.deploy_required == 'true'
         run: |
           set -euo pipefail
 
-          rsync -az --delete -O --no-perms --no-owner --no-group \
-            "$DIST_DIR"/ \
-            -e "ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p $CD_SSH_PORT" \
-            "$CD_USER@$CD_SSH_HOST:$CD_WEB_PATH/"
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p "${CD_SSH_PORT:-22}" "$CD_USER@$CD_SSH_HOST" \
+            "RELEASE_ID='${{ steps.manifest.outputs.release_id }}' CD_WEB_PATH='${CD_WEB_PATH}' bash -s" <<'EOF'
+          set -euo pipefail
+
+          web_root="$CD_WEB_PATH"
+          deploy_root="$(dirname "$web_root")"
+          site_name="$(basename "$web_root")"
+          state_root="$deploy_root/.${site_name}-deploy"
+          releases="$state_root/releases"
+          current_id_file="$state_root/current-release.txt"
+          previous_id_file="$state_root/previous-release.txt"
+          archive="/tmp/web-release-${RELEASE_ID}.tar.gz"
+          manifest="/tmp/web-release-${RELEASE_ID}.json"
+          release_dir="$releases/$RELEASE_ID"
+
+          mkdir -p "$releases"
+          rm -rf "$release_dir"
+          mkdir -p "$release_dir"
+          tar -xzf "$archive" -C "$release_dir"
+          cp "$manifest" "$release_dir/release-manifest.json"
+
+          previous_release_id=""
+          if [ -L "$web_root" ]; then
+            current_target="$(readlink -f "$web_root")"
+            if [ -n "$current_target" ] && [ "$current_target" != "$release_dir" ]; then
+              previous_release_id="$(basename "$current_target")"
+            fi
+          elif [ -d "$web_root" ]; then
+            legacy_dir="$deploy_root/${site_name}-legacy-$(date -u +%Y%m%d%H%M%S)"
+            mv "$web_root" "$legacy_dir"
+          fi
+
+          if [ -n "$previous_release_id" ]; then
+            printf '%s' "$previous_release_id" > "$previous_id_file"
+          fi
+
+          tmp_link="$state_root/current-$RELEASE_ID"
+          rm -f "$tmp_link"
+          ln -s "$release_dir" "$tmp_link"
+          mv -Tf "$tmp_link" "$web_root"
+
+          printf '%s' "$RELEASE_ID" > "$current_id_file"
+
+          keep_previous="${previous_release_id:-}"
+          while IFS= read -r existing_release; do
+            release_name="$(basename "$existing_release")"
+            if [ "$release_name" = "$RELEASE_ID" ]; then
+              continue
+            fi
+            if [ -n "$keep_previous" ] && [ "$release_name" = "$keep_previous" ]; then
+              continue
+            fi
+            rm -rf "$existing_release"
+          done < <(find "$releases" -mindepth 1 -maxdepth 1 -type d | sort)
+
+          rm -f "$archive" "$manifest"
+          EOF
+
+      - name: Checkout release smoke script
+        if: steps.manifest.outputs.deploy_required == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.release_sha }}
+          sparse-checkout: |
+            scripts/release-smoke.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Validate release smoke configuration
+        if: steps.manifest.outputs.deploy_required == 'true'
+        env:
+          RELEASE_SMOKE_BASE_URL: ${{ secrets.CD_RELEASE_BASE_URL }}
+          RELEASE_SMOKE_EMAIL: ${{ secrets.CD_SMOKE_USER_EMAIL }}
+          RELEASE_SMOKE_PASSWORD: ${{ secrets.CD_SMOKE_USER_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${RELEASE_SMOKE_BASE_URL:?CD_RELEASE_BASE_URL secret is required for release smoke.}"
+          : "${RELEASE_SMOKE_EMAIL:?CD_SMOKE_USER_EMAIL secret is required for release smoke.}"
+          : "${RELEASE_SMOKE_PASSWORD:?CD_SMOKE_USER_PASSWORD secret is required for release smoke.}"
+
+      - name: Run post-deploy release smoke
+        if: steps.manifest.outputs.deploy_required == 'true'
+        env:
+          RELEASE_SMOKE_BASE_URL: ${{ secrets.CD_RELEASE_BASE_URL }}
+          RELEASE_SMOKE_WEB_URL: ${{ secrets.CD_RELEASE_BASE_URL }}
+          RELEASE_SMOKE_EMAIL: ${{ secrets.CD_SMOKE_USER_EMAIL }}
+          RELEASE_SMOKE_PASSWORD: ${{ secrets.CD_SMOKE_USER_PASSWORD }}
+          RELEASE_SMOKE_TENANT_ID: ${{ secrets.CD_SMOKE_TENANT_ID }}
+          RELEASE_SMOKE_STORE_ID: ${{ secrets.CD_SMOKE_STORE_ID }}
+          RELEASE_SMOKE_RELEASE_ID: ${{ steps.manifest.outputs.release_id }}
+        run: bash scripts/release-smoke.sh
+
+  rollback:
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      github.ref_name == 'main' &&
+      github.event.inputs.deploy_action == 'rollback'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CD_SSH_HOST: ${{ secrets.CD_SSH_HOST }}
+      CD_SSH_PORT: ${{ secrets.CD_SSH_PORT }}
+      CD_SSH_KEY: ${{ secrets.CD_SSH_KEY_B64 }}
+      CD_USER: ${{ secrets.CD_USER }}
+      CD_WEB_PATH: ${{ secrets.CD_WEB_PATH }}
+    steps:
+      - name: Setup SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s' "$CD_SSH_KEY" | base64 -d > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
+
+          ssh-keyscan -4 -T 10 -p "${CD_SSH_PORT:-22}" -H "$CD_SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Roll back WEB release
+        env:
+          TARGET_RELEASE_ID: ${{ github.event.inputs.rollback_release_id }}
+        run: |
+          set -euo pipefail
+
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -p "${CD_SSH_PORT:-22}" "$CD_USER@$CD_SSH_HOST" \
+            "TARGET_RELEASE_ID='${TARGET_RELEASE_ID}' CD_WEB_PATH='${CD_WEB_PATH}' bash -s" <<'EOF'
+          set -euo pipefail
+
+          web_root="$CD_WEB_PATH"
+          deploy_root="$(dirname "$web_root")"
+          site_name="$(basename "$web_root")"
+          state_root="$deploy_root/.${site_name}-deploy"
+          releases="$state_root/releases"
+          current_id_file="$state_root/current-release.txt"
+          previous_id_file="$state_root/previous-release.txt"
+          target_release_id="${TARGET_RELEASE_ID:-}"
+
+          if [ -z "$target_release_id" ]; then
+            if [ ! -f "$previous_id_file" ]; then
+              echo "No previous WEB release recorded for rollback." >&2
+              exit 1
+            fi
+            target_release_id="$(cat "$previous_id_file")"
+          fi
+
+          target_dir="$releases/$target_release_id"
+          if [ ! -d "$target_dir" ]; then
+            echo "Rollback target does not exist: $target_dir" >&2
+            exit 1
+          fi
+
+          current_release_id=""
+          if [ -L "$web_root" ]; then
+            current_release_id="$(basename "$(readlink -f "$web_root")")"
+          fi
+
+          tmp_link="$state_root/current-rollback-$target_release_id"
+          rm -f "$tmp_link"
+          ln -s "$target_dir" "$tmp_link"
+          mv -Tf "$tmp_link" "$web_root"
+
+          printf '%s' "$target_release_id" > "$current_id_file"
+          if [ -n "$current_release_id" ] && [ "$current_release_id" != "$target_release_id" ]; then
+            printf '%s' "$current_release_id" > "$previous_id_file"
+          fi
+          EOF
+
+      - name: Checkout release smoke script
+        uses: actions/checkout@v4
+        with:
+          ref: refs/heads/main
+          sparse-checkout: |
+            scripts/release-smoke.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Validate release smoke configuration
+        env:
+          RELEASE_SMOKE_BASE_URL: ${{ secrets.CD_RELEASE_BASE_URL }}
+          RELEASE_SMOKE_EMAIL: ${{ secrets.CD_SMOKE_USER_EMAIL }}
+          RELEASE_SMOKE_PASSWORD: ${{ secrets.CD_SMOKE_USER_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${RELEASE_SMOKE_BASE_URL:?CD_RELEASE_BASE_URL secret is required for release smoke.}"
+          : "${RELEASE_SMOKE_EMAIL:?CD_SMOKE_USER_EMAIL secret is required for release smoke.}"
+          : "${RELEASE_SMOKE_PASSWORD:?CD_SMOKE_USER_PASSWORD secret is required for release smoke.}"
+
+      - name: Run post-rollback release smoke
+        env:
+          RELEASE_SMOKE_BASE_URL: ${{ secrets.CD_RELEASE_BASE_URL }}
+          RELEASE_SMOKE_WEB_URL: ${{ secrets.CD_RELEASE_BASE_URL }}
+          RELEASE_SMOKE_EMAIL: ${{ secrets.CD_SMOKE_USER_EMAIL }}
+          RELEASE_SMOKE_PASSWORD: ${{ secrets.CD_SMOKE_USER_PASSWORD }}
+          RELEASE_SMOKE_TENANT_ID: ${{ secrets.CD_SMOKE_TENANT_ID }}
+          RELEASE_SMOKE_STORE_ID: ${{ secrets.CD_SMOKE_STORE_ID }}
+          RELEASE_SMOKE_RELEASE_ID: ${{ github.event.inputs.rollback_release_id }}
+        run: bash scripts/release-smoke.sh

@@ -1,6 +1,6 @@
 # Release Configuration Contract
 
-Este documento es la fuente de verdad para la Fase 1 del plan maestro.
+Este documento es la fuente de verdad para configuración de release y hardening operativo.
 
 ## Decisiones activas
 
@@ -40,8 +40,9 @@ El workflow debe inyectar:
 
 - `TESTS_USE_SQLSERVER=1`
 - `ConnectionStrings__DefaultConnection`
+- `Jwt__SigningKey`
 
-Los tests API sobreescriben además los valores JWT con llaves deterministas de test.
+CI valida además migraciones reales ejecutando el binario con `--migrate-only`.
 
 ### Production
 
@@ -62,6 +63,38 @@ Debe permanecer deshabilitado en producción:
 - `DatabaseOptions__EnableSensitiveDataLogging`
 - `APPLY_MIGRATIONS_ON_STARTUP`
 - `SEED_DEV_DATA`
+
+## Migraciones de release
+
+Producción no usa auto-migrate al arrancar.
+
+La migración formal del release se ejecuta explícitamente con el mismo binario publicado:
+
+```bash
+set -a
+source /etc/cobranzadigital/api.env
+export SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING=1
+set +a
+dotnet /var/www/cobranzadigital/api/releases/<releaseId>/CobranzaDigital.Api.dll --migrate-only
+```
+
+Notas operativas:
+
+- `api.env` debe ser shell-compatible (`KEY=value`) porque el deploy la hace `source`.
+- si el archivo vive en otra ruta, `deploy-api.yml` admite `CD_API_ENV_FILE`.
+
+## Política de rollback de datos
+
+La política explícita para Fase 6 es:
+
+- rollback de binario/API o WEB: permitido vía symlink al release previo retenido;
+- rollback de base de datos: **no** se automatiza;
+- si la migración ya alteró esquema/datos y el release previo no es compatible, operar con `forward-fix + restore` según backup del entorno.
+
+En otras palabras:
+
+- si el release previo sigue siendo compatible con el esquema actual, se puede revertir binario;
+- si no lo es, la ruta segura es restaurar respaldo o corregir hacia adelante.
 
 ## Frontend: contrato de release
 
@@ -85,6 +118,16 @@ DataProtection__KeysPath=/var/www/cobranzadigital/api/keys
 
 Después, el servicio systemd del host debe referenciar ese archivo con `EnvironmentFile=`.
 
+## Secrets operativos de smoke
+
+Los deploys requieren además:
+
+- `CD_RELEASE_BASE_URL`
+- `CD_SMOKE_USER_EMAIL`
+- `CD_SMOKE_USER_PASSWORD`
+- `CD_SMOKE_TENANT_ID` opcional
+- `CD_SMOKE_STORE_ID` opcional
+
 ## Checklist de rotación y contención
 
 1. Rotar de inmediato la credencial SQL expuesta históricamente.
@@ -102,4 +145,7 @@ La fase se considera cerrada solo si:
 - producción falla claramente si faltan `ConnectionStrings__DefaultConnection` o `Jwt__SigningKey`,
 - Swagger está fuera de release comercial,
 - HSTS queda activo en release,
-- el build productivo del frontend compila con `production: true`.
+- el build productivo del frontend compila con `production: true`,
+- deploy API/WEB consume artefactos CI con SHA visible,
+- el paso de migración es explícito,
+- existe smoke post-deploy no mutante.

@@ -61,12 +61,10 @@ Ubicación recomendada:
 - `docs/50-runbooks/*`
 
 Incluye, entre otros:
-- `docs/40-quality/testing-strategy.md`
-- `docs/40-quality/testing-matrix.md`
-- `docs/40-quality/ci-cd.md`
-- `docs/40-quality/frontend-standards.md`
-- `docs/50-runbooks/backend-testing-runbook.md`
-- `docs/50-runbooks/local-dev.md`
+- `docs/testing-strategy.md`
+- `docs/testing-matrix.md`
+- `docs/ci-cd.md`
+- `backend/docs/testing.md`
 - `docs/50-runbooks/deployment.md`
 
 Uso:
@@ -177,6 +175,14 @@ Antes de proponer un cambio, OpenClaw debe:
 - `ErrorResponses.md`
 - contratos POS y platform vigentes
 - documentos consolidados de multi-tenant/authz
+
+### Nivel 2 vigente en este repo
+- `docs/ci-cd.md`
+- `docs/release-config.md`
+- `docs/testing-strategy.md`
+- `docs/testing-matrix.md`
+- `backend/docs/testing.md`
+- `docs/50-runbooks/deployment.md`
 
 ### Deben vivir como Nivel 2
 - `testing-strategy.md`

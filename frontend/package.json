@@ -16,6 +16,7 @@
     "prepare": "husky",
     "test:changed": "ng test --watch=false --include='src/**/*.spec.ts'",
     "e2e": "playwright test",
+    "e2e:contract": "playwright test --reporter=line",
     "e2e:ci": "playwright test --reporter=line",
     "e2e:ui": "playwright test --ui"
   },

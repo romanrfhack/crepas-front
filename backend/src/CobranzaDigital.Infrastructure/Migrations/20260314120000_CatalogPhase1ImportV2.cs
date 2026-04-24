@@ -1,10 +1,16 @@
 using System;
+
+using CobranzaDigital.Infrastructure.Persistence;
+
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace CobranzaDigital.Infrastructure.Migrations
 {
+    [DbContext(typeof(CobranzaDigitalDbContext))]
+    [Migration("20260314120000_CatalogPhase1ImportV2")]
     public partial class CatalogPhase1ImportV2 : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

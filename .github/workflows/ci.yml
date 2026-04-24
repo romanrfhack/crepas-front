@@ -1,6 +1,6 @@
 name: CI
 
-on:  
+on:
   push:
     branches: ["main"]
   workflow_dispatch:
@@ -16,8 +16,10 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      backend_tests: ${{ steps.filter.outputs.backend_tests }}
+      backend_release: ${{ steps.filter.outputs.backend_release }}
+      frontend_tests: ${{ steps.filter.outputs.frontend_tests }}
+      frontend_release: ${{ steps.filter.outputs.frontend_release }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,22 +28,37 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            backend:
+            backend_tests:
               - 'backend/**'
-              - '.github/workflows/**'
-              - 'Directory.Packages.props'
-              - 'global.json'
-              - 'docs/**'
-            frontend:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/deploy-api.yml'
+            backend_release:
+              - 'backend/src/**'
+              - 'backend/global.json'
+              - 'backend/Directory.Packages.props'
+              - 'backend/Directory.Build.props'
+              - 'backend/**/*.csproj'
+              - 'backend/**/*.props'
+              - 'backend/**/*.targets'
+              - 'backend/CobranzaDigital.slnx'
+            frontend_tests:
               - 'frontend/**'
-              - '.github/workflows/**'
-              - 'docs/**'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/deploy-web.yml'
+            frontend_release:
+              - 'frontend/src/**'
+              - 'frontend/public/**'
+              - 'frontend/package.json'
+              - 'frontend/package-lock.json'
+              - 'frontend/angular.json'
+              - 'frontend/tsconfig*.json'
 
   backend_tests:
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: needs.changes.outputs.backend_tests == 'true'
     runs-on: ubuntu-latest
     env:
+      CI_JWT_SIGNING_KEY: "CI_RELEASE_SIGNING_KEY_12345678901234567890"
       TESTS_USE_SQLSERVER: "1"
       ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=CrepasDB_CI_${{ github.run_id }}_${{ github.run_attempt }};User Id=sa;Password=${{ format('CiSqlRun{0}Try{1}!Aa1', github.run_id, github.run_attempt) }};Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;"
     services:
@@ -69,7 +86,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('backend/**/*.csproj', 'backend/**/*.props', 'backend/**/*.targets', 'backend/nuget.config', 'Directory.Packages.props') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('backend/**/*.csproj', 'backend/**/*.props', 'backend/**/*.targets', 'backend/nuget.config', 'backend/Directory.Packages.props', 'backend/Directory.Build.props', 'backend/global.json') }}
           restore-keys: |
             ${{ runner.os }}-nuget-
 
@@ -79,15 +96,43 @@ jobs:
 
       - name: Build
         working-directory: backend
-        run: dotnet build -c Release
+        run: dotnet build -c Release --no-restore
+
+      - name: Validate release migrations
+        working-directory: backend
+        env:
+          ASPNETCORE_ENVIRONMENT: CI
+          SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING: "1"
+          ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=CrepasDB_CI_Migrate_${{ github.run_id }}_${{ github.run_attempt }};User Id=sa;Password=${{ format('CiSqlRun{0}Try{1}!Aa1', github.run_id, github.run_attempt) }};Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;"
+          Jwt__SigningKey: ${{ env.CI_JWT_SIGNING_KEY }}
+          Jwt__Issuer: CobranzaDigital.CI
+          Jwt__Audience: CobranzaDigital.Api.CI
+        run: dotnet run --project src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release --no-build -- --migrate-only
 
       - name: Test
         working-directory: backend
-        run: dotnet test -c Release
+        run: dotnet test -c Release --no-build
+
+      - name: Package API release artifact
+        if: needs.changes.outputs.backend_release == 'true'
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/api-publish
+          dotnet publish src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release --no-build -o artifacts/api-publish
+          tar -C artifacts/api-publish -czf "artifacts/api-release-${GITHUB_SHA}.tar.gz" .
+
+      - name: Upload API release artifact
+        if: needs.changes.outputs.backend_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-release-${{ github.sha }}
+          path: backend/artifacts/api-release-${{ github.sha }}.tar.gz
+          if-no-files-found: error
 
   frontend_tests:
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: needs.changes.outputs.frontend_tests == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -105,7 +150,7 @@ jobs:
 
       - name: Build
         working-directory: frontend
-        run: npm run build
+        run: npm run build -- --configuration production
 
       - name: Unit tests
         working-directory: frontend
@@ -121,9 +166,42 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps
 
-      - name: E2E tests
+      - name: UI-contract tests
         working-directory: frontend
-        run: npm run e2e:ci
+        run: npm run e2e:contract
+
+      - name: Detect build output
+        if: needs.changes.outputs.frontend_release == 'true'
+        working-directory: frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -f "dist/cobranza-digital/browser/index.html" ]; then
+            echo "DIST_DIR=dist/cobranza-digital/browser" >> "$GITHUB_ENV"
+          elif [ -f "dist/cobranza-digital/index.html" ]; then
+            echo "DIST_DIR=dist/cobranza-digital" >> "$GITHUB_ENV"
+          else
+            echo "ERROR: No pude encontrar index.html en frontend/dist"
+            find dist -maxdepth 4 -type f -name index.html -print || true
+            exit 1
+          fi
+
+      - name: Package WEB release artifact
+        if: needs.changes.outputs.frontend_release == 'true'
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          tar -C "$DIST_DIR" -czf "artifacts/web-release-${GITHUB_SHA}.tar.gz" .
+
+      - name: Upload WEB release artifact
+        if: needs.changes.outputs.frontend_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-release-${{ github.sha }}
+          path: frontend/artifacts/web-release-${{ github.sha }}.tar.gz
+          if-no-files-found: error
 
       - name: Upload Playwright artifacts
         if: failure()
@@ -134,3 +212,69 @@ jobs:
             frontend/test-results
             frontend/playwright-report
           if-no-files-found: ignore
+
+  release_manifest:
+    needs:
+      - changes
+      - backend_tests
+      - frontend_tests
+    if: >
+      always() &&
+      (needs.backend_tests.result == 'success' || needs.backend_tests.result == 'skipped') &&
+      (needs.frontend_tests.result == 'success' || needs.frontend_tests.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write release manifest
+        env:
+          BACKEND_TESTS: ${{ needs.changes.outputs.backend_tests }}
+          BACKEND_RELEASE: ${{ needs.changes.outputs.backend_release }}
+          FRONTEND_TESTS: ${{ needs.changes.outputs.frontend_tests }}
+          FRONTEND_RELEASE: ${{ needs.changes.outputs.frontend_release }}
+          API_ARTIFACT_NAME: api-release-${{ github.sha }}
+          WEB_ARTIFACT_NAME: web-release-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/release
+
+          short_sha="${GITHUB_SHA::12}"
+          release_id="${short_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          api_artifact_json="null"
+          if [ "$BACKEND_RELEASE" = "true" ]; then
+            api_artifact_json="\"$API_ARTIFACT_NAME\""
+          fi
+
+          web_artifact_json="null"
+          if [ "$FRONTEND_RELEASE" = "true" ]; then
+            web_artifact_json="\"$WEB_ARTIFACT_NAME\""
+          fi
+
+          cat > artifacts/release/release-manifest.json <<EOF
+          {
+            "releaseId": "$release_id",
+            "sha": "$GITHUB_SHA",
+            "shortSha": "$short_sha",
+            "runId": $GITHUB_RUN_ID,
+            "runAttempt": $GITHUB_RUN_ATTEMPT,
+            "workflow": "$GITHUB_WORKFLOW",
+            "eventName": "$GITHUB_EVENT_NAME",
+            "ref": "$GITHUB_REF",
+            "refName": "$GITHUB_REF_NAME",
+            "backendTests": $BACKEND_TESTS,
+            "backendRelease": $BACKEND_RELEASE,
+            "frontendTests": $FRONTEND_TESTS,
+            "frontendRelease": $FRONTEND_RELEASE,
+            "apiArtifact": $api_artifact_json,
+            "webArtifact": $web_artifact_json,
+            "createdAtUtc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+          cat artifacts/release/release-manifest.json
+
+      - name: Upload release manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ github.sha }}
+          path: artifacts/release/release-manifest.json
+          if-no-files-found: error

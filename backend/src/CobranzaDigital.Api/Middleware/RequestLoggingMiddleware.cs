@@ -21,8 +21,9 @@ public sealed partial class RequestLoggingMiddleware
         var method = context.Request.Method;
         var path = context.Request.Path.HasValue ? context.Request.Path.Value : "/";
         var userId = GetUserId(context.User);
+        var correlationId = GetCorrelationId(context);
 
-        LogMessages.RequestStarted(_logger, method, path, userId ?? "anonymous");
+        LogMessages.RequestStarted(_logger, method, path, correlationId, userId ?? "anonymous");
 
         try
         {
@@ -34,8 +35,16 @@ public sealed partial class RequestLoggingMiddleware
             var statusCode = context.Response?.StatusCode;
 
             userId = GetUserId(context.User);
+            correlationId = GetCorrelationId(context);
 
-            LogMessages.RequestFinished(_logger, method, path, statusCode, stopwatch.ElapsedMilliseconds, userId ?? "anonymous");
+            LogMessages.RequestFinished(
+                _logger,
+                method,
+                path,
+                statusCode,
+                stopwatch.ElapsedMilliseconds,
+                correlationId,
+                userId ?? "anonymous");
         }
     }
 
@@ -45,12 +54,19 @@ public sealed partial class RequestLoggingMiddleware
             ?? user?.FindFirst("sub")?.Value;
     }
 
+    private static string GetCorrelationId(HttpContext context)
+    {
+        return context.Items.TryGetValue(CorrelationIdMiddleware.ItemKey, out var value) && value is string correlationId
+            ? correlationId
+            : "missing";
+    }
+
     private static partial class LogMessages
     {
-        [LoggerMessage(Level = LogLevel.Information, Message = "Request started {Method} {Path} UserId={UserId}")]
-        public static partial void RequestStarted(ILogger logger, string method, string? path, string userId);
+        [LoggerMessage(Level = LogLevel.Information, Message = "Request started {Method} {Path} CorrelationId={CorrelationId} UserId={UserId}")]
+        public static partial void RequestStarted(ILogger logger, string method, string? path, string correlationId, string userId);
 
-        [LoggerMessage(Level = LogLevel.Information, Message = "Request finished {Method} {Path} StatusCode={StatusCode} DurationMs={DurationMs} UserId={UserId}")]
-        public static partial void RequestFinished(ILogger logger, string method, string? path, int? statusCode, long durationMs, string userId);
+        [LoggerMessage(Level = LogLevel.Information, Message = "Request finished {Method} {Path} StatusCode={StatusCode} DurationMs={DurationMs} CorrelationId={CorrelationId} UserId={UserId}")]
+        public static partial void RequestFinished(ILogger logger, string method, string? path, int? statusCode, long durationMs, string correlationId, string userId);
     }
 }

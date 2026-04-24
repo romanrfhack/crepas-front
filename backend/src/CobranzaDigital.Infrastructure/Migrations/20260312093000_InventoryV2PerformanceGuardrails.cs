@@ -1,9 +1,14 @@
+using CobranzaDigital.Infrastructure.Persistence;
+
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace CobranzaDigital.Infrastructure.Migrations
 {
+    [DbContext(typeof(CobranzaDigitalDbContext))]
+    [Migration("20260312093000_InventoryV2PerformanceGuardrails")]
     public partial class InventoryV2PerformanceGuardrails : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)

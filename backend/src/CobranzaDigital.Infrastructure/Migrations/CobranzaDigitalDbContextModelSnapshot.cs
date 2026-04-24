@@ -234,11 +234,6 @@ namespace CobranzaDigital.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
-                    b.Property<string>("CategoryCode")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -272,6 +267,11 @@ namespace CobranzaDigital.Infrastructure.Migrations
 
                     b.Property<Guid?>("CatalogTemplateId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CategoryCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -1114,7 +1114,7 @@ namespace CobranzaDigital.Infrastructure.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.HasIndex("TenantId", "StoreId", "ItemType", "OnHandQty");
+                    b.HasIndex("TenantId", "StoreId", "ItemType", "OverrideState");
 
                     b.HasIndex("TenantId", "StoreId", "ItemType", "UpdatedAtUtc");
 
