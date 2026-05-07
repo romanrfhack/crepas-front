@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Route } from '@playwright/test';
 
 const buildJwt = (roles: string[], tenantId?: string, storeId?: string) => {
   const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
@@ -22,6 +22,35 @@ const rolesResponse = [
   { name: 'Cashier' },
 ];
 
+const optionsResponse = {
+  roles: [
+    { name: 'TenantAdmin', displayName: 'Administrador de empresa', level: 80 },
+    { name: 'AdminStore', displayName: 'Administrador de sucursal', level: 60 },
+    { name: 'Manager', displayName: 'Supervisor', level: 40 },
+    { name: 'Cashier', displayName: 'Cajero', level: 30 },
+    { name: 'Collector', displayName: 'Gestor de cobranza', level: 30 },
+    { name: 'User', displayName: 'Usuario', level: 10 },
+  ],
+  tenants: [
+    { id: 'tenant-1', name: 'Empresa Uno' },
+    { id: 'tenant-ctx', name: 'Empresa Contexto' },
+    { id: 'tenant-only', name: 'Empresa Tenant' },
+  ],
+  stores: [
+    { id: 'store-ctx', tenantId: 'tenant-ctx', name: 'Sucursal Contexto' },
+    { id: 'store-1', tenantId: 'tenant-1', name: 'Sucursal Uno' },
+  ],
+  currentScope: {
+    role: 'SuperAdmin',
+    roleDisplayName: 'Superadministrador',
+    roleLevel: 100,
+    tenantId: null,
+    tenantName: null,
+    storeId: null,
+    storeName: null,
+  },
+};
+
 const usersResponse = {
   items: [
     {
@@ -32,12 +61,36 @@ const usersResponse = {
       roles: ['TenantAdmin'],
       tenantId: 'tenant-1',
       storeId: null,
+      displayName: 'User 1',
+      primaryRole: { name: 'TenantAdmin', displayName: 'Administrador de empresa', level: 80 },
+      roleDetails: [{ name: 'TenantAdmin', displayName: 'Administrador de empresa', level: 80 }],
+      tenant: { id: 'tenant-1', name: 'Empresa Uno' },
+      store: null,
+      status: { isLockedOut: false, lockoutEnd: null, label: 'Activo' },
+      allowedActions: {
+        canEdit: true,
+        canChangeRole: true,
+        canChangeScope: true,
+        canLock: true,
+        canUnlock: false,
+        canResetTemporaryPassword: true,
+      },
     },
   ],
   totalCount: 1,
   pageNumber: 1,
   pageSize: 20,
 };
+
+const fulfillOptions = (route: Route) =>
+  route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(optionsResponse),
+  });
+
+const isOptionsRequest = (route: Route) =>
+  route.request().method() === 'GET' && route.request().url().includes('/api/v1/admin/users/options');
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(
@@ -53,10 +106,121 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test('table and filters render display names without exposing tenant/store ids', async ({ page }) => {
+  await page.route('**/api/v1/admin/users**', (route) => {
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(usersResponse) });
+  });
+
+  await page.goto('/app/admin/users');
+
+  await expect(page.locator('tbody').getByText('Empresa Uno')).toBeVisible();
+  await expect(page.getByTestId('admin-users-role-user-1')).toContainText('Administrador de empresa');
+  await expect(page.getByTestId('admin-users-page')).not.toContainText('tenant-1');
+  await expect(page.getByTestId('admin-users-page')).not.toContainText('store-1');
+  await expect(page.getByTestId('admin-users-filter-tenant')).toContainText('Empresa Contexto');
+  await expect(page.getByTestId('admin-users-filter-store')).toContainText('Sucursal Contexto');
+});
+
+test('filters issue server queries with selected role, tenant, store and status', async ({ page }) => {
+  let lastUsersUrl = '';
+
+  await page.route('**/api/v1/admin/users**', (route) => {
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
+    if (route.request().method() === 'GET') {
+      lastUsersUrl = route.request().url();
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(usersResponse),
+      });
+    }
+
+    return route.continue();
+  });
+
+  await page.goto('/app/admin/users');
+  await page.getByTestId('admin-users-filter-role').selectOption('Manager');
+  await page.getByTestId('admin-users-filter-store').selectOption('store-ctx');
+  await page.getByTestId('admin-users-filter-tenant').selectOption('tenant-ctx');
+  await page.getByTestId('admin-users-filter-status').selectOption('locked');
+
+  await expect
+    .poll(() => new URL(lastUsersUrl).searchParams.get('role'))
+    .toBe('Manager');
+  expect(new URL(lastUsersUrl).searchParams.get('tenantId')).toBe('tenant-ctx');
+  expect(new URL(lastUsersUrl).searchParams.get('storeId')).toBe('store-ctx');
+  expect(new URL(lastUsersUrl).searchParams.get('status')).toBe('locked');
+  expect(new URL(lastUsersUrl).searchParams.get('page')).toBe('1');
+});
+
+test('admin store scope keeps tenant and store fixed in create form', async ({ page }) => {
+  await page.addInitScript(
+    (token: string) => {
+      localStorage.setItem('access_token', token);
+      localStorage.setItem('refresh_token', 'refresh-e2e');
+    },
+    buildJwt(['AdminStore'], 'tenant-fixed', 'store-fixed'),
+  );
+
+  const adminStoreOptions = {
+    ...optionsResponse,
+    roles: [
+      { name: 'Manager', displayName: 'Supervisor', level: 40 },
+      { name: 'Cashier', displayName: 'Cajero', level: 30 },
+      { name: 'Collector', displayName: 'Gestor de cobranza', level: 30 },
+      { name: 'User', displayName: 'Usuario', level: 10 },
+    ],
+    tenants: [{ id: 'tenant-fixed', name: 'Empresa Fija' }],
+    stores: [{ id: 'store-fixed', tenantId: 'tenant-fixed', name: 'Sucursal Fija' }],
+    currentScope: {
+      role: 'AdminStore',
+      roleDisplayName: 'Administrador de sucursal',
+      roleLevel: 60,
+      tenantId: 'tenant-fixed',
+      tenantName: 'Empresa Fija',
+      storeId: 'store-fixed',
+      storeName: 'Sucursal Fija',
+    },
+  };
+
+  await page.route('**/api/v1/admin/users**', (route) => {
+    if (isOptionsRequest(route)) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(adminStoreOptions),
+      });
+    }
+
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(usersResponse) });
+  });
+
+  await page.goto('/app/admin/users');
+  await page.getByTestId('admin-users-create-open').click();
+
+  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('Empresa Fija');
+  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('Sucursal Fija');
+  await expect(page.getByTestId('admin-user-form-tenant')).toHaveValue('tenant-fixed');
+  await expect(page.getByTestId('admin-user-form-store')).toHaveValue('store-fixed');
+  await expect(page.getByTestId('admin-user-form-tenant')).toBeDisabled();
+  await expect(page.getByTestId('admin-user-form-store')).toBeDisabled();
+});
+
 test('create user success from tenant+store context submits POST and refreshes list', async ({ page }) => {
   let getUsersCalls = 0;
   await page.route('**/api/v1/admin/users**', (route) => {
     const method = route.request().method();
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
     if (method === 'GET') {
       getUsersCalls += 1;
       return route.fulfill({
@@ -97,9 +261,9 @@ test('create user success from tenant+store context submits POST and refreshes l
   await page.goto('/app/admin/users?tenantId=tenant-ctx&storeId=store-ctx');
   await page.getByTestId('admin-users-create-open').click();
 
-  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('tenant-ctx');
-  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('store-ctx');
-  await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('AdminStore');
+  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('Empresa Contexto');
+  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('Sucursal Contexto');
+  await expect(page.getByTestId('admin-user-form').getByTestId('admin-user-form-role')).toHaveValue('AdminStore');
 
   await page.getByTestId('admin-user-form-email').fill('new@test.local');
   await page.getByTestId('admin-user-form-username').fill('new-user');
@@ -116,6 +280,10 @@ test('create user success from tenant+store context submits POST and refreshes l
 
 test('reset temporary password success flow submits backend contract and shows success testid', async ({ page }) => {
   await page.route('**/api/v1/admin/users**', (route) => {
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
     if (route.request().method() === 'GET') {
       return route.fulfill({
         status: 200,
@@ -161,6 +329,10 @@ test('reset temporary password shows stable error testid for backend 400 and 403
   let currentStatus: 400 | 403 = 400;
 
   await page.route('**/api/v1/admin/users**', (route) => {
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
     if (route.request().method() === 'GET') {
       return route.fulfill({
         status: 200,
@@ -199,6 +371,10 @@ test('reset temporary password shows stable error testid for backend 400 and 403
 
 test('create user error maps conflict and validation responses with stable error testid', async ({ page }) => {
   await page.route('**/api/v1/admin/users**', async (route) => {
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
     if (route.request().method() === 'GET') {
       return route.fulfill({
         status: 200,
@@ -244,16 +420,20 @@ test('create user error maps conflict and validation responses with stable error
 });
 
 test('tenant-only context keeps tenant prefill and suggested tenant role', async ({ page }) => {
-  await page.route('**/api/v1/admin/users**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(usersResponse) }),
-  );
+  await page.route('**/api/v1/admin/users**', (route) => {
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(usersResponse) });
+  });
 
   await page.goto('/app/admin/users?tenantId=tenant-only');
   await page.getByTestId('admin-users-create-open').click();
 
-  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('tenant-only');
-  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('N/A');
-  await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('TenantAdmin');
+  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('Empresa Tenant');
+  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('Sin seleccionar');
+  await expect(page.getByTestId('admin-user-form').getByTestId('admin-user-form-role')).toHaveValue('TenantAdmin');
 });
 
 test('edit user success flow submits PUT and refreshes list', async ({ page }) => {
@@ -261,6 +441,10 @@ test('edit user success flow submits PUT and refreshes list', async ({ page }) =
 
   await page.route('**/api/v1/admin/users**', (route) => {
     const method = route.request().method();
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
     if (method === 'GET') {
       getUsersCalls += 1;
       return route.fulfill({
@@ -310,6 +494,10 @@ test('edit user success flow submits PUT and refreshes list', async ({ page }) =
 
 test('edit user error flow renders stable error testid', async ({ page }) => {
   await page.route('**/api/v1/admin/users**', (route) => {
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
     if (route.request().method() === 'GET') {
       return route.fulfill({
         status: 200,

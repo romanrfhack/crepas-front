@@ -108,11 +108,13 @@ public sealed class AdminUsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetUsers(
         [FromQuery] string? search,
+        [FromQuery] string? role,
         [FromQuery] int page = 1,
         [FromQuery] int? pageNumber = null,
         [FromQuery] int pageSize = 20,
         [FromQuery] Guid? tenantId = null,
         [FromQuery] Guid? storeId = null,
+        [FromQuery] string? status = null,
         CancellationToken cancellationToken = default)
     {
         var effectivePage = pageNumber ?? page;
@@ -129,7 +131,17 @@ public sealed class AdminUsersController : ControllerBase
             }));
         }
 
-        var result = await _userAdminService.GetUsersAsync(search, tenantId, storeId, effectivePage, pageSize, cancellationToken).ConfigureAwait(false);
+        var result = await _userAdminService.GetUsersAsync(search, role, tenantId, storeId, status, effectivePage, pageSize, cancellationToken).ConfigureAwait(false);
+        return Ok(result);
+    }
+
+    [HttpGet("options")]
+    [ProducesResponseType(typeof(AdminUserOptionsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetOptions(CancellationToken cancellationToken)
+    {
+        var result = await _userAdminService.GetUserOptionsAsync(cancellationToken).ConfigureAwait(false);
         return Ok(result);
     }
 

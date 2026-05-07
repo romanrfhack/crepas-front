@@ -13,9 +13,31 @@ namespace CobranzaDigital.Infrastructure.Identity;
 
 public sealed class UserAdminService : IUserAdminService
 {
+    private static readonly Dictionary<string, RoleDefinition> RoleDefinitions =
+        new Dictionary<string, RoleDefinition>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["SuperAdmin"] = new("SuperAdmin", "Superadministrador", "Acceso global a la plataforma.", 100),
+            ["TenantAdmin"] = new("TenantAdmin", "Administrador de empresa", "Administra usuarios y operación dentro de una empresa.", 80),
+            ["AdminStore"] = new("AdminStore", "Administrador de sucursal", "Administra usuarios y operación dentro de una sucursal.", 60),
+            ["Manager"] = new("Manager", "Supervisor", "Supervisa operación de sucursal sin administrar usuarios en esta iteración.", 40),
+            ["Cashier"] = new("Cashier", "Cajero", "Opera el punto de venta de una sucursal.", 30),
+            ["Collector"] = new("Collector", "Gestor de cobranza", "Gestiona actividades operativas asignadas.", 30),
+            ["User"] = new("User", "Usuario", "Acceso básico sin administración de usuarios.", 10)
+        };
+
     private static readonly HashSet<string> ProtectedRoles = new(StringComparer.OrdinalIgnoreCase)
     {
         "AdminStore",
+        "User"
+    };
+
+    private static readonly HashSet<string> RolesRequiringTenant = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TenantAdmin",
+        "AdminStore",
+        "Manager",
+        "Cashier",
+        "Collector",
         "User"
     };
 
@@ -23,7 +45,8 @@ public sealed class UserAdminService : IUserAdminService
     {
         "AdminStore",
         "Manager",
-        "Cashier"
+        "Cashier",
+        "Collector"
     };
 
     private static readonly HashSet<string> CreatableRoles = new(StringComparer.OrdinalIgnoreCase)
@@ -31,29 +54,36 @@ public sealed class UserAdminService : IUserAdminService
         "TenantAdmin",
         "AdminStore",
         "Manager",
-        "Cashier"
+        "Cashier",
+        "Collector",
+        "User"
     };
 
-    private static readonly HashSet<string> ResettableRolesBySuperAdmin = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> AssignableBySuperAdmin = new(StringComparer.OrdinalIgnoreCase)
     {
         "TenantAdmin",
         "AdminStore",
         "Manager",
-        "Cashier"
+        "Cashier",
+        "Collector",
+        "User"
     };
 
-    private static readonly HashSet<string> ResettableRolesByTenantAdmin = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> AssignableByTenantAdmin = new(StringComparer.OrdinalIgnoreCase)
     {
-        "TenantAdmin",
         "AdminStore",
         "Manager",
-        "Cashier"
+        "Cashier",
+        "Collector",
+        "User"
     };
 
-    private static readonly HashSet<string> ResettableRolesByAdminStore = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> AssignableByAdminStore = new(StringComparer.OrdinalIgnoreCase)
     {
         "Manager",
-        "Cashier"
+        "Cashier",
+        "Collector",
+        "User"
     };
 
     private readonly UserManager<ApplicationUser> _userManager;
@@ -157,10 +187,12 @@ public sealed class UserAdminService : IUserAdminService
             false);
     }
 
-    public async Task<PagedResult<AdminUserDto>> GetUsersAsync(string? search, Guid? tenantId, Guid? storeId, int page, int pageSize, CancellationToken cancellationToken)
+    public async Task<PagedResult<AdminUserDto>> GetUsersAsync(string? search, string? role, Guid? tenantId, Guid? storeId, string? status, int page, int pageSize, CancellationToken cancellationToken)
     {
         var actor = await ResolveActorScopeAsync(cancellationToken).ConfigureAwait(false);
         var normalizedSearch = search?.Trim();
+        var normalizedRole = role?.Trim();
+        var normalizedStatus = status?.Trim();
         var query = _userManager.Users.AsNoTracking();
 
         query = ApplyScope(query, actor);
@@ -192,16 +224,120 @@ public sealed class UserAdminService : IUserAdminService
                 (user.UserName != null && user.UserName.Contains(normalizedSearch)));
         }
 
+        if (!string.IsNullOrWhiteSpace(normalizedRole))
+        {
+            var roleEntity = await _roleManager.Roles.AsNoTracking()
+                .Where(item => item.Name == normalizedRole)
+                .Select(item => new { item.Id })
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (roleEntity is null)
+            {
+                return new PagedResult<AdminUserDto>(0, [], page, pageSize);
+            }
+
+            query = query.Where(user => _db.UserRoles.Any(userRole => userRole.UserId == user.Id && userRole.RoleId == roleEntity.Id));
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedStatus))
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (string.Equals(normalizedStatus, "locked", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(user => user.LockoutEnd.HasValue && user.LockoutEnd.Value > now);
+            }
+            else if (string.Equals(normalizedStatus, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Where(user => !user.LockoutEnd.HasValue || user.LockoutEnd.Value <= now);
+            }
+            else
+            {
+                throw new ValidationException(new Dictionary<string, string[]> { ["status"] = ["Status filter is invalid."] });
+            }
+        }
+
         var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
         var users = await query.OrderBy(user => user.Email).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken).ConfigureAwait(false);
 
         var mapped = new List<AdminUserDto>(users.Count);
         foreach (var user in users)
         {
-            mapped.Add(await MapUserAsync(user).ConfigureAwait(false));
+            mapped.Add(await MapUserAsync(user, actor, cancellationToken).ConfigureAwait(false));
         }
 
-        return new PagedResult<AdminUserDto>(total, mapped);
+        return new PagedResult<AdminUserDto>(total, mapped, page, pageSize);
+    }
+
+    public async Task<AdminUserOptionsDto> GetUserOptionsAsync(CancellationToken cancellationToken)
+    {
+        var actor = await ResolveActorScopeAsync(cancellationToken).ConfigureAwait(false);
+        EnsureCanAccessUserAdministration(actor);
+
+        var assignableRoles = GetAssignableRolesForActor(actor)
+            .Select(ToRoleInfo)
+            .OrderByDescending(role => role.Level)
+            .ThenBy(role => role.DisplayName)
+            .ToArray();
+
+        IQueryable<CobranzaDigital.Domain.Entities.Tenant> tenantQuery = _db.Tenants.AsNoTracking();
+        IQueryable<CobranzaDigital.Domain.Entities.Store> storeQuery = _db.Stores.AsNoTracking();
+
+        if (actor.IsTenantAdmin)
+        {
+            if (!actor.TenantId.HasValue)
+            {
+                throw new ForbiddenException("Tenant scope is required.");
+            }
+
+            tenantQuery = tenantQuery.Where(tenant => tenant.Id == actor.TenantId.Value);
+            storeQuery = storeQuery.Where(store => store.TenantId == actor.TenantId.Value);
+        }
+        else if (actor.IsAdminStore)
+        {
+            if (!actor.TenantId.HasValue || !actor.StoreId.HasValue)
+            {
+                throw new ForbiddenException("Store scope is required.");
+            }
+
+            tenantQuery = tenantQuery.Where(tenant => tenant.Id == actor.TenantId.Value);
+            storeQuery = storeQuery.Where(store => store.Id == actor.StoreId.Value);
+        }
+
+        var tenants = await tenantQuery
+            .OrderBy(tenant => tenant.Name)
+            .Select(tenant => new AdminTenantOptionDto(tenant.Id, tenant.Name, tenant.Slug))
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var stores = await storeQuery
+            .OrderBy(store => store.Name)
+            .Select(store => new AdminStoreOptionDto(store.Id, store.TenantId, store.Name))
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var tenantName = actor.TenantId.HasValue
+            ? tenants.FirstOrDefault(tenant => tenant.Id == actor.TenantId.Value)?.Name
+            : null;
+        var storeName = actor.StoreId.HasValue
+            ? stores.FirstOrDefault(store => store.Id == actor.StoreId.Value)?.Name
+            : null;
+
+        var currentRole = ToRoleInfo(actor.PrimaryRole);
+
+        return new AdminUserOptionsDto(
+            assignableRoles,
+            tenants,
+            stores,
+            new AdminUserCurrentScopeDto(
+                currentRole.Name,
+                currentRole.DisplayName,
+                currentRole.Description,
+                currentRole.Level,
+                actor.TenantId,
+                tenantName,
+                actor.StoreId,
+                storeName));
     }
 
     public async Task<SetTemporaryPasswordResponseDto> SetTemporaryPasswordAsync(string userId, SetTemporaryPasswordRequestDto request, CancellationToken cancellationToken)
@@ -217,7 +353,7 @@ public sealed class UserAdminService : IUserAdminService
         EnsureInScope(user, actor);
 
         var targetRoles = (await _userManager.GetRolesAsync(user).ConfigureAwait(false)).ToArray();
-        ValidateTargetRoleForTemporaryPassword(actor, targetRoles);
+        EnsureCanManageTargetUser(actor, targetRoles);
 
         if (await _userManager.HasPasswordAsync(user).ConfigureAwait(false))
         {
@@ -243,7 +379,7 @@ public sealed class UserAdminService : IUserAdminService
         var actor = await ResolveActorScopeAsync(cancellationToken).ConfigureAwait(false);
         var user = await FindUserOrThrowAsync(userId).ConfigureAwait(false);
         EnsureInScope(user, actor);
-        return await MapUserAsync(user).ConfigureAwait(false);
+        return await MapUserAsync(user, actor, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<AdminUserDto> UpdateUserAsync(string userId, UpdateAdminUserRequestDto request, CancellationToken cancellationToken)
@@ -259,6 +395,7 @@ public sealed class UserAdminService : IUserAdminService
         EnsureInScope(user, actor);
 
         var targetRoles = (await _userManager.GetRolesAsync(user).ConfigureAwait(false)).ToArray();
+        EnsureCanManageTargetUser(actor, targetRoles);
         ValidateActorUpdateScope(actor, request.TenantId, request.StoreId);
         await ValidateTenantStoreAndRoleConsistencyAsync(request.TenantId, request.StoreId, targetRoles, cancellationToken).ConfigureAwait(false);
 
@@ -275,7 +412,7 @@ public sealed class UserAdminService : IUserAdminService
         var result = await _userManager.UpdateAsync(user).ConfigureAwait(false);
         EnsureIdentitySuccess(result, "Failed to update user.");
 
-        return await MapUserAsync(user).ConfigureAwait(false);
+        return await MapUserAsync(user, actor, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<AdminUserDto> ReplaceUserRolesAsync(string userId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken)
@@ -299,13 +436,15 @@ public sealed class UserAdminService : IUserAdminService
             throw new ValidationException(new Dictionary<string, string[]> { ["roles"] = [$"Invalid roles: {string.Join(", ", invalidRoles)}."] });
         }
 
-        ValidateRoleAssignment(actor, normalizedRoles);
+        EnsureCanAssignRoles(actor, normalizedRoles);
 
         var user = await FindUserOrThrowAsync(userId).ConfigureAwait(false);
         EnsureInScope(user, actor);
+        var targetRoles = (await _userManager.GetRolesAsync(user).ConfigureAwait(false)).ToArray();
+        EnsureCanManageTargetUser(actor, targetRoles);
         await EnsureUserRoleScopeConsistencyAsync(user, normalizedRoles, cancellationToken).ConfigureAwait(false);
 
-        var currentRoles = await _userManager.GetRolesAsync(user).ConfigureAwait(false);
+        var currentRoles = targetRoles;
         var rolesToRemove = currentRoles.Except(normalizedRoles, StringComparer.OrdinalIgnoreCase).ToArray();
         var rolesToAdd = normalizedRoles.Except(currentRoles, StringComparer.OrdinalIgnoreCase).ToArray();
 
@@ -319,7 +458,7 @@ public sealed class UserAdminService : IUserAdminService
             EnsureIdentitySuccess(await _userManager.AddToRolesAsync(user, rolesToAdd).ConfigureAwait(false), "Failed to assign roles to user.");
         }
 
-        return await MapUserAsync(user).ConfigureAwait(false);
+        return await MapUserAsync(user, actor, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<AdminUserDto> SetUserLockAsync(string userId, bool lockUser, CancellationToken cancellationToken)
@@ -327,11 +466,13 @@ public sealed class UserAdminService : IUserAdminService
         var actor = await ResolveActorScopeAsync(cancellationToken).ConfigureAwait(false);
         var user = await FindUserOrThrowAsync(userId).ConfigureAwait(false);
         EnsureInScope(user, actor);
+        var targetRoles = (await _userManager.GetRolesAsync(user).ConfigureAwait(false)).ToArray();
+        EnsureCanManageTargetUser(actor, targetRoles);
 
         var result = await _userManager.SetLockoutEndDateAsync(user, lockUser ? DateTimeOffset.UtcNow.AddYears(100) : null).ConfigureAwait(false);
         EnsureIdentitySuccess(result, "Failed to update user lock state.");
 
-        return await MapUserAsync(user).ConfigureAwait(false);
+        return await MapUserAsync(user, actor, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyCollection<string>> GetRolesAsync(CancellationToken cancellationToken)
@@ -376,13 +517,7 @@ public sealed class UserAdminService : IUserAdminService
 
     private static void ValidateRoleCreation(ActorScope actor, string role)
     {
-        var allowed = actor.IsSuperAdmin
-            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TenantAdmin", "AdminStore", "Manager", "Cashier" }
-            : actor.IsTenantAdmin
-                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TenantAdmin", "AdminStore", "Manager", "Cashier" }
-                : actor.IsAdminStore
-                    ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Manager", "Cashier" }
-                    : throw new ForbiddenException("You do not have access to user administration.");
+        var allowed = GetAssignableRolesForActor(actor);
 
         if (!allowed.Contains(role))
         {
@@ -508,21 +643,71 @@ public sealed class UserAdminService : IUserAdminService
         throw new ForbiddenException("You do not have access to user administration.");
     }
 
-    private static void ValidateRoleAssignment(ActorScope actor, IReadOnlyCollection<string> normalizedRoles)
+    private static void EnsureCanAssignRoles(ActorScope actor, IReadOnlyCollection<string> normalizedRoles)
     {
-        var allowed = actor.IsSuperAdmin
-            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SuperAdmin", "TenantAdmin", "AdminStore", "Manager", "Cashier", "User", "Collector" }
-            : actor.IsTenantAdmin
-                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TenantAdmin", "AdminStore", "Manager", "Cashier", "User", "Collector" }
-                : actor.IsAdminStore
-                    ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Manager", "Cashier", "User", "Collector" }
-                    : throw new ForbiddenException("You do not have access to assign roles.");
+        if (normalizedRoles.Any(role => string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ForbiddenException("SuperAdmin cannot be assigned from user administration.");
+        }
+
+        var allowed = GetAssignableRolesForActor(actor);
 
         var disallowed = normalizedRoles.Where(role => !allowed.Contains(role)).ToArray();
         if (disallowed.Length > 0)
         {
             throw new ForbiddenException($"Roles not allowed for your scope: {string.Join(", ", disallowed)}.");
         }
+    }
+
+    private static HashSet<string> GetAssignableRolesForActor(ActorScope actor)
+    {
+        if (actor.IsSuperAdmin)
+        {
+            return new HashSet<string>(AssignableBySuperAdmin, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (actor.IsTenantAdmin)
+        {
+            return new HashSet<string>(AssignableByTenantAdmin, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (actor.IsAdminStore)
+        {
+            return new HashSet<string>(AssignableByAdminStore, StringComparer.OrdinalIgnoreCase);
+        }
+
+        throw new ForbiddenException("You do not have access to assign roles.");
+    }
+
+    private static void EnsureCanAccessUserAdministration(ActorScope actor)
+    {
+        if (actor.IsSuperAdmin || actor.IsTenantAdmin || actor.IsAdminStore)
+        {
+            return;
+        }
+
+        throw new ForbiddenException("You do not have access to user administration.");
+    }
+
+    private static void EnsureCanManageTargetUser(ActorScope actor, IReadOnlyCollection<string> targetRoles)
+    {
+        EnsureCanAccessUserAdministration(actor);
+
+        if (!CanManageTargetUser(actor, targetRoles))
+        {
+            throw new ForbiddenException("Target user is outside your role hierarchy.");
+        }
+    }
+
+    private static bool CanManageTargetUser(ActorScope actor, IReadOnlyCollection<string> targetRoles)
+    {
+        if (!(actor.IsSuperAdmin || actor.IsTenantAdmin || actor.IsAdminStore))
+        {
+            return false;
+        }
+
+        var targetLevel = GetHighestRoleLevel(targetRoles);
+        return targetLevel < actor.Level;
     }
 
     private static void ValidateActorUpdateScope(ActorScope actor, Guid? tenantId, Guid? storeId)
@@ -562,11 +747,7 @@ public sealed class UserAdminService : IUserAdminService
 
     private async Task ValidateTenantStoreAndRoleConsistencyAsync(Guid? tenantId, Guid? storeId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken)
     {
-        var requiresTenant = roles.Any(role =>
-            string.Equals(role, "TenantAdmin", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(role, "Manager", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase));
+        var requiresTenant = roles.Any(role => RolesRequiringTenant.Contains(role));
 
         if (requiresTenant && !tenantId.HasValue)
         {
@@ -612,6 +793,11 @@ public sealed class UserAdminService : IUserAdminService
             return;
         }
 
+        if (roles.Any(role => RolesRequiringTenant.Contains(role)) && !user.TenantId.HasValue)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["tenantId"] = ["TenantId is required for selected role."] });
+        }
+
         if (roles.Any(role => RolesRequiringStore.Contains(role)) && !user.StoreId.HasValue)
         {
             throw new ValidationException(new Dictionary<string, string[]> { ["storeId"] = ["Selected role requires StoreId."] });
@@ -627,43 +813,21 @@ public sealed class UserAdminService : IUserAdminService
         }
     }
 
-    private static void ValidateTargetRoleForTemporaryPassword(ActorScope actor, string[] targetRoles)
+    private static int GetRoleLevel(string role) =>
+        RoleDefinitions.TryGetValue(role, out var definition) ? definition.Level : 0;
+
+    private static int GetHighestRoleLevel(IEnumerable<string> roles) =>
+        roles.Select(GetRoleLevel).DefaultIfEmpty(0).Max();
+
+    private static RoleDefinition GetRoleDefinition(string role) =>
+        RoleDefinitions.TryGetValue(role, out var definition)
+            ? definition
+            : new RoleDefinition(role, role, null, 0);
+
+    private static AdminRoleInfoDto ToRoleInfo(string role)
     {
-        if (targetRoles.Length == 0)
-        {
-            throw new ForbiddenException("Target user has no roles assigned.");
-        }
-
-        if (targetRoles.Any(role => string.Equals(role, "SuperAdmin", StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new ForbiddenException("Resetting temporary password for SuperAdmin is not allowed.");
-        }
-
-        var allowed = actor.IsSuperAdmin
-            ? ResettableRolesBySuperAdmin
-            : actor.IsTenantAdmin
-                ? ResettableRolesByTenantAdmin
-                : actor.IsAdminStore
-                    ? ResettableRolesByAdminStore
-                    : throw new ForbiddenException("You do not have access to reset temporary passwords.");
-
-        var scopedRoles = targetRoles
-            .Where(role => string.Equals(role, "TenantAdmin", StringComparison.OrdinalIgnoreCase) ||
-                           string.Equals(role, "AdminStore", StringComparison.OrdinalIgnoreCase) ||
-                           string.Equals(role, "Manager", StringComparison.OrdinalIgnoreCase) ||
-                           string.Equals(role, "Cashier", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-
-        if (scopedRoles.Length == 0)
-        {
-            throw new ForbiddenException("Target user role is outside temporary password reset scope.");
-        }
-
-        var disallowed = scopedRoles.Where(role => !allowed.Contains(role)).ToArray();
-        if (disallowed.Length > 0)
-        {
-            throw new ForbiddenException($"Target roles not allowed for your scope: {string.Join(", ", disallowed)}.");
-        }
+        var definition = GetRoleDefinition(role);
+        return new AdminRoleInfoDto(definition.Name, definition.DisplayName, definition.Description, definition.Level);
     }
 
     private async Task<ActorScope> ResolveActorScopeAsync(CancellationToken cancellationToken)
@@ -679,12 +843,20 @@ public sealed class UserAdminService : IUserAdminService
         var roles = await _userManager.GetRolesAsync(actor).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var roleArray = roles.ToArray();
+        var primaryRole = roleArray
+            .OrderByDescending(GetRoleLevel)
+            .ThenBy(role => role, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault() ?? string.Empty;
+
         return new ActorScope(
-            roles.Any(r => string.Equals(r, "SuperAdmin", StringComparison.OrdinalIgnoreCase)),
-            roles.Any(r => string.Equals(r, "TenantAdmin", StringComparison.OrdinalIgnoreCase)),
-            roles.Any(r => string.Equals(r, "AdminStore", StringComparison.OrdinalIgnoreCase)),
+            roleArray.Any(r => string.Equals(r, "SuperAdmin", StringComparison.OrdinalIgnoreCase)),
+            roleArray.Any(r => string.Equals(r, "TenantAdmin", StringComparison.OrdinalIgnoreCase)),
+            roleArray.Any(r => string.Equals(r, "AdminStore", StringComparison.OrdinalIgnoreCase)),
             actor.TenantId,
-            actor.StoreId);
+            actor.StoreId,
+            primaryRole,
+            GetRoleLevel(primaryRole));
     }
 
     private async Task<ApplicationUser> FindUserOrThrowAsync(string userId)
@@ -698,10 +870,53 @@ public sealed class UserAdminService : IUserAdminService
         return user ?? throw new NotFoundException("User", userId);
     }
 
-    private async Task<AdminUserDto> MapUserAsync(ApplicationUser user)
+    private async Task<AdminUserDto> MapUserAsync(ApplicationUser user, ActorScope actor, CancellationToken cancellationToken)
     {
         var roles = await _userManager.GetRolesAsync(user).ConfigureAwait(false);
-        return new AdminUserDto(user.Id.ToString(), user.Email ?? string.Empty, user.UserName ?? string.Empty, roles?.ToArray() ?? [], user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTimeOffset.UtcNow, user.LockoutEnd, user.TenantId, user.StoreId);
+        var roleArray = roles?.ToArray() ?? [];
+        var primaryRoleName = roleArray
+            .OrderByDescending(GetRoleLevel)
+            .ThenBy(role => role, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault() ?? "SinRol";
+        var isLockedOut = user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTimeOffset.UtcNow;
+        var tenant = user.TenantId.HasValue
+            ? await _db.Tenants.AsNoTracking()
+                .Where(item => item.Id == user.TenantId.Value)
+                .Select(item => new AdminTenantOptionDto(item.Id, item.Name, item.Slug))
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+        var store = user.StoreId.HasValue
+            ? await _db.Stores.AsNoTracking()
+                .Where(item => item.Id == user.StoreId.Value)
+                .Select(item => new AdminStoreOptionDto(item.Id, item.TenantId, item.Name))
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+        var canManage = CanManageTargetUser(actor, roleArray);
+
+        return new AdminUserDto(
+            user.Id.ToString(),
+            user.Email ?? string.Empty,
+            user.UserName ?? string.Empty,
+            roleArray,
+            isLockedOut,
+            user.LockoutEnd,
+            user.TenantId,
+            user.StoreId,
+            string.IsNullOrWhiteSpace(user.UserName) ? user.Email ?? string.Empty : user.UserName,
+            ToRoleInfo(primaryRoleName),
+            roleArray.Select(ToRoleInfo).OrderByDescending(role => role.Level).ThenBy(role => role.DisplayName).ToArray(),
+            tenant,
+            store,
+            new AdminUserStatusDto(isLockedOut, user.LockoutEnd, isLockedOut ? "Bloqueado" : "Activo"),
+            new AdminUserAllowedActionsDto(
+                canManage,
+                canManage,
+                canManage && !actor.IsAdminStore,
+                canManage && !isLockedOut,
+                canManage && isLockedOut,
+                canManage));
     }
 
     private static void EnsureIdentitySuccess(IdentityResult result, string message)
@@ -731,5 +946,18 @@ public sealed class UserAdminService : IUserAdminService
         });
     }
 
-    private sealed record ActorScope(bool IsSuperAdmin, bool IsTenantAdmin, bool IsAdminStore, Guid? TenantId, Guid? StoreId);
+    private sealed record RoleDefinition(
+        string Name,
+        string DisplayName,
+        string? Description,
+        int Level);
+
+    private sealed record ActorScope(
+        bool IsSuperAdmin,
+        bool IsTenantAdmin,
+        bool IsAdminStore,
+        Guid? TenantId,
+        Guid? StoreId,
+        string PrimaryRole,
+        int Level);
 }

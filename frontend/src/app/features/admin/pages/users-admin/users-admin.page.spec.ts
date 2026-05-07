@@ -1,23 +1,51 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap } from '@angular/router';
-import { AuthService } from '../../../auth/services/auth.service';
-import { AdminRolesService } from '../../services/admin-roles.service';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { AdminUsersService } from '../../services/admin-users.service';
 import { UsersAdminPage } from './users-admin.page';
 
 describe('UsersAdminPage', () => {
   let fixture: ComponentFixture<UsersAdminPage>;
   let queryParams: Record<string, string>;
-  let authMock: {
-    hasRole: (role: string) => boolean;
-    getTenantId: () => string | null;
-    getStoreId: () => string | null;
-  };
   let getUsersMock: ReturnType<typeof vi.fn>;
+  let getUserOptionsMock: ReturnType<typeof vi.fn>;
   let createUserMock: ReturnType<typeof vi.fn>;
   let setTemporaryPasswordMock: ReturnType<typeof vi.fn>;
   let updateUserMock: ReturnType<typeof vi.fn>;
+  let routerNavigateMock: ReturnType<typeof vi.fn>;
+
+  const buildOptionsResponse = () => ({
+    roles: [
+      { name: 'TenantAdmin', displayName: 'Administrador de empresa', level: 80 },
+      { name: 'AdminStore', displayName: 'Administrador de sucursal', level: 60 },
+      { name: 'Manager', displayName: 'Supervisor', level: 40 },
+      { name: 'Cashier', displayName: 'Cajero', level: 30 },
+      { name: 'Collector', displayName: 'Gestor de cobranza', level: 30 },
+      { name: 'User', displayName: 'Usuario', level: 10 },
+    ],
+    tenants: [
+      { id: 'tenant-1', name: 'Empresa Uno' },
+      { id: 'tenant-q', name: 'Empresa Query' },
+      { id: 'tenant-ctx', name: 'Empresa Contexto' },
+      { id: 'tenant-only', name: 'Empresa Unica' },
+      { id: 'tenant-a', name: 'Empresa A' },
+    ],
+    stores: [
+      { id: 'store-1', tenantId: 'tenant-1', name: 'Sucursal Uno' },
+      { id: 'store-q', tenantId: 'tenant-q', name: 'Sucursal Query' },
+      { id: 'store-ctx', tenantId: 'tenant-ctx', name: 'Sucursal Contexto' },
+      { id: 'store-b', tenantId: 'tenant-a', name: 'Sucursal B' },
+    ],
+    currentScope: {
+      role: 'SuperAdmin',
+      roleDisplayName: 'Superadministrador',
+      roleLevel: 100,
+      tenantId: null,
+      tenantName: null,
+      storeId: null,
+      storeName: null,
+    },
+  });
 
   const buildUsersResponse = () => ({
     items: [
@@ -29,6 +57,20 @@ describe('UsersAdminPage', () => {
         roles: ['TenantAdmin'],
         tenantId: 'tenant-1',
         storeId: null,
+        displayName: 'User One',
+        primaryRole: { name: 'TenantAdmin', displayName: 'Administrador de empresa', level: 80 },
+        roleDetails: [{ name: 'TenantAdmin', displayName: 'Administrador de empresa', level: 80 }],
+        tenant: { id: 'tenant-1', name: 'Empresa Uno' },
+        store: null,
+        status: { isLockedOut: false, lockoutEnd: null, label: 'Activo' },
+        allowedActions: {
+          canEdit: true,
+          canChangeRole: true,
+          canChangeScope: true,
+          canLock: true,
+          canUnlock: false,
+          canResetTemporaryPassword: true,
+        },
       },
     ],
     totalCount: 1,
@@ -38,6 +80,7 @@ describe('UsersAdminPage', () => {
 
   const createComponent = async () => {
     getUsersMock = vi.fn().mockResolvedValue(buildUsersResponse());
+    getUserOptionsMock = vi.fn().mockResolvedValue(buildOptionsResponse());
     createUserMock = vi.fn().mockResolvedValue({
       id: 'user-2',
       email: 'new@example.com',
@@ -57,6 +100,7 @@ describe('UsersAdminPage', () => {
       tenantId: 'tenant-1',
       storeId: null,
     });
+    routerNavigateMock = vi.fn().mockResolvedValue(true);
 
     await TestBed.configureTestingModule({
       imports: [UsersAdminPage],
@@ -65,6 +109,7 @@ describe('UsersAdminPage', () => {
           provide: AdminUsersService,
           useValue: {
             getUsers: getUsersMock,
+            getUserOptions: getUserOptionsMock,
             createUser: createUserMock,
             setTemporaryPassword: setTemporaryPasswordMock,
             updateUser: updateUserMock,
@@ -88,19 +133,7 @@ describe('UsersAdminPage', () => {
             }),
           },
         },
-        {
-          provide: AdminRolesService,
-          useValue: {
-            getRoles: async () => [
-              { name: 'SuperAdmin' },
-              { name: 'TenantAdmin' },
-              { name: 'AdminStore' },
-              { name: 'Manager' },
-              { name: 'Cashier' },
-            ],
-          },
-        },
-        { provide: AuthService, useValue: authMock },
+        { provide: Router, useValue: { navigate: routerNavigateMock } },
         {
           provide: ActivatedRoute,
           useValue: {
@@ -115,6 +148,8 @@ describe('UsersAdminPage', () => {
     fixture = TestBed.createComponent(UsersAdminPage);
     fixture.detectChanges();
     await fixture.whenStable();
+    await Promise.resolve();
+    await Promise.resolve();
     fixture.detectChanges();
   };
 
@@ -129,11 +164,6 @@ describe('UsersAdminPage', () => {
       storeId: 'store-q',
       intent: 'create-user',
       suggestedRole: 'AdminStore',
-    };
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
     };
 
     await createComponent();
@@ -156,11 +186,6 @@ describe('UsersAdminPage', () => {
       intent: 'create-user',
       suggestedRole: 'AdminStore',
     };
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
 
     await createComponent();
 
@@ -176,11 +201,6 @@ describe('UsersAdminPage', () => {
 
   it('keeps query prefill and role suggestion for tenant + store context', async () => {
     queryParams = { tenantId: 'tenant-q', storeId: 'store-q' };
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
 
     await createComponent();
 
@@ -194,12 +214,6 @@ describe('UsersAdminPage', () => {
   });
 
   it('opens reset password modal from user row action', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
-
     await createComponent();
 
     const openButton = fixture.nativeElement.querySelector(
@@ -214,11 +228,6 @@ describe('UsersAdminPage', () => {
 
   it('submits create user, shows success and refreshes list', async () => {
     queryParams = { tenantId: 'tenant-ctx', storeId: 'store-ctx' };
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
 
     await createComponent();
 
@@ -242,17 +251,11 @@ describe('UsersAdminPage', () => {
       storeId: 'store-ctx',
       temporaryPassword: 'Temp123!',
     });
-    expect(component.successMessage()).toBe('Usuario creado.');
+    expect(component.successMessage()).toBe('Usuario creado correctamente.');
     expect(getUsersMock).toHaveBeenCalledTimes(2);
   });
 
   it('validates reset password min length before submit', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
-
     await createComponent();
 
     const component = fixture.componentInstance;
@@ -267,12 +270,6 @@ describe('UsersAdminPage', () => {
   });
 
   it('validates reset password confirmation mismatch', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
-
     await createComponent();
 
     const component = fixture.componentInstance;
@@ -287,12 +284,6 @@ describe('UsersAdminPage', () => {
   });
 
   it('submits reset password successfully and shows stable success', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
-
     await createComponent();
 
     const component = fixture.componentInstance;
@@ -314,11 +305,6 @@ describe('UsersAdminPage', () => {
   ])(
     'maps backend reset password errors for status %s',
     async (status: number, errorBody: unknown, expected: string) => {
-      authMock = {
-        hasRole: (role: string) => role === 'SuperAdmin',
-        getTenantId: () => null,
-        getStoreId: () => null,
-      };
       await createComponent();
 
       setTemporaryPasswordMock.mockRejectedValueOnce(
@@ -341,11 +327,6 @@ describe('UsersAdminPage', () => {
   );
 
   it('shows conflict message mapped from ProblemDetails', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
     await createComponent();
 
     createUserMock.mockRejectedValueOnce(
@@ -369,11 +350,6 @@ describe('UsersAdminPage', () => {
   });
 
   it('validates required store for scoped roles before submit', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
     await createComponent();
 
     const component = fixture.componentInstance;
@@ -388,15 +364,10 @@ describe('UsersAdminPage', () => {
     await component.onSubmitCreate(new Event('submit'));
 
     expect(createUserMock).not.toHaveBeenCalled();
-    expect(component.errorMessage()).toContain('StoreId es obligatorio');
+    expect(component.errorMessage()).toContain('Selecciona una sucursal');
   });
 
   it('shows backend validation errors for tenant/store mismatch', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
     await createComponent();
 
     createUserMock.mockRejectedValueOnce(
@@ -421,15 +392,10 @@ describe('UsersAdminPage', () => {
 
     await component.onSubmitCreate(new Event('submit'));
 
-    expect(component.errorMessage()).toContain('Store no pertenece al tenant');
+    expect(component.errorMessage()).toContain('sucursal no pertenece');
   });
 
   it('opens edit modal from row and prefills userName/tenant/store', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
     await createComponent();
 
     const component = fixture.componentInstance;
@@ -441,12 +407,7 @@ describe('UsersAdminPage', () => {
     expect(component.editStoreControl.value).toBe('');
   });
 
-  it('shows visual store required flag in edit form for store-required role', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
+  it('validates store in edit form for store-required role', async () => {
     await createComponent();
 
     const component = fixture.componentInstance;
@@ -458,17 +419,26 @@ describe('UsersAdminPage', () => {
       roles: ['Cashier'],
       tenantId: 'tenant-1',
       storeId: null,
+      allowedActions: {
+        canEdit: true,
+        canChangeRole: true,
+        canChangeScope: true,
+        canLock: true,
+        canUnlock: false,
+        canResetTemporaryPassword: true,
+      },
     });
+    component.editUserNameControl.setValue('Cashier');
+    component.editTenantControl.setValue('tenant-1');
+    component.editStoreControl.setValue('');
 
-    expect(component.editStoreRequiredForCurrentRoles()).toBe(true);
+    await component.onSubmitEditUser(new Event('submit'));
+
+    expect(updateUserMock).not.toHaveBeenCalled();
+    expect(component.editError()).toContain('Selecciona una sucursal');
   });
 
   it('submits edit successfully, calls endpoint and refreshes list', async () => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
     await createComponent();
 
     const component = fixture.componentInstance;
@@ -489,16 +459,11 @@ describe('UsersAdminPage', () => {
   });
 
   it.each([
-    [400, { errors: { storeId: ['Store inválido.'] } }, 'Store inválido'],
+    [400, { errors: { storeId: ['Store inválido.'] } }, 'sucursal inválido'],
     [403, { detail: 'Forbidden by scope.' }, 'Forbidden by scope'],
     [404, { detail: 'User not found.' }, 'User not found'],
-    [409, { detail: 'UserName duplicado.' }, 'UserName duplicado'],
+    [409, { detail: 'UserName duplicado.' }, 'nombre de usuario duplicado'],
   ])('maps edit backend errors for status %s', async (status: number, errorBody: unknown, expected: string) => {
-    authMock = {
-      hasRole: (role: string) => role === 'SuperAdmin',
-      getTenantId: () => null,
-      getStoreId: () => null,
-    };
     await createComponent();
 
     updateUserMock.mockRejectedValueOnce(

@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiClient } from '../../../core/services/api-client';
 import {
+  AdminUserOptions,
   CreateAdminUserRequestDto,
   CreateAdminUserResponseDto,
   PagedResult,
@@ -15,9 +16,11 @@ import {
 interface UsersQuery {
   page: number;
   pageSize: number;
-  search: string;
+  search?: string | null;
+  role?: string | null;
   tenantId?: string | null;
   storeId?: string | null;
+  status?: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -26,13 +29,17 @@ export class AdminUsersService {
 
   async getUsers(query: UsersQuery) {
     const searchParams = new URLSearchParams({
-      pageNumber: String(query.page),
+      page: String(query.page),
       pageSize: String(query.pageSize),
     });
 
-    const normalizedSearch = query.search.trim();
+    const normalizedSearch = query.search?.trim() ?? '';
     if (normalizedSearch) {
       searchParams.set('search', normalizedSearch);
+    }
+
+    if (query.role) {
+      searchParams.set('role', query.role);
     }
 
     if (query.tenantId) {
@@ -43,9 +50,17 @@ export class AdminUsersService {
       searchParams.set('storeId', query.storeId);
     }
 
+    if (query.status) {
+      searchParams.set('status', query.status);
+    }
+
     return firstValueFrom(
       this.apiClient.get<PagedResult<UserSummary>>(`/v1/admin/users?${searchParams.toString()}`),
     );
+  }
+
+  async getUserOptions() {
+    return firstValueFrom(this.apiClient.get<AdminUserOptions>('/v1/admin/users/options'));
   }
 
   async getUserById(id: string) {
