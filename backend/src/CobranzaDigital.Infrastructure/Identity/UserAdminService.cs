@@ -132,7 +132,7 @@ public sealed class UserAdminService : IUserAdminService
             throw new ValidationException(errors);
         }
 
-        if (!CreatableRoles.Contains(normalizedRole))
+        if (!IsKnownRole(normalizedRole) || !CreatableRoles.Contains(normalizedRole))
         {
             throw new ValidationException(new Dictionary<string, string[]> { ["role"] = ["Role is invalid for user creation."] });
         }
@@ -196,6 +196,7 @@ public sealed class UserAdminService : IUserAdminService
         var query = _userManager.Users.AsNoTracking();
 
         query = ApplyScope(query, actor);
+        query = ApplyHierarchyVisibilityFilter(query, actor);
 
         if (actor.IsSuperAdmin)
         {
@@ -226,6 +227,11 @@ public sealed class UserAdminService : IUserAdminService
 
         if (!string.IsNullOrWhiteSpace(normalizedRole))
         {
+            if (!IsKnownRole(normalizedRole))
+            {
+                return new PagedResult<AdminUserDto>(0, [], page, pageSize);
+            }
+
             var roleEntity = await _roleManager.Roles.AsNoTracking()
                 .Where(item => item.Name == normalizedRole)
                 .Select(item => new { item.Id })
@@ -379,6 +385,8 @@ public sealed class UserAdminService : IUserAdminService
         var actor = await ResolveActorScopeAsync(cancellationToken).ConfigureAwait(false);
         var user = await FindUserOrThrowAsync(userId).ConfigureAwait(false);
         EnsureInScope(user, actor);
+        var targetRoles = (await _userManager.GetRolesAsync(user).ConfigureAwait(false)).ToArray();
+        EnsureCanManageTargetUser(actor, targetRoles);
         return await MapUserAsync(user, actor, cancellationToken).ConfigureAwait(false);
     }
 
@@ -436,6 +444,7 @@ public sealed class UserAdminService : IUserAdminService
             throw new ValidationException(new Dictionary<string, string[]> { ["roles"] = [$"Invalid roles: {string.Join(", ", invalidRoles)}."] });
         }
 
+        EnsureRequestedRolesAreKnown(normalizedRoles);
         EnsureCanAssignRoles(actor, normalizedRoles);
 
         var user = await FindUserOrThrowAsync(userId).ConfigureAwait(false);
@@ -613,6 +622,30 @@ public sealed class UserAdminService : IUserAdminService
         throw new ForbiddenException("You do not have access to user administration.");
     }
 
+    private IQueryable<ApplicationUser> ApplyHierarchyVisibilityFilter(IQueryable<ApplicationUser> query, ActorScope actor)
+    {
+        EnsureCanAccessUserAdministration(actor);
+
+        var knownRoleNames = RoleDefinitions.Keys.ToArray();
+        var visibleRoleNames = RoleDefinitions.Values
+            .Where(role => role.Level < actor.Level)
+            .Select(role => role.Name)
+            .ToArray();
+
+        var knownRoleIds = _roleManager.Roles.AsNoTracking()
+            .Where(role => role.Name != null && knownRoleNames.Contains(role.Name))
+            .Select(role => role.Id);
+
+        var visibleRoleIds = _roleManager.Roles.AsNoTracking()
+            .Where(role => role.Name != null && visibleRoleNames.Contains(role.Name))
+            .Select(role => role.Id);
+
+        return query.Where(user =>
+            _db.UserRoles.Any(userRole => userRole.UserId == user.Id) &&
+            !_db.UserRoles.Any(userRole => userRole.UserId == user.Id && !knownRoleIds.Contains(userRole.RoleId)) &&
+            !_db.UserRoles.Any(userRole => userRole.UserId == user.Id && !visibleRoleIds.Contains(userRole.RoleId)));
+    }
+
     private static void EnsureInScope(ApplicationUser target, ActorScope actor)
     {
         if (actor.IsSuperAdmin)
@@ -706,8 +739,21 @@ public sealed class UserAdminService : IUserAdminService
             return false;
         }
 
-        var targetLevel = GetHighestRoleLevel(targetRoles);
+        if (!TryGetEffectiveTargetRoleLevel(targetRoles, out var targetLevel))
+        {
+            return false;
+        }
+
         return targetLevel < actor.Level;
+    }
+
+    private static void EnsureRequestedRolesAreKnown(IReadOnlyCollection<string> normalizedRoles)
+    {
+        var unknownRoles = normalizedRoles.Where(role => !IsKnownRole(role)).ToArray();
+        if (unknownRoles.Length > 0)
+        {
+            throw new ValidationException(new Dictionary<string, string[]> { ["roles"] = [$"Invalid roles: {string.Join(", ", unknownRoles)}."] });
+        }
     }
 
     private static void ValidateActorUpdateScope(ActorScope actor, Guid? tenantId, Guid? storeId)
@@ -813,16 +859,34 @@ public sealed class UserAdminService : IUserAdminService
         }
     }
 
-    private static int GetRoleLevel(string role) =>
-        RoleDefinitions.TryGetValue(role, out var definition) ? definition.Level : 0;
+    private static bool TryGetRoleDefinition(string role, out RoleDefinition definition) =>
+        RoleDefinitions.TryGetValue(role, out definition!);
 
-    private static int GetHighestRoleLevel(IEnumerable<string> roles) =>
-        roles.Select(GetRoleLevel).DefaultIfEmpty(0).Max();
+    private static bool IsKnownRole(string role) =>
+        RoleDefinitions.ContainsKey(role);
+
+    private static int GetKnownRoleLevel(string role) =>
+        TryGetRoleDefinition(role, out var definition) ? definition.Level : 0;
+
+    private static int GetHighestKnownRoleLevel(IEnumerable<string> roles) =>
+        roles.Where(IsKnownRole).Select(GetKnownRoleLevel).DefaultIfEmpty(0).Max();
+
+    private static bool TryGetEffectiveTargetRoleLevel(IReadOnlyCollection<string> roles, out int level)
+    {
+        level = 0;
+        if (roles.Count == 0 || roles.Any(role => !IsKnownRole(role)))
+        {
+            return false;
+        }
+
+        level = GetHighestKnownRoleLevel(roles);
+        return true;
+    }
 
     private static RoleDefinition GetRoleDefinition(string role) =>
-        RoleDefinitions.TryGetValue(role, out var definition)
+        TryGetRoleDefinition(role, out var definition)
             ? definition
-            : new RoleDefinition(role, role, null, 0);
+            : new RoleDefinition(role, role, "Rol no reconocido.", 0);
 
     private static AdminRoleInfoDto ToRoleInfo(string role)
     {
@@ -844,8 +908,9 @@ public sealed class UserAdminService : IUserAdminService
         cancellationToken.ThrowIfCancellationRequested();
 
         var roleArray = roles.ToArray();
-        var primaryRole = roleArray
-            .OrderByDescending(GetRoleLevel)
+        var knownRoleArray = roleArray.Where(IsKnownRole).ToArray();
+        var primaryRole = knownRoleArray
+            .OrderByDescending(GetKnownRoleLevel)
             .ThenBy(role => role, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault() ?? string.Empty;
 
@@ -856,7 +921,7 @@ public sealed class UserAdminService : IUserAdminService
             actor.TenantId,
             actor.StoreId,
             primaryRole,
-            GetRoleLevel(primaryRole));
+            GetHighestKnownRoleLevel(knownRoleArray));
     }
 
     private async Task<ApplicationUser> FindUserOrThrowAsync(string userId)
@@ -875,7 +940,7 @@ public sealed class UserAdminService : IUserAdminService
         var roles = await _userManager.GetRolesAsync(user).ConfigureAwait(false);
         var roleArray = roles?.ToArray() ?? [];
         var primaryRoleName = roleArray
-            .OrderByDescending(GetRoleLevel)
+            .OrderByDescending(GetKnownRoleLevel)
             .ThenBy(role => role, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault() ?? "SinRol";
         var isLockedOut = user.LockoutEnd.HasValue && user.LockoutEnd.Value > DateTimeOffset.UtcNow;

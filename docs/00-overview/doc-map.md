@@ -3,12 +3,14 @@
 ## Objetivo
 
 Definir qué documentos son fuente de verdad y cómo deben interpretarlos:
+
 - OpenClaw
 - revisores técnicos
 - prompts operativos
 - futuros documentos del monorepo
 
 Este mapa existe para evitar mezclar:
+
 - contrato vigente
 - estado actual
 - roadmap
@@ -24,15 +26,19 @@ Este mapa existe para evitar mezclar:
 Estos documentos mandan sobre snapshots, auditorías y propuestas históricas.
 
 Ubicación recomendada:
+
+- `docs/admin/*`
 - `docs/10-governance/*`
 - `docs/20-contracts/*`
 
 Incluye, entre otros:
+
 - `docs/10-governance/agent-rules.md`
 - `docs/10-governance/compatibility-notes.md`
 - `docs/10-governance/auditing.md`
 - `docs/10-governance/multi-tenant-and-authz.md`
 - `docs/10-governance/error-responses.md`
+- `docs/admin/user-administration.md`
 - `docs/20-contracts/pos-sales-contract.md`
 - `docs/20-contracts/pos-catalog-contract.md`
 - `docs/20-contracts/pos-reports-contract.md`
@@ -41,6 +47,7 @@ Incluye, entre otros:
 - `docs/20-contracts/admin-users-roles-contract.md`
 
 Uso:
+
 - contratos HTTP / UI
 - compatibilidades temporales
 - reglas de negocio vigentes
@@ -48,6 +55,7 @@ Uso:
 - expectativas permanentes para OpenClaw
 
 Regla:
+
 - Si un documento de Nivel 1 contradice una auditoría o un corte de implementación, gana el Nivel 1.
 
 ---
@@ -57,10 +65,12 @@ Regla:
 Documentos vivos de ejecución, pruebas, pipeline y estándares técnicos.
 
 Ubicación recomendada:
+
 - `docs/40-quality/*`
 - `docs/50-runbooks/*`
 
 Incluye, entre otros:
+
 - `docs/testing-strategy.md`
 - `docs/testing-matrix.md`
 - `docs/ci-cd.md`
@@ -68,12 +78,14 @@ Incluye, entre otros:
 - `docs/50-runbooks/deployment.md`
 
 Uso:
+
 - saber qué pruebas actualizar según el cambio
 - saber cómo correr backend/frontend localmente
 - saber cómo funciona CI/CD
 - saber qué estándares técnicos deben respetarse
 
 Regla:
+
 - Nivel 2 no redefine contratos.
 - Nivel 2 ejecuta y valida lo definido en Nivel 1.
 
@@ -84,20 +96,24 @@ Regla:
 Documentos que describen cómo está hoy el sistema y hacia dónde se quiere llevar.
 
 Ubicación recomendada:
+
 - `docs/30-state/*`
 
 Incluye, entre otros:
+
 - `docs/30-state/current-state-backend.md`
 - `docs/30-state/current-state-frontend.md`
 - `docs/30-state/roadmap-product.md`
 
 Uso:
+
 - entender qué ya existe
 - detectar gaps
 - priorizar trabajo
 - alinear expectativas del siguiente cambio
 
 Regla:
+
 - Nivel 3 no reemplaza contrato.
 - Si el estado actual contradice el contrato, se reporta como gap o deuda.
 
@@ -108,9 +124,11 @@ Regla:
 Evidencia útil, pero no normativa por sí sola.
 
 Ubicación recomendada:
+
 - `docs/90-audits/*`
 
 Incluye, entre otros:
+
 - auditorías técnicas por funcionalidad
 - cortes de implementación
 - reportes de estandarización
@@ -118,6 +136,7 @@ Incluye, entre otros:
 - evaluaciones temporales del repo
 
 Ejemplos:
+
 - `docs/90-audits/roles-audit-2026-02-26.md`
 - `docs/90-audits/sqlserver-standardization-report.md`
 - `docs/90-audits/inventory-v2-audit.md`
@@ -128,12 +147,14 @@ Ejemplos:
 - `docs/90-audits/current-state-frontend-legacy.md`
 
 Uso:
+
 - rescatar hallazgos
 - entender decisiones previas
 - revisar regresiones
 - reutilizar ideas de diseño o pruebas
 
 Regla:
+
 - Las auditorías no mandan sobre contratos vigentes.
 - Si una auditoría contiene endpoints, DTOs o recomendaciones, deben validarse contra Nivel 1 antes de tratarse como vigentes.
 
@@ -149,6 +170,7 @@ Cuando dos documentos parezcan contradecirse, aplicar este orden:
 4. Nivel 4 — Auditorías / diagnósticos / histórico
 
 Si persiste la duda:
+
 - no asumir
 - reportar el conflicto
 - pedir validación humana
@@ -170,13 +192,16 @@ Antes de proponer un cambio, OpenClaw debe:
 ## Clasificación recomendada de documentos actuales
 
 ### Deben vivir como Nivel 1
+
 - `compatibility-notes.md`
 - `auditing.md`
 - `ErrorResponses.md`
+- `docs/admin/user-administration.md`
 - contratos POS y platform vigentes
 - documentos consolidados de multi-tenant/authz
 
 ### Nivel 2 vigente en este repo
+
 - `docs/ci-cd.md`
 - `docs/release-config.md`
 - `docs/testing-strategy.md`
@@ -185,6 +210,7 @@ Antes de proponer un cambio, OpenClaw debe:
 - `docs/50-runbooks/deployment.md`
 
 ### Deben vivir como Nivel 2
+
 - `testing-strategy.md`
 - `testing-matrix.md`
 - `ci-cd.md`
@@ -192,12 +218,14 @@ Antes de proponer un cambio, OpenClaw debe:
 - estándares frontend Angular/TS
 
 ### Deben vivir como Nivel 3
+
 - `PlanMaestro.md` consolidado en `roadmap-product.md`
 - `PlanMaestro-Front.md` absorbido en `roadmap-product.md`
 - `Corte-Implementacion.md` consolidado como estado actual backend
 - `Corte-Implementacion-Front.md` consolidado como estado actual frontend
 
 ### Deben vivir como Nivel 4
+
 - auditorías puntuales por funcionalidad
 - reportes de estandarización
 - diagnósticos históricos
@@ -222,3 +250,4 @@ Authority: Level 1
 Scope: backend | frontend | monorepo
 Last updated: YYYY-MM-DD
 Owner: <persona o equipo>
+```

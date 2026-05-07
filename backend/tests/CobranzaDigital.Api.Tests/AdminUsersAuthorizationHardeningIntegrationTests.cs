@@ -69,6 +69,15 @@ public sealed class AdminUsersAuthorizationHardeningIntegrationTests : IClassFix
         await EnsureUserRoleAsync("admin@test.local", "SuperAdmin", null, null);
         var superToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
 
+        using var superAdminCreation = await CreateAdminUserAsync(superToken, new CreateUserRequest(
+            $"roles.create.super.{Guid.NewGuid():N}@test.local",
+            $"roles-create-super-{Guid.NewGuid():N}",
+            "SuperAdmin",
+            null,
+            null,
+            "Temp1234!"));
+        Assert.Equal(HttpStatusCode.BadRequest, superAdminCreation.StatusCode);
+
         var managerEmail = $"roles.manager.{Guid.NewGuid():N}@test.local";
         await RegisterAsync(managerEmail, "Temp1234!");
         await EnsureUserRoleAsync(managerEmail, "Manager", scope.TenantA.Id, scope.StoreA.Id);
@@ -76,6 +85,11 @@ public sealed class AdminUsersAuthorizationHardeningIntegrationTests : IClassFix
 
         using var superAdminAssignment = await ReplaceRolesAsync(superToken, managerId, ["SuperAdmin"]);
         Assert.Equal(HttpStatusCode.Forbidden, superAdminAssignment.StatusCode);
+
+        var unknownRole = $"UnknownAssignable{Guid.NewGuid():N}";
+        await EnsureRoleExistsAsync(unknownRole);
+        using var unknownAssignment = await ReplaceRolesAsync(superToken, managerId, [unknownRole]);
+        Assert.Equal(HttpStatusCode.BadRequest, unknownAssignment.StatusCode);
 
         var tenantAdminEmail = $"roles.tenant.actor.{Guid.NewGuid():N}@test.local";
         await RegisterAsync(tenantAdminEmail, "Temp1234!");
@@ -157,6 +171,182 @@ public sealed class AdminUsersAuthorizationHardeningIntegrationTests : IClassFix
         Assert.Equal(HttpStatusCode.Forbidden, storeRoles.StatusCode);
     }
 
+    [Fact]
+    public async Task GetUsers_FiltersByHierarchyBeforePaging_ForAdministrativeActors()
+    {
+        var scope = await GetScopeDataAsync();
+        await EnsureUserRoleAsync("admin@test.local", "SuperAdmin", null, null);
+        var superToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var prefix = $"hierarchy.{Guid.NewGuid():N}";
+
+        var tenantActorEmail = $"{prefix}.tenant.actor@test.local";
+        await RegisterAsync(tenantActorEmail, "Temp1234!");
+        await EnsureUserRoleAsync(tenantActorEmail, "TenantAdmin", scope.TenantA.Id, null);
+        var tenantToken = await LoginAndGetAccessTokenAsync(tenantActorEmail, "Temp1234!");
+
+        var tenantEqualEmail = $"{prefix}.tenant.equal@test.local";
+        await RegisterAsync(tenantEqualEmail, "Temp1234!");
+        await EnsureUserRoleAsync(tenantEqualEmail, "TenantAdmin", scope.TenantA.Id, null);
+
+        foreach (var role in new[] { "AdminStore", "Manager", "Cashier", "Collector", "User" })
+        {
+            var email = $"{prefix}.tenant.{role.ToLowerInvariant()}@test.local";
+            await RegisterAsync(email, "Temp1234!");
+            await EnsureUserRoleAsync(email, role, scope.TenantA.Id, scope.StoreA.Id);
+
+            var list = await SearchUsersAsync(tenantToken, email);
+            Assert.Single(list.Items);
+            Assert.Equal(email, list.Items[0].Email, StringComparer.OrdinalIgnoreCase);
+        }
+
+        var tenantEqualList = await SearchUsersAsync(tenantToken, tenantEqualEmail);
+        Assert.Empty(tenantEqualList.Items);
+        Assert.Equal(0, tenantEqualList.Total);
+
+        var adminStoreActorEmail = $"{prefix}.store.actor@test.local";
+        await RegisterAsync(adminStoreActorEmail, "Temp1234!");
+        await EnsureUserRoleAsync(adminStoreActorEmail, "AdminStore", scope.TenantA.Id, scope.StoreA.Id);
+        var adminStoreToken = await LoginAndGetAccessTokenAsync(adminStoreActorEmail, "Temp1234!");
+
+        var adminStoreEqualEmail = $"{prefix}.store.equal@test.local";
+        await RegisterAsync(adminStoreEqualEmail, "Temp1234!");
+        await EnsureUserRoleAsync(adminStoreEqualEmail, "AdminStore", scope.TenantA.Id, scope.StoreA.Id);
+
+        foreach (var role in new[] { "Manager", "Cashier", "Collector", "User" })
+        {
+            var email = $"{prefix}.store.{role.ToLowerInvariant()}@test.local";
+            await RegisterAsync(email, "Temp1234!");
+            await EnsureUserRoleAsync(email, role, scope.TenantA.Id, scope.StoreA.Id);
+
+            var list = await SearchUsersAsync(adminStoreToken, email);
+            Assert.Single(list.Items);
+            Assert.Equal(email, list.Items[0].Email, StringComparer.OrdinalIgnoreCase);
+        }
+
+        var adminStoreEqualList = await SearchUsersAsync(adminStoreToken, adminStoreEqualEmail);
+        Assert.Empty(adminStoreEqualList.Items);
+        Assert.Equal(0, adminStoreEqualList.Total);
+
+        var otherSuperAdminEmail = $"{prefix}.super.equal@test.local";
+        await RegisterAsync(otherSuperAdminEmail, "Temp1234!");
+        await EnsureUserRoleAsync(otherSuperAdminEmail, "SuperAdmin", null, null);
+
+        var superEqualList = await SearchUsersAsync(superToken, otherSuperAdminEmail);
+        Assert.Empty(superEqualList.Items);
+        Assert.Equal(0, superEqualList.Total);
+    }
+
+    [Fact]
+    public async Task GetUsers_ExcludesUnknownEqualAndHigherRoles_FromPagedTotal()
+    {
+        var scope = await GetScopeDataAsync();
+        await EnsureUserRoleAsync("admin@test.local", "SuperAdmin", null, null);
+        var superToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var prefix = $"pagedtotal.{Guid.NewGuid():N}";
+        var unknownRole = $"UnknownPaged{Guid.NewGuid():N}";
+        await EnsureRoleExistsAsync(unknownRole);
+
+        var visibleManagerEmail = $"{prefix}.manager@test.local";
+        await RegisterAsync(visibleManagerEmail, "Temp1234!");
+        await EnsureUserRoleAsync(visibleManagerEmail, "Manager", scope.TenantA.Id, scope.StoreA.Id);
+
+        var visibleTenantAdminEmail = $"{prefix}.tenantadmin@test.local";
+        await RegisterAsync(visibleTenantAdminEmail, "Temp1234!");
+        await EnsureUserRoleAsync(visibleTenantAdminEmail, "TenantAdmin", scope.TenantA.Id, null);
+
+        var hiddenSuperAdminEmail = $"{prefix}.superadmin@test.local";
+        await RegisterAsync(hiddenSuperAdminEmail, "Temp1234!");
+        await EnsureUserRoleAsync(hiddenSuperAdminEmail, "SuperAdmin", null, null);
+
+        var hiddenUnknownEmail = $"{prefix}.unknown@test.local";
+        await RegisterAsync(hiddenUnknownEmail, "Temp1234!");
+        await EnsureUserRolesAsync(hiddenUnknownEmail, ["Collector", unknownRole], scope.TenantA.Id, scope.StoreA.Id);
+
+        var page = await SearchUsersAsync(superToken, prefix, page: 1, pageSize: 1);
+
+        Assert.Equal(2, page.Total);
+        Assert.Equal(2, page.TotalCount);
+        Assert.Single(page.Items);
+        Assert.DoesNotContain(page.Items, item => item.Email == hiddenSuperAdminEmail);
+        Assert.DoesNotContain(page.Items, item => item.Email == hiddenUnknownEmail);
+
+        var unknownList = await SearchUsersAsync(superToken, hiddenUnknownEmail);
+        Assert.Empty(unknownList.Items);
+        Assert.Equal(0, unknownList.Total);
+    }
+
+    [Fact]
+    public async Task MutatingEndpoints_RejectTargetWithUnknownRole()
+    {
+        var scope = await GetScopeDataAsync();
+        await EnsureUserRoleAsync("admin@test.local", "SuperAdmin", null, null);
+        var superToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
+        var unknownRole = $"UnknownTarget{Guid.NewGuid():N}";
+        await EnsureRoleExistsAsync(unknownRole);
+
+        var targetEmail = $"unknown.target.{Guid.NewGuid():N}@test.local";
+        await RegisterAsync(targetEmail, "Temp1234!");
+        await EnsureUserRolesAsync(targetEmail, ["Manager", unknownRole], scope.TenantA.Id, scope.StoreA.Id);
+        var targetId = await GetUserIdDirectByEmailAsync(targetEmail);
+
+        using var update = await UpdateUserAsync(superToken, targetId, new
+        {
+            userName = "unknown-target-denied",
+            tenantId = scope.TenantA.Id,
+            storeId = scope.StoreA.Id
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, update.StatusCode);
+
+        using var lockUser = await SetLockAsync(superToken, targetId, true);
+        Assert.Equal(HttpStatusCode.Forbidden, lockUser.StatusCode);
+
+        using var temporaryPassword = await SetTemporaryPasswordAsync(superToken, targetId, "Denied1234!");
+        Assert.Equal(HttpStatusCode.Forbidden, temporaryPassword.StatusCode);
+    }
+
+    [Fact]
+    public async Task MultiRoleTarget_UsesHighestEffectiveRoleLevel_ForVisibilityAndAdministration()
+    {
+        var scope = await GetScopeDataAsync();
+        var tenantActorEmail = $"multirole.tenant.actor.{Guid.NewGuid():N}@test.local";
+        await RegisterAsync(tenantActorEmail, "Temp1234!");
+        await EnsureUserRoleAsync(tenantActorEmail, "TenantAdmin", scope.TenantA.Id, null);
+        var tenantToken = await LoginAndGetAccessTokenAsync(tenantActorEmail, "Temp1234!");
+
+        var storeActorEmail = $"multirole.store.actor.{Guid.NewGuid():N}@test.local";
+        await RegisterAsync(storeActorEmail, "Temp1234!");
+        await EnsureUserRoleAsync(storeActorEmail, "AdminStore", scope.TenantA.Id, scope.StoreA.Id);
+        var storeToken = await LoginAndGetAccessTokenAsync(storeActorEmail, "Temp1234!");
+
+        var targetEmail = $"multirole.target.{Guid.NewGuid():N}@test.local";
+        await RegisterAsync(targetEmail, "Temp1234!");
+        await EnsureUserRolesAsync(targetEmail, ["Manager", "AdminStore"], scope.TenantA.Id, scope.StoreA.Id);
+
+        var tenantList = await SearchUsersAsync(tenantToken, targetEmail);
+        Assert.Single(tenantList.Items);
+        var targetId = tenantList.Items[0].Id;
+
+        var storeList = await SearchUsersAsync(storeToken, targetEmail);
+        Assert.Empty(storeList.Items);
+        Assert.Equal(0, storeList.Total);
+
+        using var tenantUpdate = await UpdateUserAsync(tenantToken, targetId, new
+        {
+            userName = "multirole-tenant-updated",
+            tenantId = scope.TenantA.Id,
+            storeId = scope.StoreA.Id
+        });
+        Assert.Equal(HttpStatusCode.OK, tenantUpdate.StatusCode);
+
+        using var storeUpdate = await UpdateUserAsync(storeToken, targetId, new
+        {
+            userName = "multirole-store-denied",
+            tenantId = scope.TenantA.Id,
+            storeId = scope.StoreA.Id
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, storeUpdate.StatusCode);
+    }
+
     private async Task<AdminUserOptionsResponse> GetOptionsAsync(string token)
     {
         using var request = CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/admin/users/options", token);
@@ -172,6 +362,13 @@ public sealed class AdminUsersAuthorizationHardeningIntegrationTests : IClassFix
         using var request = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/admin/users/{userId}/roles", token);
         request.Content = JsonContent.Create(new { roles });
         return await _client.SendAsync(request);
+    }
+
+    private async Task<HttpResponseMessage> CreateAdminUserAsync(string token, CreateUserRequest request)
+    {
+        using var message = CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/admin/users", token);
+        message.Content = JsonContent.Create(request);
+        return await _client.SendAsync(message);
     }
 
     private async Task<HttpResponseMessage> UpdateUserAsync(string token, string userId, object payload)
@@ -195,16 +392,34 @@ public sealed class AdminUsersAuthorizationHardeningIntegrationTests : IClassFix
         return await _client.SendAsync(request);
     }
 
-    private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)
+    private async Task<PagedUsersResponse> SearchUsersAsync(string adminToken, string search, int page = 1, int pageSize = 20)
     {
-        using var request = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/admin/users?search={Uri.EscapeDataString(email)}", adminToken);
+        using var request = CreateAuthorizedRequest(
+            HttpMethod.Get,
+            $"/api/v1/admin/users?search={Uri.EscapeDataString(search)}&page={page}&pageSize={pageSize}",
+            adminToken);
         using var response = await _client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         var payload = await response.Content.ReadFromJsonAsync<PagedUsersResponse>();
         Assert.NotNull(payload);
-        Assert.Single(payload!.Items);
+        return payload!;
+    }
+
+    private async Task<string> GetUserIdByEmailAsync(string adminToken, string email)
+    {
+        var payload = await SearchUsersAsync(adminToken, email);
+        Assert.Single(payload.Items);
         return payload.Items.Single().Id;
+    }
+
+    private async Task<string> GetUserIdDirectByEmailAsync(string email)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.FindByEmailAsync(email);
+        Assert.NotNull(user);
+        return user!.Id.ToString();
     }
 
     private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token)
@@ -230,6 +445,11 @@ public sealed class AdminUsersAuthorizationHardeningIntegrationTests : IClassFix
 
     private async Task EnsureUserRoleAsync(string email, string role, Guid? tenantId, Guid? storeId)
     {
+        await EnsureUserRolesAsync(email, [role], tenantId, storeId);
+    }
+
+    private async Task EnsureUserRolesAsync(string email, IReadOnlyCollection<string> roles, Guid? tenantId, Guid? storeId)
+    {
         await using var scope = _factory.Services.CreateAsyncScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
@@ -246,11 +466,24 @@ public sealed class AdminUsersAuthorizationHardeningIntegrationTests : IClassFix
             Assert.True(removeResult.Succeeded, string.Join("; ", removeResult.Errors.Select(x => x.Description)));
         }
 
-        var addResult = await userManager.AddToRoleAsync(user, role);
+        var addResult = await userManager.AddToRolesAsync(user, roles);
         Assert.True(addResult.Succeeded, string.Join("; ", addResult.Errors.Select(x => x.Description)));
 
         var updateResult = await userManager.UpdateAsync(user);
         Assert.True(updateResult.Succeeded, string.Join("; ", updateResult.Errors.Select(x => x.Description)));
+    }
+
+    private async Task EnsureRoleExistsAsync(string role)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
+        if (await roleManager.RoleExistsAsync(role))
+        {
+            return;
+        }
+
+        var createResult = await roleManager.CreateAsync(new ApplicationRole { Name = role });
+        Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(x => x.Description)));
     }
 
     private async Task<ScopeData> GetScopeDataAsync()
@@ -315,7 +548,8 @@ public sealed class AdminUsersAuthorizationHardeningIntegrationTests : IClassFix
 
     private sealed record ScopeData(Tenant TenantA, Tenant TenantB, Store StoreA, Store StoreB);
     private sealed record AuthTokensResponse(string AccessToken, string RefreshToken);
-    private sealed record PagedUsersResponse(int Total, IReadOnlyList<UserItem> Items);
+    private sealed record CreateUserRequest(string Email, string UserName, string Role, Guid? TenantId, Guid? StoreId, string TemporaryPassword);
+    private sealed record PagedUsersResponse(int Total, int TotalCount, IReadOnlyList<UserItem> Items);
     private sealed record UserItem(string Id, string Email);
     private sealed record AdminUserOptionsResponse(
         IReadOnlyList<RoleOption> Roles,

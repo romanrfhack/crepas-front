@@ -1,38 +1,44 @@
 # Auditoría de roles, autorización y scoping (backend + frontend)
 
+Status: AUDIT
+Authority: Level 4
+Superseded for `/admin/users` by: `docs/admin/user-administration.md`
+
 Fecha: 2026-02-26
 Alcance: `/backend`, `/frontend`, `/docs`.
 
+> Nota: este documento conserva hallazgos históricos del 2026-02-26. No debe usarse como contrato vigente de Administración de usuarios. El contrato actual de `/admin/users` usa `SuperAdmin`, `TenantAdmin` y `AdminStore`, filtra por tenant/store + jerarquía antes de paginar, falla cerrado ante roles desconocidos y usa `/api/v1/admin/users/options` como fuente segura de opciones.
+
 ## A) Resumen ejecutivo
 
-- Los roles activos detectados en código son: `SuperAdmin`, `TenantAdmin`, `Admin`, `Manager`, `Cashier`, `User`, `Collector`. Todos están en seeding/gestión de identidad, pero **no todos** participan en políticas de autorización activas.  
-- En backend, las políticas efectivas para acceso funcional usan principalmente `Admin`, `Manager`, `TenantAdmin`, `Cashier`, `SuperAdmin`; `User` y `Collector` quedan prácticamente fuera de rutas protegidas de negocio.  
-- El endpoint `GET /api/v1/admin/users` está protegido por `AdminOnly`, que hoy equivale estrictamente a rol `Admin`; **no** permite `SuperAdmin`, `TenantAdmin`, ni `Manager`. Además, lista usuarios globales sin filtro por tenant/store.  
-- El modelo `ApplicationUser` incluye `TenantId` pero no `StoreId`; el JWT emite claim `tenantId` (cuando existe) y **no** emite `storeId`. El contexto de store en frontend se toma de `localStorage` y/o claims opcionales no garantizados.  
+- Los roles activos detectados en código son: `SuperAdmin`, `TenantAdmin`, `Admin`, `Manager`, `Cashier`, `User`, `Collector`. Todos están en seeding/gestión de identidad, pero **no todos** participan en políticas de autorización activas.
+- En backend, las políticas efectivas para acceso funcional usan principalmente `Admin`, `Manager`, `TenantAdmin`, `Cashier`, `SuperAdmin`; `User` y `Collector` quedan prácticamente fuera de rutas protegidas de negocio.
+- El endpoint `GET /api/v1/admin/users` está protegido por `AdminOnly`, que hoy equivale estrictamente a rol `Admin`; **no** permite `SuperAdmin`, `TenantAdmin`, ni `Manager`. Además, lista usuarios globales sin filtro por tenant/store.
+- El modelo `ApplicationUser` incluye `TenantId` pero no `StoreId`; el JWT emite claim `tenantId` (cuando existe) y **no** emite `storeId`. El contexto de store en frontend se toma de `localStorage` y/o claims opcionales no garantizados.
 - Hay diferencias relevantes entre frontend y backend: frontend habilita navegación POS para `Manager`, pero rutas hijas POS (`caja`, `reportes`) no mantienen esa simetría (por ejemplo, `Manager` no entra a `caja`). También hay divergencia entre docs y código en permisos de reportes POS.
 
 ## B) Inventario de roles y policies
 
 ### 1. Roles encontrados
 
-| Rol | Definición | Uso principal observado |
-|---|---|---|
-| `Admin` | Seeding de roles por defecto y políticas (`AdminOnly`, `PosAdmin`, `PosOperator`, `PosReportViewer`). | Admin de usuarios/roles (`/admin/*`), POS admin, POS operación, reportes POS. |
-| `Manager` | Seeding + políticas `PosAdmin`, `PosOperator`, `PosReportViewer`. | POS admin/operación/reportes (sin `/admin/users`). |
-| `TenantAdmin` | Seeding + políticas `PosAdmin`, `PosOperator`, `PosReportViewer`. | POS admin/operación/reportes por tenant (sin `/admin/users`). |
-| `Cashier` | Seeding + política `PosOperator`. | Operación POS (ventas/turnos/catálogo snapshot), sin reportes/admin POS/plataforma. |
-| `SuperAdmin` | Seeding + políticas `PlatformOnly`, `PosAdmin`, `PosOperator`, `PosReportViewer`, `TenantOrPlatform`. | `/platform/*` y POS multi-tenant con `X-Tenant-Id`; en modo platform sin tenant, endpoints operativos POS fallan por guard. |
-| `User` | Seeding y rol por defecto en registro (`auth/register`). | Sin políticas de negocio útiles por defecto. |
-| `Collector` | Seeding únicamente. | Sin políticas/rutas activas detectadas. |
+| Rol           | Definición                                                                                            | Uso principal observado                                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `Admin`       | Seeding de roles por defecto y políticas (`AdminOnly`, `PosAdmin`, `PosOperator`, `PosReportViewer`). | Admin de usuarios/roles (`/admin/*`), POS admin, POS operación, reportes POS.                                               |
+| `Manager`     | Seeding + políticas `PosAdmin`, `PosOperator`, `PosReportViewer`.                                     | POS admin/operación/reportes (sin `/admin/users`).                                                                          |
+| `TenantAdmin` | Seeding + políticas `PosAdmin`, `PosOperator`, `PosReportViewer`.                                     | POS admin/operación/reportes por tenant (sin `/admin/users`).                                                               |
+| `Cashier`     | Seeding + política `PosOperator`.                                                                     | Operación POS (ventas/turnos/catálogo snapshot), sin reportes/admin POS/plataforma.                                         |
+| `SuperAdmin`  | Seeding + políticas `PlatformOnly`, `PosAdmin`, `PosOperator`, `PosReportViewer`, `TenantOrPlatform`. | `/platform/*` y POS multi-tenant con `X-Tenant-Id`; en modo platform sin tenant, endpoints operativos POS fallan por guard. |
+| `User`        | Seeding y rol por defecto en registro (`auth/register`).                                              | Sin políticas de negocio útiles por defecto.                                                                                |
+| `Collector`   | Seeding únicamente.                                                                                   | Sin políticas/rutas activas detectadas.                                                                                     |
 
 ### 2. Policies backend
 
-- `AdminOnly`: requiere rol `Admin` (solo ese rol).  
-- `PosAdmin`: `Admin`, `Manager`, `TenantAdmin`, `SuperAdmin`.  
-- `PosOperator`: `Admin`, `Cashier`, `Manager`, `TenantAdmin`, `SuperAdmin`.  
-- `PosReportViewer`: `Admin`, `Manager`, `TenantAdmin`, `SuperAdmin`.  
-- `PlatformOnly`: `SuperAdmin`.  
-- `TenantScoped`: requiere claim `tenantId`.  
+- `AdminOnly`: requiere rol `Admin` (solo ese rol).
+- `PosAdmin`: `Admin`, `Manager`, `TenantAdmin`, `SuperAdmin`.
+- `PosOperator`: `Admin`, `Cashier`, `Manager`, `TenantAdmin`, `SuperAdmin`.
+- `PosReportViewer`: `Admin`, `Manager`, `TenantAdmin`, `SuperAdmin`.
+- `PlatformOnly`: `SuperAdmin`.
+- `TenantScoped`: requiere claim `tenantId`.
 - `TenantOrPlatform`: claim `tenantId` o rol `SuperAdmin`.
 
 ### 3. Endpoints clave por grupo
@@ -44,7 +50,7 @@ Alcance: `/backend`, `/frontend`, `/docs`.
 
 ### 4. Guards/rutas frontend
 
-- `roleGuard` permite acceso si el usuario autenticado tiene cualquiera de los roles declarados en `data.roles`/guard.  
+- `roleGuard` permite acceso si el usuario autenticado tiene cualquiera de los roles declarados en `data.roles`/guard.
 - Rutas:
   - `/app/platform/**`: solo `SuperAdmin`.
   - `/app/admin/users`, `/app/admin/roles`: solo `Admin`.
@@ -56,22 +62,22 @@ Alcance: `/backend`, `/frontend`, `/docs`.
 
 ### 5. Diferencias “esperado vs real” (autorización)
 
-- Docs indican en partes que reportes POS son `Admin`/`Manager`, pero código backend permite también `TenantAdmin` y `SuperAdmin` vía `PosReportViewer`.  
-- `SuperAdmin` tiene menú “Admin” en navegación para POS catálogo/inventario, pero no para `users/roles` (correcto por data.roles).  
+- Docs indican en partes que reportes POS son `Admin`/`Manager`, pero código backend permite también `TenantAdmin` y `SuperAdmin` vía `PosReportViewer`.
+- `SuperAdmin` tiene menú “Admin” en navegación para POS catálogo/inventario, pero no para `users/roles` (correcto por data.roles).
 - `GET /admin/users` no está tenant-scoped ni store-scoped y solo admite `Admin`, aunque la estrategia multi-tenant del resto del dominio sí existe para POS.
 
 ## C) Auditoría de user scoping actual
 
 ### 1. Modelo de usuario
 
-- `ApplicationUser` tiene `TenantId: Guid?`.  
+- `ApplicationUser` tiene `TenantId: Guid?`.
 - `ApplicationUser` no tiene `StoreId` ni equivalente persistido para asignación de sucursal por usuario.
 
 ### 2. Claims JWT actuales
 
-- Siempre: `sub`, `email`, `nameidentifier`, `jti`, roles (`ClaimTypes.Role`).  
-- Condicional: `scope = cobranza.read` solo si el usuario tiene rol `Admin`.  
-- Condicional: `tenantId` si `ApplicationUser.TenantId` tiene valor.  
+- Siempre: `sub`, `email`, `nameidentifier`, `jti`, roles (`ClaimTypes.Role`).
+- Condicional: `scope = cobranza.read` solo si el usuario tiene rol `Admin`.
+- Condicional: `tenantId` si `ApplicationUser.TenantId` tiene valor.
 - No existe claim `storeId` emitido por backend.
 
 ### 3. Resolución tenant/store efectiva hoy
@@ -110,15 +116,15 @@ Alcance: `/backend`, `/frontend`, `/docs`.
 
 ## E) Hallazgos y huecos
 
-| Rol | Alcance esperado hoy (según código) | Alcance real hoy | Problemas detectados | Riesgo |
-|---|---|---|---|---|
-| `SuperAdmin` | Plataforma + POS admin/operator/report viewer (con tenant override). | Correcto en backend; en POS operativo exige tenant efectivo; en reports hay subset global. | Puede quedar fuera de `/admin/users` por `AdminOnly`; potencial inconsistencia con “admin global”. | Medio |
-| `TenantAdmin` | POS admin/operator/report dentro tenant. | Backend lo permite por policies POS; frontend también en `/app/admin/pos/*`. | No administra usuarios hoy; docs/expectativas pueden asumir lo contrario. | Medio |
-| `Admin` | Admin usuarios/roles + POS completo (tenant). | Ve y modifica usuarios globalmente sin tenant filter. | Riesgo alto multi-tenant por ausencia de filtro en `/admin/users*`. | Alto |
-| `Manager` | POS admin/operator/report en tenant. | Backend incluye operación (incl. ventas/turnos) por `PosOperator`; frontend no deja entrar a `/app/pos/caja` (solo Admin/Cashier). | Divergencia frontend-backend; experiencia y control operativo ambiguo. | Medio |
-| `Cashier` | Operación POS básica. | Backend y frontend le dan caja POS; reportes/admin restringidos. | Sin claim storeId persistente; depende de store activo local + validación server-side por tenant/store. | Bajo-Medio |
-| `User` | Rol base de registro. | Sin capacidades relevantes en módulos auditados. | Puede generar cuentas “huérfanas” funcionalmente sin onboarding de rol adecuado. | Bajo |
-| `Collector` | Sin políticas activas detectadas. | Sin uso real visible en módulos auditados. | Rol muerto/huérfano aumenta complejidad y riesgo de configuración errónea futura. | Bajo |
+| Rol           | Alcance esperado hoy (según código)                                  | Alcance real hoy                                                                                                                   | Problemas detectados                                                                                    | Riesgo     |
+| ------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------- |
+| `SuperAdmin`  | Plataforma + POS admin/operator/report viewer (con tenant override). | Correcto en backend; en POS operativo exige tenant efectivo; en reports hay subset global.                                         | Puede quedar fuera de `/admin/users` por `AdminOnly`; potencial inconsistencia con “admin global”.      | Medio      |
+| `TenantAdmin` | POS admin/operator/report dentro tenant.                             | Backend lo permite por policies POS; frontend también en `/app/admin/pos/*`.                                                       | No administra usuarios hoy; docs/expectativas pueden asumir lo contrario.                               | Medio      |
+| `Admin`       | Admin usuarios/roles + POS completo (tenant).                        | Ve y modifica usuarios globalmente sin tenant filter.                                                                              | Riesgo alto multi-tenant por ausencia de filtro en `/admin/users*`.                                     | Alto       |
+| `Manager`     | POS admin/operator/report en tenant.                                 | Backend incluye operación (incl. ventas/turnos) por `PosOperator`; frontend no deja entrar a `/app/pos/caja` (solo Admin/Cashier). | Divergencia frontend-backend; experiencia y control operativo ambiguo.                                  | Medio      |
+| `Cashier`     | Operación POS básica.                                                | Backend y frontend le dan caja POS; reportes/admin restringidos.                                                                   | Sin claim storeId persistente; depende de store activo local + validación server-side por tenant/store. | Bajo-Medio |
+| `User`        | Rol base de registro.                                                | Sin capacidades relevantes en módulos auditados.                                                                                   | Puede generar cuentas “huérfanas” funcionalmente sin onboarding de rol adecuado.                        | Bajo       |
+| `Collector`   | Sin políticas activas detectadas.                                    | Sin uso real visible en módulos auditados.                                                                                         | Rol muerto/huérfano aumenta complejidad y riesgo de configuración errónea futura.                       | Bajo       |
 
 ## Recomendación técnica objetivo (sin implementar)
 
@@ -164,6 +170,7 @@ Alcance: `/backend`, `/frontend`, `/docs`.
 ## Archivos clave revisados
 
 ### Backend
+
 - `backend/src/CobranzaDigital.Api/Program.cs`
 - `backend/src/CobranzaDigital.Api/AuthorizationPolicies.cs`
 - `backend/src/CobranzaDigital.Api/Controllers/Admin/AdminUsersController.cs`
@@ -186,6 +193,7 @@ Alcance: `/backend`, `/frontend`, `/docs`.
 - `backend/tests/CobranzaDigital.Api.Tests/TenantIsolationIntegrationTests.cs`
 
 ### Frontend
+
 - `frontend/src/app/features/auth/services/auth.service.ts`
 - `frontend/src/app/core/guards/role.guard.ts`
 - `frontend/src/app/core/http/platform-tenant.interceptor.ts`
@@ -200,6 +208,7 @@ Alcance: `/backend`, `/frontend`, `/docs`.
 - `frontend/src/app/features/pos/services/store-context.service.ts`
 
 ### Docs contrastadas
+
 - `docs/multi-tenant.md`
 - `docs/pos-reports.md`
 - `docs/release-b-contract-sheet.md`

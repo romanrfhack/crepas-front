@@ -78,8 +78,8 @@ describe('UsersAdminPage', () => {
     pageSize: 20,
   });
 
-  const createComponent = async () => {
-    getUsersMock = vi.fn().mockResolvedValue(buildUsersResponse());
+  const createComponent = async (usersResponse = buildUsersResponse()) => {
+    getUsersMock = vi.fn().mockResolvedValue(usersResponse);
     getUserOptionsMock = vi.fn().mockResolvedValue(buildOptionsResponse());
     createUserMock = vi.fn().mockResolvedValue({
       id: 'user-2',
@@ -155,6 +155,52 @@ describe('UsersAdminPage', () => {
 
   beforeEach(() => {
     queryParams = {};
+  });
+
+  it('renders readable labels without visible technical ids', async () => {
+    await createComponent();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const text = host.textContent ?? '';
+
+    expect(text).toContain('Empresa Uno');
+    expect(text).toContain('Administrador de empresa');
+    expect(text).not.toContain('tenant-1');
+    expect(text).not.toContain('store-1');
+    expect(text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    expect(text).not.toMatch(/\b(tenantId|storeId|userId|roleId|TenantId|StoreId|UserId|RoleId)\b/);
+  });
+
+  it('hides all row actions when allowedActions are false', async () => {
+    const response = buildUsersResponse();
+    await createComponent({
+      ...response,
+      items: [
+        {
+          ...response.items[0],
+          id: 'user-no-actions',
+          allowedActions: {
+            canEdit: false,
+            canChangeRole: false,
+            canChangeScope: false,
+            canLock: false,
+            canUnlock: false,
+            canResetTemporaryPassword: false,
+          },
+        },
+      ],
+    });
+
+    const host = fixture.nativeElement as HTMLElement;
+    const row = host.querySelector('[data-testid="admin-users-row-user-no-actions"]') as HTMLElement;
+
+    expect(row).not.toBeNull();
+    expect(row.querySelector('[data-testid="admin-user-role-update"]')).toBeNull();
+    expect(row.querySelector('[data-testid="admin-users-reset-password-open-user-no-actions"]')).toBeNull();
+    expect(row.querySelector('[data-testid="admin-users-edit-open-user-no-actions"]')).toBeNull();
+    expect(row.querySelector('[data-testid="admin-users-lock-user-no-actions"]')).toBeNull();
+    expect(row.querySelector('[data-testid="admin-users-unlock-user-no-actions"]')).toBeNull();
+    expect(row.textContent ?? '').not.toMatch(/Editar|Bloquear|Desbloquear|Restablecer contraseña|Guardar rol/);
   });
 
 

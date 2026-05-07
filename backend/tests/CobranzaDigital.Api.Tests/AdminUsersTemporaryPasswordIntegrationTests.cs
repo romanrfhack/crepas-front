@@ -110,7 +110,7 @@ public sealed class AdminUsersTemporaryPasswordIntegrationTests : IClassFixture<
         using var deniedRole = await SetTemporaryPasswordAsync(actorToken, tenantAdminId, new { temporaryPassword = "Store1234!" });
         Assert.Equal(HttpStatusCode.Forbidden, deniedRole.StatusCode);
 
-        var superActorId = await GetUserIdByEmailAsync(superToken, "admin@test.local");
+        var superActorId = await GetUserIdDirectByEmailAsync("admin@test.local");
         using var deniedSuperAdmin = await SetTemporaryPasswordAsync(actorToken, superActorId, new { temporaryPassword = "Store1234!" });
         Assert.Equal(HttpStatusCode.Forbidden, deniedSuperAdmin.StatusCode);
     }
@@ -141,9 +141,14 @@ public sealed class AdminUsersTemporaryPasswordIntegrationTests : IClassFixture<
     [Fact]
     public async Task TemporaryPassword_Validations_AndNotFound_AreReturned()
     {
+        var scope = await GetScopeDataAsync();
         await EnsureUserRoleAsync("admin@test.local", "SuperAdmin", null, null);
         var superToken = await LoginAndGetAccessTokenAsync("admin@test.local", "Admin1234!");
-        var userId = await GetUserIdByEmailAsync(superToken, "admin@test.local");
+
+        var targetEmail = $"validation.reset.{Guid.NewGuid():N}@test.local";
+        await RegisterAsync(targetEmail, "Temp1234!");
+        await EnsureUserRoleAsync(targetEmail, "Manager", scope.TenantA.Id, scope.StoreA.Id);
+        var userId = await GetUserIdByEmailAsync(superToken, targetEmail);
 
         using var missingPassword = await SetTemporaryPasswordAsync(superToken, userId, new { });
         Assert.Equal(HttpStatusCode.BadRequest, missingPassword.StatusCode);
@@ -227,6 +232,15 @@ public sealed class AdminUsersTemporaryPasswordIntegrationTests : IClassFixture<
         Assert.NotNull(payload);
         Assert.Single(payload!.Items);
         return payload.Items.Single().Id;
+    }
+
+    private async Task<string> GetUserIdDirectByEmailAsync(string email)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.FindByEmailAsync(email);
+        Assert.NotNull(user);
+        return user!.Id.ToString();
     }
 
     private async Task<ScopeData> GetScopeDataAsync()

@@ -53,7 +53,16 @@ Notas:
 - `SuperAdmin`: alcance global de usuarios (todos los tenants/stores).
 - `TenantAdmin`: alcance completo dentro de su `tenantId`.
 - `AdminStore`: alcance restringido a su `storeId` (y tenant asociado).
-- `Manager` y `Cashier`: sin acceso a `/api/v1/admin/users`.
+- `Manager`, `Cashier`, `Collector` y `User`: sin acceso a `/api/v1/admin/users`.
+
+Regla vigente:
+
+- un actor solo puede ver y administrar usuarios con rol efectivo estrictamente inferior al suyo y dentro de su alcance operativo.
+- el listado aplica scope tenant/store + jerarquía antes de `Count/Skip/Take`.
+- usuarios multi-rol usan el máximo nivel efectivo.
+- roles desconocidos fallan cerrado.
+- `SuperAdmin` no se crea, asigna ni administra desde `/app/admin/users`.
+- la fuente segura de opciones para esta pantalla es `GET /api/v1/admin/users/options`, no `GET /api/v1/admin/roles`.
 
 ### Claims de scoping
 
@@ -62,7 +71,7 @@ Notas:
 
 ### Reglas de asignación
 
-- Roles `AdminStore`/`Manager`/`Cashier` requieren usuario con `StoreId` válido.
+- Roles `AdminStore`/`Manager`/`Cashier`/`Collector` requieren usuario con `StoreId` válido.
 - Si existe `StoreId`, backend valida pertenencia de la store al `TenantId` del usuario.
 
 ## Platform Dashboard v1 (SuperAdmin cross-tenant)
@@ -104,11 +113,14 @@ Contrato detallado en `docs/platform-dashboard-contract-sheet.md`.
   - `admin-users-filter-search`
   - `admin-users-filter-tenant`
   - `admin-users-filter-store`
+- La UI muestra nombres legibles de roles, tenant/cliente y store/sucursal; no debe renderizar IDs técnicos como texto visible.
+- Los filtros se aplican server-side y la paginación visible debe usar el total ya filtrado por scope + jerarquía.
 - Scoping en UI:
   - `SuperAdmin`: tenant/store editables.
   - `TenantAdmin`: tenant fijo (deshabilitado), store editable dentro de su alcance.
   - `AdminStore`: store fijo (deshabilitado), sin cambio de tenant.
-- Formulario inline de rol usa `admin-user-form-*` testids y muestra `admin-user-form-store-required` cuando el rol destino requiere `StoreId` (`AdminStore`, `Manager`, `Cashier`).
+- Formulario inline de rol usa `admin-user-form-*` testids y muestra errores legibles cuando el rol destino requiere sucursal (`AdminStore`, `Manager`, `Cashier`, `Collector`).
+- Las acciones por fila dependen de `allowedActions` calculado por backend.
 
 ## Platform Dashboard v2 (SuperAdmin)
 
@@ -181,6 +193,7 @@ Referencia de contrato: `docs/platform-dashboard-contract-sheet.md` (sección v3
   - solo `tenantId` → `TenantAdmin`.
 - Se mantienen testids contractuales para contexto y formulario (`admin-users-create-context-*`, `admin-user-form-*`).
 - El frontend ya conecta submit real contra `POST /api/v1/admin/users`: envía `email`, `userName`, `role`, `tenantId`, `storeId`, `temporaryPassword`, muestra success/error por `ProblemDetails`, y refresca el listado scoped después de crear.
+- El backend valida roles asignables y alcance; los query params de contexto no agregan permisos.
 
 ## Backend Admin Users v4: alta real (`POST /api/v1/admin/users`)
 
@@ -188,9 +201,9 @@ Contrato de request:
 
 - `email` (required, único)
 - `userName` (required, único)
-- `role` (required; válidos para creación: `TenantAdmin`, `AdminStore`, `Manager`, `Cashier`)
+- `role` (required; válidos para creación según actor: `TenantAdmin`, `AdminStore`, `Manager`, `Cashier`, `Collector`, `User`; `SuperAdmin` no es válido desde esta pantalla)
 - `tenantId` (required para todos los roles creados en v4)
-- `storeId` (required para `AdminStore`/`Manager`/`Cashier`; opcional para `TenantAdmin`)
+- `storeId` (required para `AdminStore`/`Manager`/`Cashier`/`Collector`; opcional para `TenantAdmin`/`User` cuando el contrato operativo lo permita)
 - `temporaryPassword` (required)
 
 Contrato de response (201 Created):
@@ -199,10 +212,11 @@ Contrato de response (201 Created):
 
 Reglas de autorización por actor:
 
-- `SuperAdmin`: puede crear `TenantAdmin`, `AdminStore`, `Manager`, `Cashier` en cualquier tenant/store válido.
-- `TenantAdmin`: puede crear los mismos roles, pero únicamente dentro de su propio tenant.
-- `AdminStore`: solo puede crear `Manager`/`Cashier` y únicamente dentro de su misma store.
-- `Manager`/`Cashier`: sin acceso por policy (`403`).
+- `SuperAdmin`: puede crear `TenantAdmin`, `AdminStore`, `Manager`, `Cashier`, `Collector` y `User` en cualquier tenant/store válido.
+- `TenantAdmin`: puede crear `AdminStore`, `Manager`, `Cashier`, `Collector` y `User`, pero únicamente dentro de su propio tenant.
+- `AdminStore`: solo puede crear `Manager`, `Cashier`, `Collector` y `User` y únicamente dentro de su misma store.
+- `Manager`/`Cashier`/`Collector`/`User`: sin acceso por policy (`403`).
+- Ningún actor puede crear `SuperAdmin` desde `/api/v1/admin/users`.
 
 Validaciones de scoping:
 
@@ -232,14 +246,15 @@ Contrato de response (200 OK):
 
 Reglas de autorización por actor:
 
-- `SuperAdmin`: puede resetear password temporal de `TenantAdmin`, `AdminStore`, `Manager`, `Cashier` en cualquier tenant/store válido.
-- `TenantAdmin`: puede resetear `TenantAdmin`, `AdminStore`, `Manager`, `Cashier` únicamente dentro de su tenant.
-- `AdminStore`: puede resetear solo `Manager`/`Cashier` y únicamente dentro de su store.
-- `Manager`/`Cashier`: sin acceso por policy (`403`).
+- `SuperAdmin`: puede resetear password temporal de targets con rol inferior en cualquier tenant/store válido.
+- `TenantAdmin`: puede resetear `AdminStore`, `Manager`, `Cashier`, `Collector` y `User` únicamente dentro de su tenant.
+- `AdminStore`: puede resetear `Manager`, `Cashier`, `Collector` y `User` únicamente dentro de su store.
+- `Manager`/`Cashier`/`Collector`/`User`: sin acceso por policy (`403`).
 
 Reglas por usuario objetivo:
 
 - No se permite resetear usuarios con rol `SuperAdmin` vía este endpoint.
+- No se permite resetear targets con rol igual, superior o desconocido.
 - Si el target está fuera del scope tenant/store del actor, retorna `403`.
 - Si el usuario no existe, retorna `404`.
 
@@ -261,9 +276,9 @@ Auditoría:
   - Request: `{ temporaryPassword }`.
   - Response: `{ id, email, userName, roles, tenantId, storeId, message }`.
 - Visibilidad/UI por scope:
-  - `SuperAdmin`: target roles `TenantAdmin|AdminStore|Manager|Cashier`.
-  - `TenantAdmin`: mismos roles pero dentro de tenant visible.
-  - `AdminStore`: solo `Manager|Cashier` en su store visible.
+  - `SuperAdmin`: target roles inferiores; no `SuperAdmin`.
+  - `TenantAdmin`: `AdminStore|Manager|Cashier|Collector|User` dentro de tenant visible.
+  - `AdminStore`: `Manager|Cashier|Collector|User` en su store visible.
 - Validaciones frontend del modal:
   - required (`temporaryPassword` + confirmación),
   - mínimo 8,
@@ -286,7 +301,7 @@ Contrato de request:
 
 - `userName` (required, único)
 - `tenantId` (nullable, pero requerido cuando roles actuales del target lo exigen)
-- `storeId` (nullable, pero requerido para roles actuales `AdminStore`/`Manager`/`Cashier`)
+- `storeId` (nullable, pero requerido para roles actuales `AdminStore`/`Manager`/`Cashier`/`Collector`)
 
 Contrato de response (200 OK):
 
@@ -294,15 +309,16 @@ Contrato de response (200 OK):
 
 Reglas de autorización por actor:
 
-- `SuperAdmin`: puede editar en cualquier tenant/store válido.
-- `TenantAdmin`: solo usuarios de su tenant; no puede mover target a otro tenant.
-- `AdminStore`: solo usuarios de su store; solo puede mantener tenant/store en su propio contexto.
-- `Manager`/`Cashier`: sin acceso (`403`).
+- `SuperAdmin`: puede editar targets con rol inferior en cualquier tenant/store válido.
+- `TenantAdmin`: solo targets con rol inferior dentro de su tenant; no puede mover target a otro tenant.
+- `AdminStore`: solo targets con rol inferior dentro de su store; solo puede mantener tenant/store en su propio contexto.
+- `Manager`/`Cashier`/`Collector`/`User`: sin acceso (`403`).
 
 Reglas por roles actuales del target (sin cambiar roles en este endpoint):
 
 - `TenantAdmin`: `tenantId` requerido, `storeId` opcional.
-- `AdminStore` / `Manager` / `Cashier`: `tenantId` y `storeId` requeridos.
+- `AdminStore` / `Manager` / `Cashier` / `Collector`: `tenantId` y `storeId` requeridos.
+- Targets con rol igual, superior o desconocido no son administrables.
 - Siempre se valida que `storeId` pertenezca a `tenantId`.
 
 Errores esperados:
@@ -452,7 +468,6 @@ Cobertura:
 - Vitest: servicio tenants details GET/PUT + página tenant details/settings.
 - Playwright: `e2e/platform.tenant-details.contract.spec.ts`.
 
-
 ## 2026-02-28 — Tenant/Store detail quick actions (frontend hubs)
 
 Se enriquecen las pantallas:
@@ -510,5 +525,6 @@ Se refuerza navegación operativa contextual en superficies platform:
   - inventory (`inventory-context-badge`) cuando llega `storeId`/`itemType`/`search` por query params.
 
 Compatibilidad:
+
 - No se agregan endpoints nuevos.
 - Se reutilizan rutas y query params ya soportados por superficies existentes.

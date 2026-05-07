@@ -121,8 +121,52 @@ test('table and filters render display names without exposing tenant/store ids',
   await expect(page.getByTestId('admin-users-role-user-1')).toContainText('Administrador de empresa');
   await expect(page.getByTestId('admin-users-page')).not.toContainText('tenant-1');
   await expect(page.getByTestId('admin-users-page')).not.toContainText('store-1');
+  await expect(page.getByTestId('admin-users-page')).not.toContainText(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+  );
+  await expect(page.getByTestId('admin-users-page')).not.toContainText(
+    /\b(tenantId|storeId|userId|roleId|TenantId|StoreId|UserId|RoleId)\b/,
+  );
   await expect(page.getByTestId('admin-users-filter-tenant')).toContainText('Empresa Contexto');
   await expect(page.getByTestId('admin-users-filter-store')).toContainText('Sucursal Contexto');
+});
+
+test('rows without allowed actions do not render action controls', async ({ page }) => {
+  const noActionsResponse = {
+    ...usersResponse,
+    items: [
+      {
+        ...usersResponse.items[0],
+        id: 'user-no-actions',
+        allowedActions: {
+          canEdit: false,
+          canChangeRole: false,
+          canChangeScope: false,
+          canLock: false,
+          canUnlock: false,
+          canResetTemporaryPassword: false,
+        },
+      },
+    ],
+  };
+
+  await page.route('**/api/v1/admin/users**', (route) => {
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(noActionsResponse) });
+  });
+
+  await page.goto('/app/admin/users');
+
+  const row = page.getByTestId('admin-users-row-user-no-actions');
+  await expect(row).toBeVisible();
+  await expect(row.getByText('Editar')).toHaveCount(0);
+  await expect(row.getByText('Bloquear')).toHaveCount(0);
+  await expect(row.getByText('Desbloquear')).toHaveCount(0);
+  await expect(row.getByText('Restablecer contraseña')).toHaveCount(0);
+  await expect(row.getByText('Guardar rol')).toHaveCount(0);
 });
 
 test('filters issue server queries with selected role, tenant, store and status', async ({ page }) => {

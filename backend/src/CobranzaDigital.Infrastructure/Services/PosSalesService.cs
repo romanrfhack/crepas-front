@@ -584,7 +584,7 @@ public sealed class PosSalesService : IPosSalesService
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
-        return new PagedResult<SaleListItemDto>(total, items);
+        return new PagedResult<SaleListItemDto>(total, items, page, pageSize);
     }
 
     public async Task<SaleDetailDto> GetSaleByIdAsync(Guid saleId, CancellationToken ct)

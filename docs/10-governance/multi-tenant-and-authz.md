@@ -3,12 +3,13 @@
 Status: NORMATIVE
 Authority: Level 1
 Scope: monorepo
-Last updated: 2026-03-10
+Last updated: 2026-05-07
 Owner: Román / arquitectura técnica
 
 ## Objetivo
 
 Definir el modelo vigente de:
+
 - multi-tenant
 - tenant/store scoping
 - roles
@@ -28,6 +29,7 @@ Si una auditoría contradice este documento, se reporta el conflicto y no se asu
 - **Store**: sucursal operativa de un tenant.
 
 Regla base:
+
 - Todo dato operativo POS pertenece a un tenant.
 - Cuando aplica operación por sucursal, también pertenece a una store válida de ese tenant. :contentReference[oaicite:3]{index=3}
 
@@ -38,6 +40,7 @@ Regla base:
 ### 2.1 Usuarios tenant normales
 
 Para usuarios no `SuperAdmin`, el backend resuelve tenant principalmente desde:
+
 - claim JWT `tenantId`
 - fallback a `AspNetUsers.TenantId` cuando el claim no existe
 
@@ -56,6 +59,7 @@ Esto existe por compatibilidad con usuarios legacy durante la transición multi-
   - o, en algunos casos documentados, `tenantId` por query
 
 Regla:
+
 - `SuperAdmin` puede trabajar cross-tenant solo donde el contrato lo permite.
 - Para endpoints operativos tenant-scoped, `SuperAdmin` debe seleccionar tenant efectivo cuando el endpoint así lo requiera. :contentReference[oaicite:6]{index=6} :contentReference[oaicite:7]{index=7}
 
@@ -70,6 +74,7 @@ El contexto expuesto por backend debe distinguir entre:
 - `IsPlatformAdmin`: verdadero cuando el actor es `SuperAdmin`
 
 Regla:
+
 - usuarios tenant no pueden overridear a otro tenant
 - si un no-superadmin envía `X-Tenant-Id` distinto a su tenant, la respuesta esperada es `403` :contentReference[oaicite:8]{index=8} :contentReference[oaicite:9]{index=9}
 
@@ -80,6 +85,7 @@ Regla:
 La store operativa no debe asumirse por frontend como fuente de verdad de autorización.
 
 Reglas vigentes:
+
 - la store del request debe pertenecer al tenant efectivo
 - si `storeId` corresponde a otro tenant, backend debe responder `404` o `403` según el flujo/endpoint
 - el frontend puede mantener contexto local para UX, pero la autorización crítica debe validarse server-side :contentReference[oaicite:10]{index=10} :contentReference[oaicite:11]{index=11}
@@ -87,6 +93,7 @@ Reglas vigentes:
 ### 4.1 Claims de store
 
 Regla normativa objetivo:
+
 - JWT mantiene `tenantId` cuando corresponde
 - JWT agrega `storeId` cuando el usuario tiene sucursal asignada
 
@@ -101,12 +108,14 @@ Sin embargo, si el código real todavía tiene zonas legacy donde `storeId` no e
 Endpoints POS operativos requieren tenant y validan pertenencia de `storeId` al tenant actual.
 
 Ejemplos típicos:
+
 - `/api/v1/pos/sales`
 - `/api/v1/pos/shifts`
 - `/api/v1/pos/admin/*`
 - `GET /api/v1/pos/catalog/snapshot` cuando no puede resolverse store de forma segura
 
 Regla:
+
 - no mezclar datos entre tenants
 - `Sale`, `PosShift` y `Store` deben persistir `TenantId` para aislamiento
 - si el `storeId` es de otro tenant, la respuesta no debe exponer datos ajenos :contentReference[oaicite:14]{index=14}
@@ -116,24 +125,28 @@ Regla:
 Algunos reportes POS permiten modo platform global para `SuperAdmin`; otros requieren tenant efectivo.
 
 Casos expresamente documentados como permitidos cross-tenant global para `SuperAdmin`:
+
 - `GET /api/v1/pos/reports/kpis/summary`
 - `GET /api/v1/pos/reports/sales/daily`
 - `GET /api/v1/pos/reports/payments/methods`
 - `GET /api/v1/pos/reports/control/cash-differences`
 
 Regla:
+
 - no asumir que todos los `/pos/reports/*` aceptan modo global
 - si un endpoint fuerza tenant efectivo, debe respetarse ese guard/scoping :contentReference[oaicite:15]{index=15} :contentReference[oaicite:16]{index=16}
 
 ### 5.3 Platform
 
 Los endpoints `/api/v1/platform/*`:
+
 - usan policy `PlatformOnly`
 - son exclusivos de `SuperAdmin`
 - operan cross-tenant según su contrato
 - no deben depender de `X-Tenant-Id` salvo que el contrato del endpoint lo requiera explícitamente
 
 Ejemplo claro:
+
 - `GET /api/v1/platform/dashboard/*` es cross-tenant global y no requiere `X-Tenant-Id` :contentReference[oaicite:17]{index=17}
 
 ---
@@ -143,22 +156,27 @@ Ejemplo claro:
 ### 6.1 SuperAdmin sin `X-Tenant-Id`
 
 Permitido:
+
 - `/api/v1/platform/*`
 - reportes POS globales expresamente soportados por contrato
 
 No permitido:
+
 - endpoints operativos tenant-scoped que requieren tenant efectivo
 
 Respuesta esperada cuando el endpoint operativo exige tenant:
+
 - `400 tenantId required for this endpoint in platform mode` :contentReference[oaicite:18]{index=18} :contentReference[oaicite:19]{index=19}
 
 ### 6.2 SuperAdmin con `X-Tenant-Id`
 
 Permitido:
+
 - operar como tenant efectivo en endpoints POS tenant-scoped
 - mantener acceso a endpoints platform cuando el contrato lo admita
 
 Regla:
+
 - el override debe afectar scoping, no reescribir ownership de datos persistidos de forma incorrecta :contentReference[oaicite:20]{index=20}
 
 ---
@@ -172,8 +190,11 @@ Modelo final vigente:
 - `AdminStore`
 - `Manager`
 - `Cashier`
+- `Collector`
+- `User`
 
 Regla de compatibilidad:
+
 - la transición `Admin` → `AdminStore` ya está cerrada
 - policies, guards, claims y scoping deben operar con el modelo final
 - no debe reintroducirse dependencia funcional en el rol legacy `Admin` salvo migración explícita documentada :contentReference[oaicite:21]{index=21}
@@ -181,6 +202,7 @@ Regla de compatibilidad:
 ### 7.1 Descripción normativa por rol
 
 #### SuperAdmin
+
 - acceso a `/api/v1/platform/*`
 - acceso POS multi-tenant controlado
 - puede usar `X-Tenant-Id`
@@ -188,26 +210,42 @@ Regla de compatibilidad:
 - alcance global sobre usuarios/tenants/stores conforme al contrato vigente :contentReference[oaicite:22]{index=22}
 
 #### TenantAdmin
+
 - administración completa dentro de su tenant
 - sin capacidades plataforma global
 - puede operar POS admin/reportes/operación dentro de su tenant :contentReference[oaicite:23]{index=23}
 
 #### AdminStore
+
 - administración operativa por sucursal/tienda dentro del tenant
 - alcance restringido a su store y tenant asociado
 - es el nombre final del antiguo `Admin` de sucursal :contentReference[oaicite:24]{index=24} :contentReference[oaicite:25]{index=25}
 
 #### Manager
+
 - operación y supervisión dentro del tenant/store permitido
 - acceso según policies POS y scoping aplicable
 - sin acceso plataforma global
 - sin acceso a `/api/v1/admin/users` salvo que un contrato normativo futuro lo cambie explícitamente :contentReference[oaicite:26]{index=26}
 
 #### Cashier
+
 - operación POS básica
 - sin acceso a plataforma
 - sin acceso a admin users
 - el enforcing crítico sigue siendo server-side por tenant/store :contentReference[oaicite:27]{index=27}
+
+#### Collector
+
+- operación de cobranza
+- sin acceso a plataforma
+- sin acceso a admin users
+
+#### User
+
+- acceso operativo limitado según módulos asignados
+- sin acceso a plataforma
+- sin acceso a admin users
 
 ---
 
@@ -220,6 +258,7 @@ Policies normativas a respetar:
 - `TenantOrPlatform` → claim `tenantId` o rol `SuperAdmin`
 
 Además, por grupo funcional:
+
 - `/api/v1/platform/*` → `PlatformOnly`
 - `/api/v1/pos/admin/*` → `TenantOrPlatform` + policy POS admin correspondiente
 - `/api/v1/pos/reports/*` → `TenantOrPlatform` + `PosReportViewer`
@@ -231,36 +270,48 @@ Además, por grupo funcional:
 
 ### 9.1 Objetivo de alcance
 
-`/api/v1/admin/users*` debe seguir scoping por actor.
+`/api/v1/admin/users*` debe seguir scoping por actor y jerarquía. El contrato detallado vive en `docs/admin/user-administration.md` y manda sobre notas históricas de releases anteriores.
 
 Modelo normativo:
-- `SuperAdmin` → vista global + filtros por tenant/store
-- `TenantAdmin` → usuarios de su tenant
-- `AdminStore` → usuarios del contexto permitido de su store/tenant
-- `Manager` y `Cashier` → sin acceso salvo contrato futuro explícito
+
+- `SuperAdmin` → vista global, pero solo usuarios con roles inferiores; no ve ni administra `SuperAdmin`
+- `TenantAdmin` → usuarios de su tenant con roles inferiores; no ve ni administra `TenantAdmin` o `SuperAdmin`
+- `AdminStore` → usuarios de su store con roles inferiores; no ve ni administra `AdminStore`, `TenantAdmin` o `SuperAdmin`
+- `Manager`, `Cashier`, `Collector` y `User` → sin acceso salvo contrato futuro explícito
 
 Esto se alinea con la evolución contractual documentada para create/edit/reset password y con la transición cerrada hacia `AdminStore`. :contentReference[oaicite:30]{index=30} :contentReference[oaicite:31]{index=31}
+
+Regla transversal:
+
+- un actor solo puede ver y administrar usuarios con rol efectivo estrictamente inferior al suyo
+- usuarios multi-rol usan el máximo nivel efectivo
+- targets con roles desconocidos fallan cerrado
+- el listado aplica scope + jerarquía antes de `Count/Skip/Take`
+- `SuperAdmin` no es asignable desde `/admin/users`
 
 ### 9.2 Reglas por actor en operaciones críticas de usuarios
 
 #### Crear usuario
-- `SuperAdmin`: puede crear dentro de cualquier tenant/store válido
-- `TenantAdmin`: solo dentro de su tenant
-- `AdminStore`: solo `Manager`/`Cashier` en su propia store
-- `Manager`/`Cashier`: `403` :contentReference[oaicite:32]{index=32}
+
+- `SuperAdmin`: puede crear `TenantAdmin`, `AdminStore`, `Manager`, `Cashier`, `Collector` y `User` dentro de cualquier tenant/store válido
+- `TenantAdmin`: puede crear `AdminStore`, `Manager`, `Cashier`, `Collector` y `User` solo dentro de su tenant
+- `AdminStore`: puede crear `Manager`, `Cashier`, `Collector` y `User` solo en su propia store
+- `Manager`/`Cashier`/`Collector`/`User`: `403` :contentReference[oaicite:32]{index=32}
 
 #### Reset temporal de contraseña
+
 - `SuperAdmin`: puede resetear targets válidos en cualquier scope permitido
-- `TenantAdmin`: solo dentro de su tenant
-- `AdminStore`: solo `Manager`/`Cashier` de su store
-- no se resetean `SuperAdmin` por este endpoint
+- `TenantAdmin`: solo targets de rol inferior dentro de su tenant
+- `AdminStore`: solo targets de rol inferior dentro de su store
+- no se resetean `SuperAdmin`, roles iguales, roles superiores ni roles desconocidos por este endpoint
 - nunca se audita ni se loguea el valor del password temporal :contentReference[oaicite:33]{index=33} :contentReference[oaicite:34]{index=34}
 
 #### Editar usuario
-- `SuperAdmin`: cualquier tenant/store válido
-- `TenantAdmin`: solo dentro de su tenant
-- `AdminStore`: solo dentro de su store/tenant
-- `Manager`/`Cashier`: `403`
+
+- `SuperAdmin`: targets de rol inferior en cualquier tenant/store válido
+- `TenantAdmin`: targets de rol inferior dentro de su tenant
+- `AdminStore`: targets de rol inferior dentro de su store/tenant
+- `Manager`/`Cashier`/`Collector`/`User`: `403`
 - si un rol requiere `storeId`, debe validarse que la store pertenezca al tenant indicado :contentReference[oaicite:35]{index=35}
 
 ---
@@ -273,7 +324,7 @@ Reglas normativas:
   - `tenantId` requerido
   - `storeId` opcional
 
-- `AdminStore`, `Manager`, `Cashier`:
+- `AdminStore`, `Manager`, `Cashier`, `Collector`:
   - `tenantId` requerido
   - `storeId` requerido
   - backend valida que `storeId` pertenezca a `tenantId`
@@ -289,6 +340,7 @@ Reglas normativas:
 En frontend, `SuperAdmin` puede seleccionar tenant activo para operar superficies tenant-scoped.
 
 Reglas:
+
 - el contexto platform seleccionado debe propagarse mediante `X-Tenant-Id` solo en requests POS/reportes/snapshot donde aplique
 - no debe añadirse a `/platform/*`
 - si el tenant seleccionado deja de ser válido, frontend debe limpiar el contexto para evitar requests inválidos :contentReference[oaicite:38]{index=38} :contentReference[oaicite:39]{index=39}
@@ -298,6 +350,7 @@ Reglas:
 Las superficies platform pueden navegar a users/dashboard/inventory pasando `tenantId` y/o `storeId` por query params como contexto UX.
 
 Regla:
+
 - esos query params ayudan a prefill, navegación y foco operativo
 - no sustituyen la autorización server-side
 - no agregan permisos nuevos por sí mismos :contentReference[oaicite:40]{index=40} :contentReference[oaicite:41]{index=41}
@@ -305,8 +358,9 @@ Regla:
 ### 11.3 Rutas protegidas
 
 Reglas generales de frontend:
+
 - `/app/platform/**` → solo `SuperAdmin`
-- `/app/admin/users` y `/app/admin/roles` → sujetas al contrato vigente de admin users/roles
+- `/app/admin/users` y `/app/admin/roles` → sujetas al contrato vigente de admin users/roles; `/app/admin/users` debe usar `/api/v1/admin/users/options` como fuente segura de opciones asignables
 - `/app/admin/pos/**` e inventario → roles permitidos por contrato POS admin
 - `/app/pos/**` → roles operativos según contrato/guards vigentes
 
@@ -317,6 +371,7 @@ Si frontend y backend divergen, debe considerarse bug de alineación y no debe �
 ## 12. Pruebas obligatorias cuando cambia auth/scoping
 
 Si un cambio toca:
+
 - roles
 - policies
 - `tenantId`
@@ -331,6 +386,7 @@ Si un cambio toca:
 entonces deben revisarse y actualizarse las pruebas correspondientes en `testing-matrix.md`.
 
 Coberturas mínimas esperadas:
+
 - tenant isolation
 - `SuperAdmin` global vs tenant-scoped
 - `X-Tenant-Id`
@@ -343,10 +399,12 @@ Coberturas mínimas esperadas:
 ## 13. Compatibilidades cerradas y reglas de transición
 
 ### 13.1 Tenant claim legacy
+
 - usuarios legacy sin claim `tenantId` siguen resolviendo tenant por lookup
 - esto existe por compatibilidad y no debe removerse sin plan explícito de migración/documentación/pruebas :contentReference[oaicite:45]{index=45}
 
 ### 13.2 `Admin` → `AdminStore`
+
 - transición cerrada
 - contratos nuevos deben usar `AdminStore`
 - no crear nueva dependencia funcional en `Admin` legacy :contentReference[oaicite:46]{index=46}
@@ -369,6 +427,7 @@ OpenClaw no debe:
 ## 15. Cuándo pedir ASK_HUMAN
 
 OpenClaw debe pedir validación humana si el cambio afecta:
+
 - emisión de claims JWT
 - policies o guardas de autorización
 - `X-Tenant-Id`
