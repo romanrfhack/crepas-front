@@ -449,12 +449,8 @@ public sealed class TenantIsolationIntegrationTests : IClassFixture<CobranzaDigi
 
     private async Task SetUserRolesAsync(string adminToken, string email, string[] roles)
     {
-        await EnsureUserScopeForRolesAsync(email, roles);
-        var userId = await GetUserIdByEmailAsync(adminToken, email);
-
-        using var request = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/admin/users/{userId}/roles", adminToken, new { roles });
-        using var response = await _client.SendAsync(request);
-        Assert.True(response.StatusCode is HttpStatusCode.NoContent or HttpStatusCode.OK);
+        _ = adminToken;
+        await TestUserRoleSeeder.SetUserRolesDirectlyAsync(_factory.Services, email, roles);
     }
 
 

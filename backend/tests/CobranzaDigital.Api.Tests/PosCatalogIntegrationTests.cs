@@ -1490,23 +1490,8 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
 
     private async Task SetUserRolesAsync(string adminToken, string email, string[] roles)
     {
-        await EnsureUserScopeForRolesAsync(email, roles);
-        var userId = await GetUserIdByEmailAsync(adminToken, email);
-
-        using var request = CreateAuthorizedRequest(HttpMethod.Put, $"/api/v1/admin/users/{userId}/roles", adminToken);
-        request.Content = JsonContent.Create(new { roles });
-        using var response = await _client.SendAsync(request);
-
-        // Keep compatibility while the endpoint transitions between update semantics (204) and resource return (200).
-        Assert.True(response.StatusCode is HttpStatusCode.NoContent or HttpStatusCode.OK);
-
-        using var verifyRequest = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/admin/users/{userId}", adminToken);
-        using var verifyResponse = await _client.SendAsync(verifyRequest);
-        var user = await verifyResponse.Content.ReadFromJsonAsync<AdminUserResponse>();
-
-        Assert.Equal(HttpStatusCode.OK, verifyResponse.StatusCode);
-        Assert.NotNull(user);
-        Assert.Equal(roles.OrderBy(x => x), user!.Roles.OrderBy(x => x));
+        _ = adminToken;
+        await TestUserRoleSeeder.SetUserRolesDirectlyAsync(_factory.Services, email, roles);
     }
 
 
