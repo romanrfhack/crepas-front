@@ -78,6 +78,41 @@ dotnet /var/www/cobranzadigital/api/releases/<releaseId>/CobranzaDigital.Api.dll
 4. Conserva el release previo para rollback básico.
 5. Ejecuta `scripts/release-smoke.sh`.
 
+## Verificación de versión WEB
+
+La interfaz web muestra un indicador discreto de build en la parte baja del sidebar autenticado
+y también en el login. El formato visible es:
+
+```text
+Web r<runNumber> · <shortSha>
+```
+
+Ejemplo:
+
+```text
+Web r353 · bf797d9
+```
+
+- `runNumber` corresponde a `GITHUB_RUN_NUMBER` del workflow que construyó el artefacto.
+- `shortSha` corresponde a los primeros 7 caracteres de `GITHUB_SHA`.
+- Al hacer click en el indicador se abre el detalle con versión de `package.json`, run id,
+  commit completo, branch, entorno, fecha UTC de build y fuente.
+- El botón `Copiar información de soporte` copia un resumen útil para soporte y diagnóstico.
+
+El dato visible viene compilado en el bundle Angular para confirmar qué frontend está ejecutando
+realmente el navegador. Además, el build genera `assets/build-info.json` para consultar la
+última versión desplegada como archivo público.
+
+El build info se genera automáticamente con `frontend/scripts/write-build-info.mjs` antes de
+`npm run build`. En GitHub Actions usa `GITHUB_SHA`, `GITHUB_REF_NAME`, `GITHUB_RUN_NUMBER` y
+`GITHUB_RUN_ID`; en local usa `git` cuando está disponible y marca la fuente como `local`.
+
+Si un usuario no ve cambios después de deploy:
+
+1. Pedirle que abra el indicador y comparta la información de soporte.
+2. Comparar `Web r<runNumber> · <shortSha>` contra el `CI` aprobado.
+3. Si el run o commit no coinciden, recargar la página y limpiar cache del navegador si persiste.
+
 ## Post-deploy
 
 Debe quedar verde:

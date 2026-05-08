@@ -10,6 +10,7 @@ import {
 import { FormField, email, form, minLength, required } from '@angular/forms/signals';
 import { ActivatedRoute } from '@angular/router';
 import { finalize } from 'rxjs';
+import { BuildInfoBadgeComponent } from '../../../../core/build-info/build-info-badge.component';
 import { AuthService } from '../../services/auth.service';
 
 interface LoginModel {
@@ -19,7 +20,7 @@ interface LoginModel {
 
 @Component({
   selector: 'app-login',
-  imports: [FormField],
+  imports: [FormField, BuildInfoBadgeComponent],
   template: `
     <main class="auth-container">
       <section class="auth-card" aria-labelledby="login-title">
@@ -79,9 +80,10 @@ interface LoginModel {
           <a routerLink="/register">Crear cuenta</a>
         </footer> -->
       </section>
+      <app-build-info-badge class="auth-build-info" />
     </main>
   `,
-    styles: `
+  styles: `
     :host {
       /* Paleta alineada a tu menú + fondo */
       --brand-rose: #f3b6c2;
@@ -98,6 +100,7 @@ interface LoginModel {
 
     .auth-container {
       min-height: 100vh;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -108,14 +111,18 @@ interface LoginModel {
       /* Fondo: imagen + overlays para asegurar legibilidad del card */
       background-color: var(--brand-cream);
       background-image:
-        radial-gradient(1100px 700px at 70% 35%,
+        radial-gradient(
+          1100px 700px at 70% 35%,
           rgba(255, 255, 255, 0.78),
           rgba(255, 255, 255, 0.38) 35%,
-          rgba(255, 255, 255, 0) 72%),
-        linear-gradient(90deg,
+          rgba(255, 255, 255, 0) 72%
+        ),
+        linear-gradient(
+          90deg,
           rgba(243, 182, 194, 0.28) 0%,
           rgba(251, 246, 239, 0.88) 55%,
-          rgba(251, 246, 239, 1) 100%),
+          rgba(251, 246, 239, 1) 100%
+        ),
         url('/assets/fondoLogin.webp');
 
       background-repeat: no-repeat;
@@ -184,7 +191,10 @@ interface LoginModel {
       border: 1px solid rgba(107, 63, 42, 0.16);
       background: rgba(255, 255, 255, 0.9);
       font-size: 1rem;
-      transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+      transition:
+        border-color 140ms ease,
+        box-shadow 140ms ease,
+        transform 140ms ease;
     }
 
     input:hover {
@@ -220,7 +230,10 @@ interface LoginModel {
       color: #ffffff;
       font-weight: 700;
       cursor: pointer;
-      transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+      transition:
+        transform 140ms ease,
+        filter 140ms ease,
+        box-shadow 140ms ease;
 
       /* rosa → caramelo (combina con waffle/chocolate) */
       background: linear-gradient(135deg, var(--brand-rose-strong), #c98d6a);
@@ -257,12 +270,20 @@ interface LoginModel {
       font-weight: 700;
       text-decoration: none;
       border-bottom: 1px solid rgba(107, 63, 42, 0.25);
-      transition: border-color 140ms ease, color 140ms ease;
+      transition:
+        border-color 140ms ease,
+        color 140ms ease;
     }
 
     .auth-footer a:hover {
       color: #4f2d1f;
       border-bottom-color: rgba(232, 154, 172, 0.65);
+    }
+
+    .auth-build-info {
+      bottom: 1rem;
+      position: absolute;
+      right: 1rem;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

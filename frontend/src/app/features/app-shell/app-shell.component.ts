@@ -9,6 +9,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Data, NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
+import { BuildInfoBadgeComponent } from '../../core/build-info/build-info-badge.component';
 import { GlobalErrorService } from '../../core/services/global-error.service';
 import { AuthService } from '../auth/services/auth.service';
 import { AppNavComponent } from './components/app-nav/app-nav.component';
@@ -21,7 +22,7 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
   host: {
     '(document:keydown.escape)': 'onEscapeClose()',
   },
-  imports: [RouterOutlet, AppNavComponent],
+  imports: [RouterOutlet, AppNavComponent, BuildInfoBadgeComponent],
   template: `
     <div class="app-shell">
       <!-- HEADER con gradiente y diseño refinado -->
@@ -85,6 +86,7 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
           <aside class="app-sidebar" [attr.aria-hidden]="!isSidenavOpen()">
             <div class="sidebar-container">
               <app-nav [navItems]="appNavItems" [userRoles]="rolesSig()" />
+              <app-build-info-badge />
             </div>
           </aside>
         }
@@ -388,6 +390,8 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow);
+      display: grid;
+      gap: 0.75rem;
       padding: 1rem 0.75rem;
       transition: all var(--transition);
     }

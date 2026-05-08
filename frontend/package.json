@@ -5,6 +5,8 @@
   "packageManager": "npm@11.8.0",
   "scripts": {
     "ng": "ng",
+    "generate:build-info": "node scripts/write-build-info.mjs",
+    "prebuild": "npm run generate:build-info",
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",

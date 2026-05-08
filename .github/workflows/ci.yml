@@ -47,6 +47,7 @@ jobs:
               - '.github/workflows/deploy-web.yml'
             frontend_release:
               - 'frontend/src/**'
+              - 'frontend/scripts/**'
               - 'frontend/public/**'
               - 'frontend/package.json'
               - 'frontend/package-lock.json'
@@ -150,6 +151,8 @@ jobs:
 
       - name: Build
         working-directory: frontend
+        env:
+          BUILD_INFO_ENVIRONMENT: production
         run: npm run build -- --configuration production
 
       - name: Unit tests
