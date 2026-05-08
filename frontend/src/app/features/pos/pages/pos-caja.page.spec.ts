@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
+import { vi } from 'vitest';
 import { CreateSaleRequestDto, SaleDetailDto, SaleListItemUi } from '../models/pos.models';
 import { PosCatalogSnapshotService } from '../services/pos-catalog-snapshot.service';
 import { PosSalesApiService } from '../services/pos-sales-api.service';
@@ -11,15 +12,21 @@ import { PosWholesaleApiService } from '../services/pos-wholesale-api.service';
 import { PosCajaPage } from './pos-caja.page';
 
 describe('PosCajaPage', () => {
+  const fixedBusinessDayNow = new Date('2026-02-12T18:00:00.000Z');
+
   let fixture: ComponentFixture<PosCajaPage>;
   let currentShiftResponse: Record<string, unknown> | null;
-  let openShiftCalls: Array<{
+  let openShiftCalls: {
     startingCashAmount: number;
     notes?: string | null;
     clientOperationId?: string | null;
-  }>;
+  }[];
   let salesCalls: { payload: CreateSaleRequestDto; correlationId: string }[];
-  let voidCalls: { saleId: string; payload: { clientVoidId: string; reasonCode?: string }; correlationId: string }[];
+  let voidCalls: {
+    saleId: string;
+    payload: { clientVoidId: string; reasonCode?: string };
+    correlationId: string;
+  }[];
   let closePreviewCalls: unknown[];
   let invalidateCalls: (string | undefined)[];
   let persistedSales: SaleListItemUi[];
@@ -29,9 +36,9 @@ describe('PosCajaPage', () => {
   let validateAvailabilityCalls = 0;
 
   beforeEach(async () => {
-    const todayOccurredAt = new Date();
-    todayOccurredAt.setUTCHours(18, 0, 0, 0);
-    todayOccurredAtIso = todayOccurredAt.toISOString();
+    vi.useFakeTimers({ now: fixedBusinessDayNow, toFake: ['Date'] });
+
+    todayOccurredAtIso = fixedBusinessDayNow.toISOString();
     currentShiftResponse = {
       id: 'shift-1',
       openedAtUtc: '2026-02-12T10:00:00Z',
@@ -317,6 +324,10 @@ describe('PosCajaPage', () => {
     fixture.detectChanges();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('reuses the same clientSaleId when retrying after network error', async () => {
     await fixture.componentInstance.confirmPayment({
       payments: [{ method: 'Cash', amount: 10, reference: null }],
@@ -339,14 +350,14 @@ describe('PosCajaPage', () => {
     await fixture.componentInstance.openSaleReceipt('sale-existing');
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.daySales().some((sale) => sale.saleId === 'sale-existing')).toBe(
-      true,
-    );
+    expect(
+      fixture.componentInstance.daySales().some((sale) => sale.saleId === 'sale-existing'),
+    ).toBe(true);
     expect(fixture.componentInstance.selectedSaleDetail()?.payments.length).toBe(1);
     expect(fixture.nativeElement.querySelector('[data-testid="sale-receipt"]')).toBeTruthy();
-    expect(fixture.nativeElement.querySelector('[data-testid="receipt-folio"]')?.textContent).toContain(
-      'POS-HIST-1',
-    );
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="receipt-folio"]')?.textContent,
+    ).toContain('POS-HIST-1');
   });
 
   it('opens receipt automatically after a successful sale and keeps it recoverable from persisted state', async () => {
@@ -614,11 +625,15 @@ describe('PosCajaPage', () => {
         .disabled,
     ).toBe(true);
     expect(
-      (fixture.nativeElement.querySelector('[data-testid="cancel-close-shift"]') as HTMLButtonElement)
-        .disabled,
+      (
+        fixture.nativeElement.querySelector(
+          '[data-testid="cancel-close-shift"]',
+        ) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(
-      (fixture.nativeElement.querySelector('[data-testid="cancel-void"]') as HTMLButtonElement).disabled,
+      (fixture.nativeElement.querySelector('[data-testid="cancel-void"]') as HTMLButtonElement)
+        .disabled,
     ).toBe(true);
   });
 
@@ -627,7 +642,7 @@ describe('PosCajaPage', () => {
       status: 403,
       error: { code: 'FORBIDDEN_VOID' },
     });
-    const successfulVoidCalls: Array<{ saleId: string; payload: { clientVoidId: string } }> = [];
+    const successfulVoidCalls: { saleId: string; payload: { clientVoidId: string } }[] = [];
 
     const salesApi = TestBed.inject(PosSalesApiService) as unknown as {
       voidSale: (
