@@ -79,10 +79,16 @@ describe('BuildInfoBadgeComponent', () => {
     const content = fixture.nativeElement.textContent as string;
     expect(content).toContain('Run number');
     expect(content).toContain('353');
+    expect(content).toContain('Run id');
+    expect(content).toContain('987654321');
     expect(content).toContain('Branch');
     expect(content).toContain('main');
     expect(content).toContain('Commit completo');
     expect(content).toContain('2026-05-07T03:42:00Z');
+    expect(content).toContain('Entorno');
+    expect(content).toContain('production');
+    expect(content).toContain('Fuente');
+    expect(content).toContain('github-actions');
   });
 
   it('copia información de soporte', async () => {

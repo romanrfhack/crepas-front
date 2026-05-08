@@ -105,7 +105,7 @@ realmente el navegador. Además, el build genera `assets/build-info.json` para c
 
 El build info se genera automáticamente con `frontend/scripts/write-build-info.mjs` antes de
 `npm run build`. En GitHub Actions usa `GITHUB_SHA`, `GITHUB_REF_NAME`, `GITHUB_RUN_NUMBER` y
-`GITHUB_RUN_ID`; en local usa `git` cuando está disponible y marca la fuente como `local`.
+`GITHUB_RUN_ID`; en local mantiene un fallback estable y marca la fuente como `local`.
 
 Si un usuario no ve cambios después de deploy:
 

@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,32 +18,25 @@ function getArgValue(name) {
   return match ? match.slice(prefix.length).trim() : '';
 }
 
-function runGit(args, fallback) {
-  try {
-    return execSync(`git ${args}`, {
-      cwd: frontendRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return fallback;
-  }
-}
-
 function clean(value, fallback) {
   const text = String(value ?? '').trim();
   return text && text !== 'undefined' && text !== 'null' ? text : fallback;
 }
 
-const commitSha = clean(process.env.GITHUB_SHA, runGit('rev-parse HEAD', 'local'));
-const commitShortSha = githubActions
-  ? commitSha.slice(0, 7)
-  : clean(runGit('rev-parse --short=7 HEAD', 'local'), commitSha.slice(0, 7) || 'local');
-const branch = clean(process.env.GITHUB_REF_NAME, runGit('rev-parse --abbrev-ref HEAD', 'local'));
-const environment = clean(
-  getArgValue('environment') || process.env.BUILD_INFO_ENVIRONMENT || process.env.APP_ENVIRONMENT,
-  githubActions ? 'production' : 'local',
-);
+const commitSha = githubActions ? clean(process.env.GITHUB_SHA, 'local') : 'local';
+const commitShortSha = githubActions ? clean(commitSha.slice(0, 7), 'local') : 'local';
+const branch = githubActions ? clean(process.env.GITHUB_REF_NAME, 'local') : 'local';
+const runNumber = githubActions ? clean(process.env.GITHUB_RUN_NUMBER, 'local') : 'local';
+const runId = githubActions ? clean(process.env.GITHUB_RUN_ID, 'local') : 'local';
+const buildDateUtc = githubActions ? new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') : 'local';
+const environment = githubActions
+  ? clean(
+      getArgValue('environment') ||
+        process.env.BUILD_INFO_ENVIRONMENT ||
+        process.env.APP_ENVIRONMENT,
+      'production',
+    )
+  : 'local';
 
 const buildInfo = {
   app: 'web',
@@ -52,9 +44,9 @@ const buildInfo = {
   commitSha,
   commitShortSha,
   branch,
-  runNumber: githubActions ? clean(process.env.GITHUB_RUN_NUMBER, 'local') : 'local',
-  runId: githubActions ? clean(process.env.GITHUB_RUN_ID, 'local') : 'local',
-  buildDateUtc: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+  runNumber,
+  runId,
+  buildDateUtc,
   environment,
   source: githubActions ? 'github-actions' : 'local',
 };
