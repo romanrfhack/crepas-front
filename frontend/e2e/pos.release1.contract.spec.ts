@@ -6,10 +6,10 @@ interface FakeSale {
   saleId: string;
   folio: string;
   status: 'Completed' | 'Void';
-  payments: Array<{ method: string; amount: number; reference?: string | null }>;
+  payments: { method: string; amount: number; reference?: string | null }[];
   total: number;
   occurredAtUtc: string;
-  lines: Array<{
+  lines: {
     productId: string;
     externalCode: string | null;
     name: string;
@@ -17,7 +17,7 @@ interface FakeSale {
     baseUnitPrice: number;
     appliedUnitPrice: number;
     lineSubtotal: number;
-  }>;
+  }[];
 }
 
 interface FakeServerOptions {
@@ -28,6 +28,9 @@ interface FakeServerOptions {
   openShiftNetworkErrorOnce?: boolean;
   closeConflictOnce?: boolean;
 }
+
+const fixedBusinessDayNow = new Date('2026-02-12T18:00:00.000Z');
+const fixedBusinessDayNowIso = fixedBusinessDayNow.toISOString();
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -54,10 +57,10 @@ const seedAuth = async (page: Page, role: Role) => {
 };
 
 const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
+  await page.clock.setFixedTime(fixedBusinessDayNow);
+
   const shiftId = 'SHIFT-E2E-1';
-  const todayOccurredAt = new Date();
-  todayOccurredAt.setUTCHours(18, 0, 0, 0);
-  const todayOccurredAtIso = todayOccurredAt.toISOString();
+  const todayOccurredAtIso = fixedBusinessDayNowIso;
   let shiftOpen = false;
   let voidAttempts = 0;
   let openShiftAttempts = 0;
@@ -69,7 +72,7 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
   const captured = {
     openRequests: [] as Record<string, unknown>[],
     saleRequests: [] as Record<string, unknown>[],
-    closePreviewRequests: [] as Array<{ method: string; body: Record<string, unknown> }>,
+    closePreviewRequests: [] as { method: string; body: Record<string, unknown> }[],
     closeRequests: [] as Record<string, unknown>[],
     voidRequests: [] as Record<string, unknown>[],
     snapshotCalls: () => snapshotCalls,
@@ -379,8 +382,7 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
 
     if (pathname.endsWith('/shifts/close-preview') && method === 'POST') {
       captured.closePreviewRequests.push({ method, body });
-      const cashCount =
-        (body.cashCount as Array<{ denominationValue: number; count: number }>) ?? [];
+      const cashCount = (body.cashCount as { denominationValue: number; count: number }[]) ?? [];
       const countedCashAmount = cashCount.reduce(
         (sum, line) => sum + Number(line.denominationValue) * Number(line.count),
         0,
@@ -413,7 +415,7 @@ const setupFakePosApi = async (page: Page, options: FakeServerOptions = {}) => {
       closeAttempts += 1;
       captured.closeRequests.push(body);
       const counted = (
-        (body.countedDenominations as Array<{ denominationValue: number; count: number }>) ?? []
+        (body.countedDenominations as { denominationValue: number; count: number }[]) ?? []
       ).reduce((sum, line) => sum + Number(line.denominationValue) * Number(line.count), 0);
       const difference = counted - 20;
       const reason = String(body.closeReason ?? '').trim();
@@ -551,7 +553,11 @@ const submitMixedPayment = async (page: Page) => {
   await confirmPaymentButton.evaluate((button) => {
     button.scrollIntoView({ block: 'center', inline: 'nearest' });
   });
-  await confirmPaymentButton.click({ force: true });
+  const createSaleResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/v1/pos/sales') && response.request().method() === 'POST',
+  );
+  await Promise.all([createSaleResponse, confirmPaymentButton.click({ force: true })]);
   await expect(paymentModal).toBeHidden();
 };
 
@@ -743,7 +749,9 @@ test('G) Close shift 409 stale recarga estado y muestra feedback útil', async (
   await page.getByTestId('close-reason').fill('Cierre reconciliado tras conflicto');
   await page.getByTestId('confirm-close-shift').click();
 
-  await expect(page.getByText('El turno ya no está abierto. Actualizamos el estado de caja.')).toBeVisible();
+  await expect(
+    page.getByText('El turno ya no está abierto. Actualizamos el estado de caja.'),
+  ).toBeVisible();
   await expect(page.getByText('Turno cerrado')).toBeVisible();
   await expect(page.getByText('Cierre de turno')).toBeHidden();
 });

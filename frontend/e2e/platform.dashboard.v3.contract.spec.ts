@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 
 const buildJwt = (roles: string[]) => {
   const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
@@ -6,6 +6,126 @@ const buildJwt = (roles: string[]) => {
     'base64url',
   );
   return `${header}.${payload}.sig`;
+};
+
+const adminUserOptions = {
+  roles: [
+    {
+      name: 'TenantAdmin',
+      displayName: 'Administrador de empresa',
+      description: 'Administra usuarios y configuración de una empresa',
+      level: 80,
+    },
+    {
+      name: 'AdminStore',
+      displayName: 'Administrador de tienda',
+      description: 'Administra usuarios de una tienda',
+      level: 60,
+    },
+    {
+      name: 'Manager',
+      displayName: 'Encargado / supervisor operativo',
+      description: 'Usuario operativo sin acceso a Administración de usuarios',
+      level: 40,
+    },
+    {
+      name: 'Cashier',
+      displayName: 'Cajero',
+      description: 'Usuario operativo de caja',
+      level: 30,
+    },
+    {
+      name: 'Collector',
+      displayName: 'Gestor de cobranza',
+      description: 'Usuario operativo de cobranza',
+      level: 30,
+    },
+    {
+      name: 'User',
+      displayName: 'Usuario básico',
+      description: 'Acceso operativo limitado',
+      level: 10,
+    },
+  ],
+  tenants: [
+    {
+      id: 'tenant-1',
+      name: 'Cliente Demo',
+      slug: 'cliente-demo',
+    },
+    {
+      id: 'tenant-2',
+      name: 'Cliente Norte',
+      slug: 'cliente-norte',
+    },
+    {
+      id: 'tenant-3',
+      name: 'Cliente Plantilla',
+      slug: 'cliente-plantilla',
+    },
+  ],
+  stores: [
+    {
+      id: 'store-1',
+      tenantId: 'tenant-1',
+      name: 'Tienda Centro',
+    },
+    {
+      id: 'store-3',
+      tenantId: 'tenant-3',
+      name: 'Tienda Plantilla',
+    },
+  ],
+  currentScope: {
+    role: 'SuperAdmin',
+    roleDisplayName: 'Superadministrador',
+    roleLevel: 100,
+    tenantId: null,
+    tenantName: null,
+    storeId: null,
+    storeName: null,
+  },
+};
+
+const tenantName = (tenantId: string | null) =>
+  adminUserOptions.tenants.find((tenant) => tenant.id === tenantId)?.name ?? 'Sin empresa';
+
+const storeName = (storeId: string | null) =>
+  adminUserOptions.stores.find((store) => store.id === storeId)?.name ?? 'Sin sucursal';
+
+const fulfillAdminUserOptions = (route: Route) =>
+  route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(adminUserOptions),
+  });
+
+const expectNoTechnicalScopeIdsVisible = async (page: Page) => {
+  const adminPage = page.getByTestId('admin-users-page');
+  await expect(adminPage).not.toContainText(/\btenant-\d+\b/);
+  await expect(adminPage).not.toContainText(/\bstore-\d+\b/);
+};
+
+const expectCreateContext = async (
+  page: Page,
+  expected: {
+    tenantId: string;
+    tenantName: string;
+    storeId?: string;
+    storeName?: string;
+    role: string;
+  },
+) => {
+  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText(
+    `Empresa: ${expected.tenantName}`,
+  );
+  await expect(page.getByTestId('admin-users-create-context-store')).toContainText(
+    `Sucursal: ${expected.storeName ?? 'Sin seleccionar'}`,
+  );
+  await expect(page.getByTestId('admin-user-form-tenant')).toHaveValue(expected.tenantId);
+  await expect(page.getByTestId('admin-user-form-store')).toHaveValue(expected.storeId ?? '');
+  await expect(page.getByTestId('admin-user-form-role')).toHaveValue(expected.role);
+  await expectNoTechnicalScopeIdsVisible(page);
 };
 
 test.beforeEach(async ({ page }) => {
@@ -57,7 +177,13 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
 
   await page.route('**/api/v1/admin/users**', (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/options') && route.request().method() === 'GET') {
+      return fulfillAdminUserOptions(route);
+    }
+
     captured.adminUsers.push(url.searchParams.toString());
+    const requestedTenantId = url.searchParams.get('tenantId');
+    const requestedStoreId = url.searchParams.get('storeId');
     return route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -65,12 +191,49 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
         items: [
           {
             id: 'user-1',
-            email: 'user1@test.local',
-            userName: 'User 1',
+            email: 'adminstore@test.local',
+            userName: 'Admin Store Demo',
+            displayName: 'Admin Store Demo',
             isLockedOut: false,
             roles: ['AdminStore'],
-            tenantId: url.searchParams.get('tenantId') ?? 'tenant-1',
-            storeId: url.searchParams.get('storeId'),
+            primaryRole: {
+              name: 'AdminStore',
+              displayName: 'Administrador de tienda',
+              level: 60,
+            },
+            roleDetails: [
+              {
+                name: 'AdminStore',
+                displayName: 'Administrador de tienda',
+                level: 60,
+              },
+            ],
+            tenantId: requestedTenantId ?? 'tenant-1',
+            storeId: requestedStoreId,
+            tenant: {
+              id: requestedTenantId ?? 'tenant-1',
+              name: tenantName(requestedTenantId ?? 'tenant-1'),
+            },
+            store: requestedStoreId
+              ? {
+                  id: requestedStoreId,
+                  tenantId: requestedTenantId ?? 'tenant-1',
+                  name: storeName(requestedStoreId),
+                }
+              : null,
+            status: {
+              isLockedOut: false,
+              lockoutEnd: null,
+              label: 'Activo',
+            },
+            allowedActions: {
+              canEdit: true,
+              canChangeRole: true,
+              canChangeScope: true,
+              canLock: true,
+              canUnlock: false,
+              canResetTemporaryPassword: true,
+            },
           },
         ],
         totalCount: 1,
@@ -456,10 +619,13 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
   await expect(page.getByTestId('admin-users-page')).toBeVisible();
   await expect(page.getByTestId('admin-users-create-intent-active')).toBeVisible();
   await expect(page.getByTestId('admin-users-filter-tenant')).toHaveValue('tenant-1');
-  await expect(page.getByTestId('admin-users-filter-store')).toHaveValue('store-1');
-  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('tenant-1');
-  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('store-1');
-  await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('AdminStore');
+  await expectCreateContext(page, {
+    tenantId: 'tenant-1',
+    tenantName: 'Cliente Demo',
+    storeId: 'store-1',
+    storeName: 'Tienda Centro',
+    role: 'AdminStore',
+  });
 
   await gotoDashboard();
   const openStoreScopedUserDrilldown = page.getByTestId(
@@ -478,9 +644,11 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
   await expect(page.getByTestId('admin-users-filter-tenant')).toHaveValue('tenant-2');
   await page.getByTestId('admin-users-create-open').click();
   await expect(page.getByTestId('admin-users-create-context-badge')).toBeVisible();
-  await expect(page.getByTestId('admin-users-create-context-badge')).toContainText(
-    'Tenant: tenant-2',
-  );
+  await expectCreateContext(page, {
+    tenantId: 'tenant-2',
+    tenantName: 'Cliente Norte',
+    role: 'TenantAdmin',
+  });
 
   await gotoDashboard();
   const openTenantOverview = page.getByTestId('platform-tenant-overview-open-tenant-1');
@@ -498,7 +666,13 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
   ]);
   await expect(page.getByTestId('admin-users-page')).toBeVisible();
   await expect(page.getByTestId('admin-users-filter-tenant')).toHaveValue('tenant-1');
-  await expect(page.getByTestId('admin-user-form-role-suggestion')).toContainText('TenantAdmin');
+  await expectCreateContext(page, {
+    tenantId: 'tenant-1',
+    tenantName: 'Cliente Demo',
+    storeId: 'store-1',
+    storeName: 'Tienda Centro',
+    role: 'TenantAdmin',
+  });
 
   await gotoDashboard();
   const openStoreStockout = page.getByTestId('platform-store-stockout-open-store-1');
@@ -513,7 +687,13 @@ test('platform dashboard v3 drilldown quick actions ui-contract', async ({ page 
   ]);
   await expect(page.getByTestId('admin-users-page')).toBeVisible();
   await expect(page.getByTestId('admin-users-filter-tenant')).toHaveValue('tenant-1');
-  await expect(page.getByTestId('admin-users-filter-store')).toHaveValue('store-1');
+  await expectCreateContext(page, {
+    tenantId: 'tenant-1',
+    tenantName: 'Cliente Demo',
+    storeId: 'store-1',
+    storeName: 'Tienda Centro',
+    role: 'Cashier',
+  });
 
   expect(captured.alertDrilldown).toContain('code=STORE_WITHOUT_ADMINSTORE');
   expect(captured.alertDrilldown).toContain('code=STORE_SCOPED_USER_WITHOUT_STORE');
