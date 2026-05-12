@@ -78,9 +78,14 @@ describe('UsersAdminPage', () => {
     pageSize: 20,
   });
 
-  const createComponent = async (usersResponse = buildUsersResponse()) => {
+  const createComponent = async (
+    usersResponse: unknown = buildUsersResponse(),
+    optionsSetup: { response?: unknown; error?: unknown } = {},
+  ) => {
     getUsersMock = vi.fn().mockResolvedValue(usersResponse);
-    getUserOptionsMock = vi.fn().mockResolvedValue(buildOptionsResponse());
+    getUserOptionsMock = optionsSetup.error
+      ? vi.fn().mockRejectedValue(optionsSetup.error)
+      : vi.fn().mockResolvedValue(optionsSetup.response ?? buildOptionsResponse());
     createUserMock = vi.fn().mockResolvedValue({
       id: 'user-2',
       email: 'new@example.com',
@@ -90,7 +95,9 @@ describe('UsersAdminPage', () => {
       storeId: 'store-ctx',
       isLockedOut: false,
     });
-    setTemporaryPasswordMock = vi.fn().mockResolvedValue({ message: 'Contraseña temporal restablecida.' });
+    setTemporaryPasswordMock = vi
+      .fn()
+      .mockResolvedValue({ message: 'Contraseña temporal restablecida.' });
     updateUserMock = vi.fn().mockResolvedValue({
       id: 'user-1',
       email: 'user@example.com',
@@ -171,6 +178,240 @@ describe('UsersAdminPage', () => {
     expect(text).not.toMatch(/\b(tenantId|storeId|userId|roleId|TenantId|StoreId|UserId|RoleId)\b/);
   });
 
+  it('shows scope loading text only while optionsLoading is true', async () => {
+    await createComponent();
+
+    const component = fixture.componentInstance;
+    component.optionsLoading.set(true);
+    component.optionsLoaded.set(false);
+    component.options.set(null);
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent ?? '').toContain(
+      'Cargando alcance permitido...',
+    );
+
+    component.optionsLoading.set(false);
+    component.optionsLoaded.set(true);
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent ?? '').not.toContain(
+      'Cargando alcance permitido...',
+    );
+  });
+
+  it('hides scope loading after options success with currentScope', async () => {
+    await createComponent();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Alcance global');
+    expect(text).not.toContain('Cargando alcance permitido...');
+    expect(fixture.componentInstance.optionsLoaded()).toBe(true);
+    expect(fixture.componentInstance.optionsError()).toBe('');
+  });
+
+  it('shows stable options error, disables create, and does not leave infinite loading', async () => {
+    await createComponent(buildUsersResponse(), {
+      error: new HttpErrorResponse({ status: 500 }),
+    });
+
+    const host = fixture.nativeElement as HTMLElement;
+    const createButton = host.querySelector(
+      '[data-testid="admin-users-create-open"]',
+    ) as HTMLButtonElement;
+
+    expect(fixture.componentInstance.optionsLoading()).toBe(false);
+    expect(host.textContent ?? '').toContain('No se pudo cargar el alcance permitido.');
+    expect(host.textContent ?? '').not.toContain('Cargando alcance permitido...');
+    expect(createButton.disabled).toBe(true);
+    expect(
+      host.querySelector('[data-testid="admin-users-create-disabled-reason"]')?.textContent,
+    ).toContain('No se pudo cargar el alcance permitido.');
+  });
+
+  it('shows unavailable scope and disables create when options response lacks currentScope', async () => {
+    const options = { ...buildOptionsResponse(), currentScope: undefined };
+    await createComponent(buildUsersResponse(), { response: options });
+
+    const host = fixture.nativeElement as HTMLElement;
+    const createButton = host.querySelector(
+      '[data-testid="admin-users-create-open"]',
+    ) as HTMLButtonElement;
+
+    expect(fixture.componentInstance.optionsLoading()).toBe(false);
+    expect(fixture.componentInstance.optionsLoaded()).toBe(true);
+    expect(host.textContent ?? '').toContain('Alcance no disponible');
+    expect(host.textContent ?? '').not.toContain('Cargando alcance permitido...');
+    expect(createButton.disabled).toBe(true);
+    expect(
+      host.querySelector('[data-testid="admin-users-create-disabled-reason"]')?.textContent,
+    ).toContain('No hay alcance disponible para crear usuarios.');
+  });
+
+  it('loadUsers does not clear options errors', async () => {
+    await createComponent(buildUsersResponse(), {
+      error: new HttpErrorResponse({ status: 500 }),
+    });
+
+    const component = fixture.componentInstance;
+    expect(component.optionsError()).toContain('No se pudo cargar el alcance permitido.');
+
+    await component.loadUsers();
+    fixture.detectChanges();
+
+    expect(component.optionsError()).toContain('No se pudo cargar el alcance permitido.');
+  });
+
+  it('shows global scope for SuperAdmin without tenant or store', async () => {
+    await createComponent();
+
+    expect((fixture.nativeElement as HTMLElement).textContent ?? '').toContain('Alcance global');
+    expect((fixture.nativeElement as HTMLElement).textContent ?? '').not.toContain(
+      'Cargando alcance permitido...',
+    );
+  });
+
+  it('uses primaryRole displayName when present', async () => {
+    await createComponent();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="admin-users-role-user-1"]',
+      )?.textContent,
+    ).toContain('Administrador de empresa');
+  });
+
+  it('falls back to a local readable role name when only the technical role name is available', async () => {
+    const response = buildUsersResponse();
+    await createComponent(
+      {
+        ...response,
+        items: [
+          {
+            ...response.items[0],
+            primaryRole: { name: 'TenantAdmin' },
+            roleDetails: [{ name: 'TenantAdmin' }],
+          },
+        ],
+      },
+      {
+        response: {
+          ...buildOptionsResponse(),
+          roles: [{ name: 'AdminStore', displayName: 'Administrador de sucursal', level: 60 }],
+        },
+      },
+    );
+
+    const roleText =
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '[data-testid="admin-users-role-user-1"]',
+      )?.textContent ?? '';
+
+    expect(roleText).toContain('Administrador de cliente');
+    expect(roleText).not.toContain('undefined');
+    expect(roleText).not.toContain('null');
+  });
+
+  it('resolves tenant and store names from options when row objects are missing', async () => {
+    const response = buildUsersResponse();
+    await createComponent({
+      ...response,
+      items: [
+        {
+          ...response.items[0],
+          tenant: null,
+          store: null,
+          tenantId: 'tenant-ctx',
+          storeId: 'store-ctx',
+        },
+      ],
+    });
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Empresa Contexto');
+    expect(text).toContain('Sucursal Contexto');
+    expect(text).not.toContain('tenant-ctx');
+    expect(text).not.toContain('store-ctx');
+  });
+
+  it('shows unavailable tenant and store fallback without exposing ids when catalog lookup misses', async () => {
+    const response = buildUsersResponse();
+    await createComponent({
+      ...response,
+      items: [
+        {
+          ...response.items[0],
+          tenant: null,
+          store: null,
+          tenantId: 'tenant-missing',
+          storeId: 'store-missing',
+        },
+      ],
+    });
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Empresa no disponible');
+    expect(text).toContain('Sucursal no disponible');
+    expect(text).not.toContain('tenant-missing');
+    expect(text).not.toContain('store-missing');
+  });
+
+  it('shows empty tenant and store labels when ids are absent', async () => {
+    const response = buildUsersResponse();
+    await createComponent({
+      ...response,
+      items: [
+        {
+          ...response.items[0],
+          tenant: null,
+          store: null,
+          tenantId: null,
+          storeId: null,
+        },
+      ],
+    });
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Sin empresa');
+    expect(text).toContain('Sin sucursal');
+  });
+
+  it('keeps create disabled when options failed', async () => {
+    await createComponent(buildUsersResponse(), {
+      error: new HttpErrorResponse({ status: 500 }),
+    });
+
+    const component = fixture.componentInstance;
+    component.openCreateFormFromContext();
+    fixture.detectChanges();
+
+    expect(component.createFormVisible()).toBe(false);
+    expect(component.errorMessage()).toContain('No se pudo cargar el alcance permitido.');
+    expect(
+      (
+        (fixture.nativeElement as HTMLElement).querySelector(
+          '[data-testid="admin-users-create-open"]',
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it('opens create form when options are loaded, scope is valid and roles are assignable', async () => {
+    await createComponent();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const createButton = host.querySelector(
+      '[data-testid="admin-users-create-open"]',
+    ) as HTMLButtonElement;
+    expect(createButton.disabled).toBe(false);
+
+    createButton.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.createFormVisible()).toBe(true);
+    expect(host.querySelector('[data-testid="admin-user-form"]')).not.toBeNull();
+  });
+
   it('hides all row actions when allowedActions are false', async () => {
     const response = buildUsersResponse();
     await createComponent({
@@ -192,17 +433,22 @@ describe('UsersAdminPage', () => {
     });
 
     const host = fixture.nativeElement as HTMLElement;
-    const row = host.querySelector('[data-testid="admin-users-row-user-no-actions"]') as HTMLElement;
+    const row = host.querySelector(
+      '[data-testid="admin-users-row-user-no-actions"]',
+    ) as HTMLElement;
 
     expect(row).not.toBeNull();
     expect(row.querySelector('[data-testid="admin-user-role-update"]')).toBeNull();
-    expect(row.querySelector('[data-testid="admin-users-reset-password-open-user-no-actions"]')).toBeNull();
+    expect(
+      row.querySelector('[data-testid="admin-users-reset-password-open-user-no-actions"]'),
+    ).toBeNull();
     expect(row.querySelector('[data-testid="admin-users-edit-open-user-no-actions"]')).toBeNull();
     expect(row.querySelector('[data-testid="admin-users-lock-user-no-actions"]')).toBeNull();
     expect(row.querySelector('[data-testid="admin-users-unlock-user-no-actions"]')).toBeNull();
-    expect(row.textContent ?? '').not.toMatch(/Editar|Bloquear|Desbloquear|Restablecer contraseña|Guardar rol/);
+    expect(row.textContent ?? '').not.toMatch(
+      /Editar|Bloquear|Desbloquear|Restablecer contraseña|Guardar rol/,
+    );
   });
-
 
   it('auto-opens create form when intent=create-user and applies suggestedRole from query', async () => {
     queryParams = {
@@ -268,7 +514,9 @@ describe('UsersAdminPage', () => {
     openButton.click();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[data-testid="admin-users-reset-password-modal"]')).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="admin-users-reset-password-modal"]'),
+    ).not.toBeNull();
     expect(fixture.componentInstance.resetTargetUser()?.id).toBe('user-1');
   });
 
@@ -339,7 +587,9 @@ describe('UsersAdminPage', () => {
 
     await component.onSubmitResetPassword(new Event('submit'));
 
-    expect(setTemporaryPasswordMock).toHaveBeenCalledWith('user-1', { temporaryPassword: 'Temp1234!' });
+    expect(setTemporaryPasswordMock).toHaveBeenCalledWith('user-1', {
+      temporaryPassword: 'Temp1234!',
+    });
     expect(component.resetPasswordSuccess()).toContain('restablecida');
     expect(component.resetPasswordError()).toBe('');
   });
@@ -509,25 +759,28 @@ describe('UsersAdminPage', () => {
     [403, { detail: 'Forbidden by scope.' }, 'Forbidden by scope'],
     [404, { detail: 'User not found.' }, 'User not found'],
     [409, { detail: 'UserName duplicado.' }, 'nombre de usuario duplicado'],
-  ])('maps edit backend errors for status %s', async (status: number, errorBody: unknown, expected: string) => {
-    await createComponent();
+  ])(
+    'maps edit backend errors for status %s',
+    async (status: number, errorBody: unknown, expected: string) => {
+      await createComponent();
 
-    updateUserMock.mockRejectedValueOnce(
-      new HttpErrorResponse({
-        status,
-        error: errorBody,
-      }),
-    );
+      updateUserMock.mockRejectedValueOnce(
+        new HttpErrorResponse({
+          status,
+          error: errorBody,
+        }),
+      );
 
-    const component = fixture.componentInstance;
-    component.openEditUser(buildUsersResponse().items[0]);
-    component.editUserNameControl.setValue('updated-name');
-    component.editTenantControl.setValue('tenant-1');
-    component.editStoreControl.setValue('');
+      const component = fixture.componentInstance;
+      component.openEditUser(buildUsersResponse().items[0]);
+      component.editUserNameControl.setValue('updated-name');
+      component.editTenantControl.setValue('tenant-1');
+      component.editStoreControl.setValue('');
 
-    await component.onSubmitEditUser(new Event('submit'));
+      await component.onSubmitEditUser(new Event('submit'));
 
-    expect(component.editError()).toContain(expected);
-    expect(component.editSuccess()).toBe('');
-  });
+      expect(component.editError()).toContain(expected);
+      expect(component.editSuccess()).toBe('');
+    },
+  );
 });

@@ -31,9 +31,9 @@ export interface RoleDto {
 
 export interface RoleOption {
   name: string;
-  displayName: string;
+  displayName?: string | null;
   description?: string | null;
-  level: number;
+  level?: number;
 }
 
 export interface TenantOption {
@@ -75,10 +75,10 @@ export interface AdminUserCurrentScope {
 }
 
 export interface AdminUserOptions {
-  roles: RoleOption[];
-  tenants: TenantOption[];
-  stores: StoreOption[];
-  currentScope: AdminUserCurrentScope;
+  roles?: RoleOption[] | null;
+  tenants?: TenantOption[] | null;
+  stores?: StoreOption[] | null;
+  currentScope?: AdminUserCurrentScope | null;
 }
 
 export interface UpdateUserRolesRequest {

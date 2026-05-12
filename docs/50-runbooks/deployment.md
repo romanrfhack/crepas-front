@@ -113,6 +113,106 @@ Si un usuario no ve cambios después de deploy:
 2. Comparar `Web r<runNumber> · <shortSha>` contra el `CI` aprobado.
 3. Si el run o commit no coinciden, recargar la página y limpiar cache del navegador si persiste.
 
+## Diagnóstico de `/admin/users`
+
+Usar este checklist cuando la pantalla muestre `Cargando alcance permitido...` de forma
+persistente, `Sin empresa`, `Sin sucursal`, roles técnicos o usuarios `SuperAdmin` visibles.
+
+### Frontend desplegado
+
+1. Abrir `/app/admin/users` con DevTools > Network > Disable cache.
+2. Revisar el badge visible `Web r<runNumber> · <shortSha>`.
+3. Confirmar en el detalle del badge:
+   - `source = github-actions`
+   - `environment = production`
+   - commit y branch esperados
+4. Abrir `/assets/build-info.json` y comparar `runNumber`, `sha`, `source` y `environment`
+   contra el artefacto aprobado.
+
+### Backend desplegado
+
+1. Confirmar el release/artifact/commit desplegado para API en el workflow de deploy.
+2. Revisar logs de deploy y reinicio del servicio API.
+3. En DevTools Network, revisar `GET /api/v1/admin/users/options`:
+   - status esperado `200` para un actor valido;
+   - `currentScope` presente;
+   - `currentScope.role`, `roleDisplayName` y `roleLevel`;
+   - `roles` sin `SuperAdmin`;
+   - `tenants` y `stores` segun scope del actor.
+4. Revisar `GET /api/v1/admin/users`:
+   - cada usuario con `primaryRole.displayName`;
+   - `roleDetails[].displayName`;
+   - `tenant` y `store` como objetos cuando existan;
+   - `tenantId` y `storeId` internos cuando existan;
+   - ausencia de usuarios `SuperAdmin` en el listado.
+
+Si `/options` responde `401`, `403`, `404` o `500`, la UI debe mostrar error de alcance y no
+quedarse en carga infinita. Si responde `200` sin `currentScope`, revisar desalineacion de
+contrato o backend viejo: la UI debe mostrar alcance no disponible y deshabilitar alta.
+
+### Sintomas comunes
+
+- `Cargando alcance permitido...` persistente: revisar status/body de `/options`, cache del web
+  bundle y commit de API desplegado.
+- `Sin empresa` o `Sin sucursal`: revisar si el usuario realmente no tiene `TenantId`/`StoreId`.
+  Si los IDs existen, validar que `/options` incluya catalogos `tenants`/`stores` y que
+  `/users` incluya objetos `tenant`/`store`.
+- Rol tecnico visible: revisar `primaryRole.displayName`, `roleDetails[].displayName` y
+  `options.roles[].displayName`.
+- `SuperAdmin` visible: revisar que el backend desplegado aplique el filtro de jerarquia antes
+  de `Count/Skip/Take` y que no sea un API viejo.
+
+### Queries SQL Server de diagnostico
+
+Estas queries son solo de lectura. No ejecutan backfill ni corrigen datos.
+
+```sql
+SELECT u.Id, u.Email, u.UserName, u.TenantId, t.Name AS TenantName,
+       u.StoreId, s.Name AS StoreName, s.TenantId AS StoreTenantId,
+       STRING_AGG(r.Name, ',') WITHIN GROUP (ORDER BY r.Name) AS Roles
+FROM AspNetUsers u
+LEFT JOIN Tenants t ON t.Id = u.TenantId
+LEFT JOIN Stores s ON s.Id = u.StoreId
+LEFT JOIN AspNetUserRoles ur ON ur.UserId = u.Id
+LEFT JOIN AspNetRoles r ON r.Id = ur.RoleId
+GROUP BY u.Id, u.Email, u.UserName, u.TenantId, t.Name, u.StoreId, s.Name, s.TenantId
+ORDER BY u.Email;
+
+SELECT Id, Name, Slug, IsActive, DefaultStoreId FROM Tenants ORDER BY Name;
+
+SELECT Id, TenantId, Name, IsActive FROM Stores ORDER BY TenantId, Name;
+
+SELECT u.Id, u.Email, r.Name, u.TenantId, u.StoreId
+FROM AspNetUsers u
+JOIN AspNetUserRoles ur ON ur.UserId = u.Id
+JOIN AspNetRoles r ON r.Id = ur.RoleId
+WHERE r.Name IN ('TenantAdmin','AdminStore','Manager','Cashier','Collector','User')
+  AND u.TenantId IS NULL;
+
+SELECT u.Id, u.Email, r.Name, u.TenantId, u.StoreId
+FROM AspNetUsers u
+JOIN AspNetUserRoles ur ON ur.UserId = u.Id
+JOIN AspNetRoles r ON r.Id = ur.RoleId
+WHERE r.Name IN ('AdminStore','Manager','Cashier','Collector')
+  AND u.StoreId IS NULL;
+
+SELECT u.Id, u.Email, u.TenantId
+FROM AspNetUsers u
+LEFT JOIN Tenants t ON t.Id = u.TenantId
+WHERE u.TenantId IS NOT NULL AND t.Id IS NULL;
+
+SELECT u.Id, u.Email, u.StoreId
+FROM AspNetUsers u
+LEFT JOIN Stores s ON s.Id = u.StoreId
+WHERE u.StoreId IS NOT NULL AND s.Id IS NULL;
+
+SELECT u.Id, u.Email, u.TenantId AS UserTenantId, u.StoreId,
+       s.TenantId AS StoreTenantId, s.Name AS StoreName
+FROM AspNetUsers u
+JOIN Stores s ON s.Id = u.StoreId
+WHERE u.TenantId IS NULL OR s.TenantId <> u.TenantId;
+```
+
 ## Post-deploy
 
 Debe quedar verde:

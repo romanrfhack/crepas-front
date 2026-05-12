@@ -90,7 +90,8 @@ const fulfillOptions = (route: Route) =>
   });
 
 const isOptionsRequest = (route: Route) =>
-  route.request().method() === 'GET' && route.request().url().includes('/api/v1/admin/users/options');
+  route.request().method() === 'GET' &&
+  route.request().url().includes('/api/v1/admin/users/options');
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(
@@ -102,23 +103,36 @@ test.beforeEach(async ({ page }) => {
   );
 
   await page.route('**/api/v1/admin/roles', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rolesResponse) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(rolesResponse),
+    }),
   );
 });
 
-test('table and filters render display names without exposing tenant/store ids', async ({ page }) => {
+test('table and filters render display names without exposing tenant/store ids', async ({
+  page,
+}) => {
   await page.route('**/api/v1/admin/users**', (route) => {
     if (isOptionsRequest(route)) {
       return fulfillOptions(route);
     }
 
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(usersResponse) });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(usersResponse),
+    });
   });
 
   await page.goto('/app/admin/users');
 
+  await expect(page.getByTestId('admin-users-page')).toContainText('Alcance global');
   await expect(page.locator('tbody').getByText('Empresa Uno')).toBeVisible();
-  await expect(page.getByTestId('admin-users-role-user-1')).toContainText('Administrador de empresa');
+  await expect(page.getByTestId('admin-users-role-user-1')).toContainText(
+    'Administrador de empresa',
+  );
   await expect(page.getByTestId('admin-users-page')).not.toContainText('tenant-1');
   await expect(page.getByTestId('admin-users-page')).not.toContainText('store-1');
   await expect(page.getByTestId('admin-users-page')).not.toContainText(
@@ -129,6 +143,77 @@ test('table and filters render display names without exposing tenant/store ids',
   );
   await expect(page.getByTestId('admin-users-filter-tenant')).toContainText('Empresa Contexto');
   await expect(page.getByTestId('admin-users-filter-store')).toContainText('Sucursal Contexto');
+});
+
+test('options failure shows scope error and does not leave scope loading stuck', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/admin/users**', (route) => {
+    if (isOptionsRequest(route)) {
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Options unavailable.' }),
+      });
+    }
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(usersResponse),
+    });
+  });
+
+  await page.goto('/app/admin/users');
+
+  await expect(page.getByTestId('admin-users-options-error')).toBeVisible();
+  await expect(page.getByTestId('admin-users-page')).toContainText(
+    'No se pudo cargar el alcance permitido.',
+  );
+  await expect(page.getByTestId('admin-users-page')).not.toContainText(
+    'Cargando alcance permitido...',
+  );
+  await expect(page.getByTestId('admin-users-create-open')).toBeDisabled();
+  await expect(page.getByTestId('admin-users-create-disabled-reason')).toContainText(
+    'No se pudo cargar el alcance permitido.',
+  );
+});
+
+test('table resolves tenant and store names from options when users only include ids', async ({
+  page,
+}) => {
+  const usersWithIdsOnly = {
+    ...usersResponse,
+    items: [
+      {
+        ...usersResponse.items[0],
+        tenant: null,
+        store: null,
+        tenantId: 'tenant-ctx',
+        storeId: 'store-ctx',
+      },
+    ],
+  };
+
+  await page.route('**/api/v1/admin/users**', (route) => {
+    if (isOptionsRequest(route)) {
+      return fulfillOptions(route);
+    }
+
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(usersWithIdsOnly),
+    });
+  });
+
+  await page.goto('/app/admin/users');
+
+  const row = page.getByTestId('admin-users-row-user-1');
+  await expect(row).toContainText('Empresa Contexto');
+  await expect(row).toContainText('Sucursal Contexto');
+  await expect(page.getByTestId('admin-users-page')).not.toContainText('tenant-ctx');
+  await expect(page.getByTestId('admin-users-page')).not.toContainText('store-ctx');
 });
 
 test('rows without allowed actions do not render action controls', async ({ page }) => {
@@ -155,7 +240,11 @@ test('rows without allowed actions do not render action controls', async ({ page
       return fulfillOptions(route);
     }
 
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(noActionsResponse) });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(noActionsResponse),
+    });
   });
 
   await page.goto('/app/admin/users');
@@ -169,7 +258,9 @@ test('rows without allowed actions do not render action controls', async ({ page
   await expect(row.getByText('Guardar rol')).toHaveCount(0);
 });
 
-test('filters issue server queries with selected role, tenant, store and status', async ({ page }) => {
+test('filters issue server queries with selected role, tenant, store and status', async ({
+  page,
+}) => {
   let lastUsersUrl = '';
 
   await page.route('**/api/v1/admin/users**', (route) => {
@@ -195,9 +286,7 @@ test('filters issue server queries with selected role, tenant, store and status'
   await page.getByTestId('admin-users-filter-tenant').selectOption('tenant-ctx');
   await page.getByTestId('admin-users-filter-status').selectOption('locked');
 
-  await expect
-    .poll(() => new URL(lastUsersUrl).searchParams.get('role'))
-    .toBe('Manager');
+  await expect.poll(() => new URL(lastUsersUrl).searchParams.get('role')).toBe('Manager');
   expect(new URL(lastUsersUrl).searchParams.get('tenantId')).toBe('tenant-ctx');
   expect(new URL(lastUsersUrl).searchParams.get('storeId')).toBe('store-ctx');
   expect(new URL(lastUsersUrl).searchParams.get('status')).toBe('locked');
@@ -243,7 +332,11 @@ test('admin store scope keeps tenant and store fixed in create form', async ({ p
       });
     }
 
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(usersResponse) });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(usersResponse),
+    });
   });
 
   await page.goto('/app/admin/users');
@@ -257,7 +350,9 @@ test('admin store scope keeps tenant and store fixed in create form', async ({ p
   await expect(page.getByTestId('admin-user-form-store')).toBeDisabled();
 });
 
-test('create user success from tenant+store context submits POST and refreshes list', async ({ page }) => {
+test('create user success from tenant+store context submits POST and refreshes list', async ({
+  page,
+}) => {
   let getUsersCalls = 0;
   await page.route('**/api/v1/admin/users**', (route) => {
     const method = route.request().method();
@@ -305,9 +400,15 @@ test('create user success from tenant+store context submits POST and refreshes l
   await page.goto('/app/admin/users?tenantId=tenant-ctx&storeId=store-ctx');
   await page.getByTestId('admin-users-create-open').click();
 
-  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('Empresa Contexto');
-  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('Sucursal Contexto');
-  await expect(page.getByTestId('admin-user-form').getByTestId('admin-user-form-role')).toHaveValue('AdminStore');
+  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText(
+    'Empresa Contexto',
+  );
+  await expect(page.getByTestId('admin-users-create-context-store')).toContainText(
+    'Sucursal Contexto',
+  );
+  await expect(page.getByTestId('admin-user-form').getByTestId('admin-user-form-role')).toHaveValue(
+    'AdminStore',
+  );
 
   await page.getByTestId('admin-user-form-email').fill('new@test.local');
   await page.getByTestId('admin-user-form-username').fill('new-user');
@@ -322,7 +423,9 @@ test('create user success from tenant+store context submits POST and refreshes l
   expect(getUsersCalls).toBeGreaterThanOrEqual(2);
 });
 
-test('reset temporary password success flow submits backend contract and shows success testid', async ({ page }) => {
+test('reset temporary password success flow submits backend contract and shows success testid', async ({
+  page,
+}) => {
   await page.route('**/api/v1/admin/users**', (route) => {
     if (isOptionsRequest(route)) {
       return fulfillOptions(route);
@@ -369,7 +472,9 @@ test('reset temporary password success flow submits backend contract and shows s
   await expect(page.getByTestId('admin-users-reset-password-error')).toHaveCount(0);
 });
 
-test('reset temporary password shows stable error testid for backend 400 and 403', async ({ page }) => {
+test('reset temporary password shows stable error testid for backend 400 and 403', async ({
+  page,
+}) => {
   let currentStatus: 400 | 403 = 400;
 
   await page.route('**/api/v1/admin/users**', (route) => {
@@ -413,7 +518,9 @@ test('reset temporary password shows stable error testid for backend 400 and 403
   await expect(page.getByTestId('admin-users-reset-password-error')).toBeVisible();
 });
 
-test('create user error maps conflict and validation responses with stable error testid', async ({ page }) => {
+test('create user error maps conflict and validation responses with stable error testid', async ({
+  page,
+}) => {
   await page.route('**/api/v1/admin/users**', async (route) => {
     if (isOptionsRequest(route)) {
       return fulfillOptions(route);
@@ -469,15 +576,25 @@ test('tenant-only context keeps tenant prefill and suggested tenant role', async
       return fulfillOptions(route);
     }
 
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(usersResponse) });
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(usersResponse),
+    });
   });
 
   await page.goto('/app/admin/users?tenantId=tenant-only');
   await page.getByTestId('admin-users-create-open').click();
 
-  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText('Empresa Tenant');
-  await expect(page.getByTestId('admin-users-create-context-store')).toContainText('Sin seleccionar');
-  await expect(page.getByTestId('admin-user-form').getByTestId('admin-user-form-role')).toHaveValue('TenantAdmin');
+  await expect(page.getByTestId('admin-users-create-context-tenant')).toContainText(
+    'Empresa Tenant',
+  );
+  await expect(page.getByTestId('admin-users-create-context-store')).toContainText(
+    'Sin seleccionar',
+  );
+  await expect(page.getByTestId('admin-user-form').getByTestId('admin-user-form-role')).toHaveValue(
+    'TenantAdmin',
+  );
 });
 
 test('edit user success flow submits PUT and refreshes list', async ({ page }) => {
@@ -550,7 +667,10 @@ test('edit user error flow renders stable error testid', async ({ page }) => {
       });
     }
 
-    if (route.request().method() === 'PUT' && route.request().url().includes('/api/v1/admin/users/user-1')) {
+    if (
+      route.request().method() === 'PUT' &&
+      route.request().url().includes('/api/v1/admin/users/user-1')
+    ) {
       return route.fulfill({
         status: 403,
         contentType: 'application/json',

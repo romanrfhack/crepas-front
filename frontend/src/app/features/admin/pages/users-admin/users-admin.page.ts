@@ -4,13 +4,25 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AdminUsersService } from '../../services/admin-users.service';
 import {
+  AdminUserCurrentScope,
   AdminUserOptions,
   AllowedActions,
   CreateAdminUserRequestDto,
+  RoleOption,
   UserSummary,
 } from '../../models/admin.models';
 
 type UserStatusFilter = '' | 'active' | 'locked';
+
+const ROLE_DISPLAY_FALLBACKS: Record<string, string> = {
+  SuperAdmin: 'Super administrador',
+  TenantAdmin: 'Administrador de cliente',
+  AdminStore: 'Administrador de tienda',
+  Manager: 'Encargado / supervisor operativo',
+  Cashier: 'Cajero',
+  Collector: 'Gestor de cobranza',
+  User: 'Usuario básico',
+};
 
 @Component({
   selector: 'app-users-admin-page',
@@ -22,16 +34,44 @@ type UserStatusFilter = '' | 'active' | 'locked';
           <h1>Administración de usuarios</h1>
           <p class="subtitle">{{ scopeLabel() }}</p>
         </div>
-        <button
-          type="button"
-          class="primary"
-          data-testid="admin-users-create-open"
-          (click)="openCreateFormFromContext()"
-          [disabled]="optionsLoading() || roleOptions().length === 0"
-        >
-          Nuevo usuario
-        </button>
+        <div class="header-actions">
+          <button
+            type="button"
+            class="primary"
+            data-testid="admin-users-create-open"
+            (click)="openCreateFormFromContext()"
+            [disabled]="!canOpenCreateDialog()"
+            [attr.title]="createDisabledReason() || null"
+          >
+            Nuevo usuario
+          </button>
+          @if (createDisabledReason()) {
+            <p
+              class="muted create-disabled-reason"
+              data-testid="admin-users-create-disabled-reason"
+            >
+              {{ createDisabledReason() }}
+            </p>
+          }
+        </div>
       </header>
+
+      @if (optionsError()) {
+        <div class="error scope-error" data-testid="admin-users-options-error">
+          <span>{{ optionsError() }}</span>
+          <button
+            type="button"
+            data-testid="admin-users-options-retry"
+            (click)="retryLoadOptions()"
+          >
+            Reintentar cargar alcance
+          </button>
+        </div>
+      } @else if (optionsLoaded() && !currentScope()) {
+        <div class="error" data-testid="admin-users-options-warning">
+          Alcance no disponible. No hay alcance disponible para crear usuarios.
+        </div>
+      }
 
       <form class="filters" (submit)="onSearch($event)">
         <label>
@@ -53,7 +93,7 @@ type UserStatusFilter = '' | 'active' | 'locked';
           >
             <option value="">Todos los roles</option>
             @for (role of roleOptions(); track role.name) {
-              <option [value]="role.name">{{ role.displayName }}</option>
+              <option [value]="role.name">{{ roleOptionLabel(role) }}</option>
             }
           </select>
         </label>
@@ -128,7 +168,7 @@ type UserStatusFilter = '' | 'active' | 'locked';
               <select [formControl]="createRoleControl" data-testid="admin-user-form-role">
                 <option value="">Selecciona un rol</option>
                 @for (role of roleOptions(); track role.name) {
-                  <option [value]="role.name">{{ role.displayName }}</option>
+                  <option [value]="role.name">{{ roleOptionLabel(role) }}</option>
                 }
               </select>
             </label>
@@ -149,10 +189,7 @@ type UserStatusFilter = '' | 'active' | 'locked';
 
             <label>
               Sucursal
-              <select
-                [formControl]="createStoreControl"
-                data-testid="admin-user-form-store"
-              >
+              <select [formControl]="createStoreControl" data-testid="admin-user-form-store">
                 <option value="">Sin sucursal</option>
                 @for (store of createStoreOptions(); track store.id) {
                   <option [value]="store.id">{{ store.name }}</option>
@@ -233,7 +270,11 @@ type UserStatusFilter = '' | 'active' | 'locked';
           </label>
         </div>
 
-        @if (loading()) {
+        @if (usersError()) {
+          <p class="error" data-testid="admin-users-users-error">{{ usersError() }}</p>
+        }
+
+        @if (usersLoading()) {
           <p class="empty">Cargando usuarios...</p>
         } @else if (users().length === 0) {
           <p class="empty">Sin resultados para los filtros actuales.</p>
@@ -273,7 +314,7 @@ type UserStatusFilter = '' | 'active' | 'locked';
                             data-testid="admin-user-role-update"
                           >
                             @for (role of roleOptions(); track role.name) {
-                              <option [value]="role.name">{{ role.displayName }}</option>
+                              <option [value]="role.name">{{ roleOptionLabel(role) }}</option>
                             }
                           </select>
                           <button type="submit" data-testid="admin-user-role-update-submit">
@@ -333,7 +374,7 @@ type UserStatusFilter = '' | 'active' | 'locked';
           <button
             type="button"
             data-testid="admin-users-prev-page"
-            [disabled]="page() <= 1 || loading()"
+            [disabled]="page() <= 1 || usersLoading()"
             (click)="goToPage(page() - 1)"
           >
             Anterior
@@ -344,7 +385,7 @@ type UserStatusFilter = '' | 'active' | 'locked';
           <button
             type="button"
             data-testid="admin-users-next-page"
-            [disabled]="page() >= totalPages() || loading()"
+            [disabled]="page() >= totalPages() || usersLoading()"
             (click)="goToPage(page() + 1)"
           >
             Siguiente
@@ -443,10 +484,7 @@ type UserStatusFilter = '' | 'active' | 'locked';
 
             <label>
               Sucursal
-              <select
-                [formControl]="editStoreControl"
-                data-testid="admin-user-edit-store"
-              >
+              <select [formControl]="editStoreControl" data-testid="admin-user-edit-store">
                 <option value="">Sin sucursal</option>
                 @for (store of editStoreOptions(); track store.id) {
                   <option [value]="store.id">{{ store.name }}</option>
@@ -463,7 +501,12 @@ type UserStatusFilter = '' | 'active' | 'locked';
             }
 
             <div class="actions-row">
-              <button type="submit" class="primary" data-testid="admin-user-edit-submit" [disabled]="editSubmitting()">
+              <button
+                type="submit"
+                class="primary"
+                data-testid="admin-user-edit-submit"
+                [disabled]="editSubmitting()"
+              >
                 {{ editSubmitting() ? 'Guardando...' : 'Guardar' }}
               </button>
               <button
@@ -490,6 +533,7 @@ type UserStatusFilter = '' | 'active' | 'locked';
     .table-header,
     .pagination,
     .actions-row,
+    .scope-error,
     .row-actions {
       display: flex;
       gap: 0.75rem;
@@ -500,6 +544,18 @@ type UserStatusFilter = '' | 'active' | 'locked';
     .header,
     .table-header {
       justify-content: space-between;
+    }
+
+    .header-actions {
+      display: grid;
+      gap: 0.35rem;
+      justify-items: end;
+    }
+
+    .create-disabled-reason {
+      max-width: 18rem;
+      text-align: right;
+      font-size: 0.85rem;
     }
 
     h1,
@@ -639,8 +695,11 @@ export class UsersAdminPage {
 
   readonly users = signal<UserSummary[]>([]);
   readonly options = signal<AdminUserOptions | null>(null);
-  readonly loading = signal(false);
+  readonly usersLoading = signal(false);
   readonly optionsLoading = signal(false);
+  readonly optionsLoaded = signal(false);
+  readonly optionsError = signal('');
+  readonly usersError = signal('');
   readonly errorMessage = signal('');
   readonly successMessage = signal('');
   readonly totalCount = signal(0);
@@ -668,13 +727,46 @@ export class UsersAdminPage {
   readonly roleOptions = computed(() => this.options()?.roles ?? []);
   readonly tenantOptions = computed(() => this.options()?.tenants ?? []);
   readonly storeOptions = computed(() => this.options()?.stores ?? []);
+  readonly currentScope = computed(() => this.options()?.currentScope ?? null);
   readonly scopeLabel = computed(() => {
-    const scope = this.options()?.currentScope;
-    if (!scope) return 'Cargando alcance permitido...';
-    const tenant = scope.tenantName ? ` · ${scope.tenantName}` : '';
-    const store = scope.storeName ? ` · ${scope.storeName}` : '';
-    return `Alcance actual: ${scope.roleDisplayName || this.roleDisplayName(scope.role)}${tenant}${store}`;
+    if (this.optionsLoading()) return 'Cargando alcance permitido...';
+    if (this.optionsError()) return 'No se pudo cargar el alcance permitido.';
+
+    const scope = this.currentScope();
+    if (this.optionsLoaded() && !scope) return 'Alcance no disponible.';
+    if (!scope) return 'Alcance no disponible.';
+
+    return this.formatScopeLabel(scope);
   });
+  readonly createDisabledReason = computed(() => {
+    if (this.optionsLoading()) return 'Cargando alcance permitido.';
+    if (this.optionsError()) return 'No se pudo cargar el alcance permitido.';
+
+    const scope = this.currentScope();
+    if (!scope) return 'No hay alcance disponible para crear usuarios.';
+
+    if (this.roleOptions().length === 0) return 'No hay roles disponibles para tu perfil.';
+
+    const tenantId = this.nonBlank(scope.tenantId);
+    const tenantName = this.nonBlank(scope.tenantName);
+    const storeId = this.nonBlank(scope.storeId);
+    const storeName = this.nonBlank(scope.storeName);
+
+    if (scope.role === 'SuperAdmin' && this.tenantOptions().length === 0) {
+      return 'No hay clientes disponibles para crear usuarios.';
+    }
+
+    if (scope.role === 'TenantAdmin' && (!tenantId || !tenantName)) {
+      return 'Tu usuario no tiene cliente asignado.';
+    }
+
+    if (scope.role === 'AdminStore' && (!tenantId || !tenantName || !storeId || !storeName)) {
+      return 'Tu usuario no tiene tienda asignada.';
+    }
+
+    return '';
+  });
+  readonly canOpenCreateDialog = computed(() => !this.createDisabledReason());
 
   constructor() {
     this.hydrateFromQueryParams();
@@ -730,16 +822,55 @@ export class UsersAdminPage {
     return user.displayName || user.userName || user.fullName || user.email;
   }
 
+  roleOptionLabel(role: RoleOption) {
+    return this.nonBlank(role.displayName) || this.localRoleDisplayName(role.name);
+  }
+
   roleLabel(user: UserSummary) {
-    return user.primaryRole?.displayName || this.roleDisplayName(user.roles[0] ?? '') || 'Sin rol';
+    const explicitDisplayName =
+      this.nonBlank(user.primaryRole?.displayName) ||
+      this.nonBlank(user.roleDetails?.[0]?.displayName);
+
+    if (explicitDisplayName) return explicitDisplayName;
+
+    const roleName =
+      this.nonBlank(user.primaryRole?.name) ||
+      this.nonBlank(user.roleDetails?.[0]?.name) ||
+      this.nonBlank(user.roles[0]);
+
+    return roleName ? this.roleDisplayName(roleName) : 'Sin rol';
   }
 
   tenantLabel(user: UserSummary) {
-    return user.tenant?.name || 'Sin empresa';
+    return this.getTenantDisplayName(user);
   }
 
   storeLabel(user: UserSummary) {
-    return user.store?.name || 'Sin sucursal';
+    return this.getStoreDisplayName(user);
+  }
+
+  getTenantDisplayName(user: UserSummary) {
+    const tenantName = this.nonBlank(user.tenant?.name);
+    if (tenantName) return tenantName;
+
+    const tenantId = this.nonBlank(user.tenantId);
+    if (!tenantId) return 'Sin empresa';
+
+    return (
+      this.tenantOptions().find((tenant) => tenant.id === tenantId)?.name ?? 'Empresa no disponible'
+    );
+  }
+
+  getStoreDisplayName(user: UserSummary) {
+    const storeName = this.nonBlank(user.store?.name);
+    if (storeName) return storeName;
+
+    const storeId = this.nonBlank(user.storeId);
+    if (!storeId) return 'Sin sucursal';
+
+    return (
+      this.storeOptions().find((store) => store.id === storeId)?.name ?? 'Sucursal no disponible'
+    );
   }
 
   statusLabel(user: UserSummary) {
@@ -823,8 +954,8 @@ export class UsersAdminPage {
   }
 
   async loadUsers() {
-    this.loading.set(true);
-    this.errorMessage.set('');
+    this.usersLoading.set(true);
+    this.usersError.set('');
     this.successMessage.set('');
     try {
       const response = await this.adminUsersService.getUsers({
@@ -848,9 +979,9 @@ export class UsersAdminPage {
       ) as Record<string, FormControl<string>>;
       this.roleDrafts.set(controls);
     } catch (error) {
-      this.errorMessage.set(this.resolveUserMessage(error, 'No fue posible cargar usuarios.'));
+      this.usersError.set(this.resolveUserMessage(error, 'No fue posible cargar usuarios.'));
     } finally {
-      this.loading.set(false);
+      this.usersLoading.set(false);
     }
   }
 
@@ -878,6 +1009,13 @@ export class UsersAdminPage {
   async onSubmitCreate(event: Event) {
     event.preventDefault();
     if (this.createSubmitting()) return;
+
+    const disabledReason = this.createDisabledReason();
+    if (disabledReason) {
+      this.errorMessage.set(disabledReason);
+      this.successMessage.set('');
+      return;
+    }
 
     const validationError = this.validateCreateForm();
     if (validationError) {
@@ -908,7 +1046,9 @@ export class UsersAdminPage {
     try {
       const updated = await this.adminUsersService.setUserLockState(user.id, !this.isLocked(user));
       this.replaceUser(updated);
-      this.successMessage.set(this.isLocked(updated) ? 'Usuario bloqueado.' : 'Usuario desbloqueado.');
+      this.successMessage.set(
+        this.isLocked(updated) ? 'Usuario bloqueado.' : 'Usuario desbloqueado.',
+      );
       this.errorMessage.set('');
     } catch (error) {
       this.errorMessage.set(
@@ -918,12 +1058,24 @@ export class UsersAdminPage {
     }
   }
 
-  openCreateFormFromContext(options: { suggestedRole?: string; source?: 'manual' | 'intent' } = {}) {
+  openCreateFormFromContext(
+    options: { suggestedRole?: string; source?: 'manual' | 'intent' } = {},
+  ) {
+    const disabledReason = this.createDisabledReason();
+    if (disabledReason) {
+      this.createFormVisible.set(false);
+      this.errorMessage.set(disabledReason);
+      this.successMessage.set('');
+      return;
+    }
+
     const tenantId = this.resolveCreateTenant();
     const storeId = this.resolveCreateStore(tenantId);
     this.createTenantControl.setValue(tenantId);
     this.createStoreControl.setValue(storeId);
-    this.createRoleControl.setValue(this.resolveSuggestedRole(options.suggestedRole, tenantId, storeId));
+    this.createRoleControl.setValue(
+      this.resolveSuggestedRole(options.suggestedRole, tenantId, storeId),
+    );
     this.createContextMessage.set(this.buildCreateContextMessage(tenantId, storeId));
     this.createIntentActive.set(options.source === 'intent');
     this.createFormVisible.set(true);
@@ -933,6 +1085,15 @@ export class UsersAdminPage {
   closeCreateForm() {
     this.createFormVisible.set(false);
     this.createIntentActive.set(false);
+  }
+
+  async retryLoadOptions() {
+    await this.loadOptions();
+    this.applyFixedScopeDefaults();
+    this.syncCreateScopeControlState();
+    if (this.editModalOpen()) {
+      this.syncEditScopeControlState();
+    }
   }
 
   openResetPassword(user: UserSummary) {
@@ -1059,11 +1220,17 @@ export class UsersAdminPage {
 
   private async loadOptions() {
     this.optionsLoading.set(true);
+    this.optionsLoaded.set(false);
+    this.optionsError.set('');
     try {
       const options = await this.adminUsersService.getUserOptions();
-      this.options.set(options);
+      this.options.set(options ?? null);
+      this.optionsLoaded.set(true);
     } catch (error) {
-      this.errorMessage.set(this.resolveUserMessage(error, 'No fue posible cargar opciones.'));
+      this.options.set(null);
+      this.optionsError.set(
+        this.resolveUserMessage(error, 'No se pudo cargar el alcance permitido.'),
+      );
     } finally {
       this.optionsLoading.set(false);
     }
@@ -1122,21 +1289,74 @@ export class UsersAdminPage {
   }
 
   private roleDisplayName(roleName: string) {
-    return this.roleOptions().find((role) => role.name === roleName)?.displayName || roleName;
+    const role = this.roleOptions().find((option) => option.name === roleName);
+    return this.nonBlank(role?.displayName) || this.localRoleDisplayName(roleName);
   }
 
-  private resolveSuggestedRole(explicitSuggestedRole: string | undefined, tenantId: string, storeId: string) {
+  private localRoleDisplayName(roleName: string) {
+    return ROLE_DISPLAY_FALLBACKS[roleName] || roleName;
+  }
+
+  private formatScopeLabel(scope: AdminUserCurrentScope) {
+    const tenantId = this.nonBlank(scope.tenantId);
+    const tenantName = this.nonBlank(scope.tenantName);
+    const storeId = this.nonBlank(scope.storeId);
+    const storeName = this.nonBlank(scope.storeName);
+
+    if (scope.role === 'SuperAdmin' && !tenantId && !storeId) {
+      return 'Alcance global';
+    }
+
+    if (scope.role === 'TenantAdmin') {
+      return tenantName
+        ? `Cliente: ${tenantName}`
+        : 'Alcance incompleto. Contacta a un administrador.';
+    }
+
+    if (scope.role === 'AdminStore') {
+      if (tenantName && storeName) {
+        return `Cliente: ${tenantName} · Tienda: ${storeName}`;
+      }
+
+      return 'Alcance incompleto. Contacta a un administrador.';
+    }
+
+    const roleName = this.nonBlank(scope.roleDisplayName) || this.roleDisplayName(scope.role);
+
+    if (tenantName && storeName) return `${roleName}: ${tenantName} · ${storeName}`;
+    if (tenantName) return `${roleName}: ${tenantName}`;
+
+    return 'Alcance incompleto. Contacta a un administrador.';
+  }
+
+  private nonBlank(value: string | null | undefined) {
+    const normalized = value?.trim() ?? '';
+    return normalized || '';
+  }
+
+  private resolveSuggestedRole(
+    explicitSuggestedRole: string | undefined,
+    tenantId: string,
+    storeId: string,
+  ) {
     const explicit = explicitSuggestedRole?.trim();
     if (explicit && this.roleOptions().some((role) => role.name === explicit)) {
       return explicit;
     }
 
-    const preferred = storeId ? ['AdminStore', 'Manager', 'Cashier'] : ['TenantAdmin', 'AdminStore', 'User'];
-    return preferred.find((role) => this.roleOptions().some((option) => option.name === role)) ?? '';
+    const preferred = storeId
+      ? ['AdminStore', 'Manager', 'Cashier']
+      : ['TenantAdmin', 'AdminStore', 'User'];
+    return (
+      preferred.find((role) => this.roleOptions().some((option) => option.name === role)) ?? ''
+    );
   }
 
   private resolveCreateTenant() {
-    return this.tenantFilterControl.value || (this.tenantOptions().length === 1 ? this.tenantOptions()[0].id : '');
+    return (
+      this.tenantFilterControl.value ||
+      (this.tenantOptions().length === 1 ? this.tenantOptions()[0].id : '')
+    );
   }
 
   private resolveCreateStore(tenantId: string) {
@@ -1259,8 +1479,14 @@ export class UsersAdminPage {
       .replaceAll('store', 'sucursal')
       .replaceAll('UserName', 'nombre de usuario')
       .replaceAll('TemporaryPassword', 'contraseña temporal')
-      .replaceAll('Target user is outside your role hierarchy.', 'No tienes permiso para administrar este usuario.')
-      .replaceAll('Roles not allowed for your scope', 'El rol seleccionado no está permitido para tu perfil');
+      .replaceAll(
+        'Target user is outside your role hierarchy.',
+        'No tienes permiso para administrar este usuario.',
+      )
+      .replaceAll(
+        'Roles not allowed for your scope',
+        'El rol seleccionado no está permitido para tu perfil',
+      );
   }
 
   private parsePositiveInt(value: string | null, fallback: number) {
