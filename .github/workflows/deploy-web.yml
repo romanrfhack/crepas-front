@@ -164,6 +164,33 @@ jobs:
           echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
 
+      - name: Validate release smoke configuration
+        if: steps.manifest.outputs.deploy_required == 'true'
+        shell: bash
+        env:
+          RELEASE_SMOKE_BASE_URL: ${{ secrets.CD_RELEASE_BASE_URL }}
+          RELEASE_SMOKE_EMAIL: ${{ secrets.CD_SMOKE_USER_EMAIL }}
+          RELEASE_SMOKE_PASSWORD: ${{ secrets.CD_SMOKE_USER_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          if [ -z "${RELEASE_SMOKE_BASE_URL:-}" ]; then
+            missing+=("CD_RELEASE_BASE_URL secret is required for release smoke.")
+          fi
+          if [ -z "${RELEASE_SMOKE_EMAIL:-}" ]; then
+            missing+=("CD_SMOKE_USER_EMAIL secret is required for release smoke.")
+          fi
+          if [ -z "${RELEASE_SMOKE_PASSWORD:-}" ]; then
+            missing+=("CD_SMOKE_USER_PASSWORD secret is required for release smoke.")
+          fi
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing required release smoke secrets:" >&2
+            printf -- '- %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
+
       - name: Download WEB artifact
         if: steps.manifest.outputs.deploy_required == 'true'
         uses: actions/download-artifact@v4
@@ -277,18 +304,6 @@ jobs:
             scripts/release-smoke.sh
           sparse-checkout-cone-mode: false
 
-      - name: Validate release smoke configuration
-        if: steps.manifest.outputs.deploy_required == 'true'
-        env:
-          RELEASE_SMOKE_BASE_URL: ${{ secrets.CD_RELEASE_BASE_URL }}
-          RELEASE_SMOKE_EMAIL: ${{ secrets.CD_SMOKE_USER_EMAIL }}
-          RELEASE_SMOKE_PASSWORD: ${{ secrets.CD_SMOKE_USER_PASSWORD }}
-        run: |
-          set -euo pipefail
-          : "${RELEASE_SMOKE_BASE_URL:?CD_RELEASE_BASE_URL secret is required for release smoke.}"
-          : "${RELEASE_SMOKE_EMAIL:?CD_SMOKE_USER_EMAIL secret is required for release smoke.}"
-          : "${RELEASE_SMOKE_PASSWORD:?CD_SMOKE_USER_PASSWORD secret is required for release smoke.}"
-
       - name: Run post-deploy release smoke
         if: steps.manifest.outputs.deploy_required == 'true'
         env:
@@ -315,6 +330,32 @@ jobs:
       CD_USER: ${{ secrets.CD_USER }}
       CD_WEB_PATH: ${{ secrets.CD_WEB_PATH }}
     steps:
+      - name: Validate release smoke configuration
+        shell: bash
+        env:
+          RELEASE_SMOKE_BASE_URL: ${{ secrets.CD_RELEASE_BASE_URL }}
+          RELEASE_SMOKE_EMAIL: ${{ secrets.CD_SMOKE_USER_EMAIL }}
+          RELEASE_SMOKE_PASSWORD: ${{ secrets.CD_SMOKE_USER_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          if [ -z "${RELEASE_SMOKE_BASE_URL:-}" ]; then
+            missing+=("CD_RELEASE_BASE_URL secret is required for release smoke.")
+          fi
+          if [ -z "${RELEASE_SMOKE_EMAIL:-}" ]; then
+            missing+=("CD_SMOKE_USER_EMAIL secret is required for release smoke.")
+          fi
+          if [ -z "${RELEASE_SMOKE_PASSWORD:-}" ]; then
+            missing+=("CD_SMOKE_USER_PASSWORD secret is required for release smoke.")
+          fi
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "Missing required release smoke secrets:" >&2
+            printf -- '- %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
+
       - name: Setup SSH
         run: |
           set -euo pipefail
@@ -383,17 +424,6 @@ jobs:
           sparse-checkout: |
             scripts/release-smoke.sh
           sparse-checkout-cone-mode: false
-
-      - name: Validate release smoke configuration
-        env:
-          RELEASE_SMOKE_BASE_URL: ${{ secrets.CD_RELEASE_BASE_URL }}
-          RELEASE_SMOKE_EMAIL: ${{ secrets.CD_SMOKE_USER_EMAIL }}
-          RELEASE_SMOKE_PASSWORD: ${{ secrets.CD_SMOKE_USER_PASSWORD }}
-        run: |
-          set -euo pipefail
-          : "${RELEASE_SMOKE_BASE_URL:?CD_RELEASE_BASE_URL secret is required for release smoke.}"
-          : "${RELEASE_SMOKE_EMAIL:?CD_SMOKE_USER_EMAIL secret is required for release smoke.}"
-          : "${RELEASE_SMOKE_PASSWORD:?CD_SMOKE_USER_PASSWORD secret is required for release smoke.}"
 
       - name: Run post-rollback release smoke
         env:

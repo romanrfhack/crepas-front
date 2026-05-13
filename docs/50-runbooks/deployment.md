@@ -22,6 +22,37 @@ Operar deploy y rollback de Fase 6 sin recompilar en deploy, sin migración impl
 - Host API con `EnvironmentFile` shell-compatible (`KEY=value`) y servicio `cobranzadigital-api`.
 - Binario `dotnet` disponible en el host API.
 
+### Secrets de release smoke para WEB
+
+`deploy-web.yml` corre con `environment: production`. Configurar los secrets requeridos como
+secrets del environment `production` es la opcion recomendada para acotar su alcance; tambien
+pueden existir como repository secrets si se comparten deliberadamente entre environments. No
+configurarlos como variables normales.
+
+Secrets obligatorios para deploy WEB:
+
+- `CD_RELEASE_BASE_URL`: URL base publica HTTPS del entorno desplegado, sin `/api` al final,
+  por ejemplo `https://<dominio-produccion>`. El smoke consulta health checks bajo
+  `CD_RELEASE_BASE_URL`, la API bajo `CD_RELEASE_BASE_URL/api` y la raiz WEB con ese mismo valor.
+- `CD_SMOKE_USER_EMAIL`: email de un usuario smoke activo.
+- `CD_SMOKE_USER_PASSWORD`: password del usuario smoke activo.
+
+Si el usuario smoke es `SuperAdmin`, configurar tambien `CD_SMOKE_TENANT_ID` y
+`CD_SMOKE_STORE_ID` cuando el smoke requiera contexto explicito de tenant/sucursal.
+
+Si el deploy falla en `Validate release smoke configuration`, agregar los secrets faltantes en
+GitHub (`Settings > Secrets and variables > Actions > Environments > production`, o repository
+secrets si esa es la politica del repo) y reejecutar el workflow fallido. No pegar valores de
+secrets en logs, issues, chats ni runbooks; el workflow solo debe mostrar nombres de secrets
+faltantes.
+
+Para reintentar despues de agregar secrets:
+
+- si fallo el deploy automatico, abrir el run fallido de `Deploy WEB (CobranzaDigital)` y usar
+  `Re-run failed jobs`;
+- si se requiere redeploy manual, usar `workflow_dispatch` sobre `main` con `deploy_action=deploy`,
+  `ci_run_id` y `release_sha` del `CI` aprobado.
+
 ## Pre-deploy
 
 1. Confirmar el `run_id` y `sha` exactos del `CI` aprobado.
@@ -72,11 +103,22 @@ dotnet /var/www/cobranzadigital/api/releases/<releaseId>/CobranzaDigital.Api.dll
 
 ## Qué hace el deploy WEB
 
-1. Descarga `release-manifest-<sha>` y `web-release-<sha>`.
-2. Extrae el release en un directorio versionado junto al docroot.
-3. Hace swap atómico del symlink del sitio.
-4. Conserva el release previo para rollback básico.
-5. Ejecuta `scripts/release-smoke.sh`.
+1. Resuelve el `CI` aprobado y descarga `release-manifest-<sha>`.
+2. Valida que el manifiesto contiene un release frontend y el artefacto WEB esperado.
+3. Valida `CD_RELEASE_BASE_URL`, `CD_SMOKE_USER_EMAIL` y `CD_SMOKE_USER_PASSWORD` antes de
+   configurar SSH, subir artefactos o hacer swap.
+4. Descarga `web-release-<sha>`.
+5. Extrae el release en un directorio versionado junto al docroot.
+6. Hace swap atómico del symlink del sitio.
+7. Conserva el release previo para rollback básico.
+8. Ejecuta `scripts/release-smoke.sh` contra el release ya aplicado.
+
+Despues de reejecutar un deploy WEB, confirmar que quedo aplicado:
+
+- revisar el badge visible `Web r<runNumber> · <shortSha>`;
+- abrir `/assets/build-info.json` y comparar `runNumber`, `sha`, `source` y `environment`;
+- revisar que el paso `Run post-deploy release smoke` haya quedado verde, o correr el smoke
+  equivalente contra el entorno desplegado.
 
 ## Verificación de versión WEB
 
