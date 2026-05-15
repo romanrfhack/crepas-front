@@ -2,6 +2,9 @@
 
 Fecha del corte: 2026-02-13
 
+> Documento histórico. El release vigente de Ruta A usa SQL Server real para runtime/CI/tests API y
+> `--migrate-only` sin suppression EF como camino normal. Ver `docs/release-config.md`.
+
 ## 1) Hallazgo de Plan Maestro
 
 No se encontró un plan maestro explícito (`PlanMaestro.md`, `ROADMAP.md`, backlog/TODO formal). Se creó `docs/PlanMaestro.md` v0.1 como baseline de planeación.
@@ -19,9 +22,9 @@ No se encontró un plan maestro explícito (`PlanMaestro.md`, `ROADMAP.md`, back
 | C1. Registro de venta POS                     | DONE    | `POST /api/v1/pos/sales`; `PosSalesService.CreateSaleAsync` crea `Sale`, `SaleItem`, `SaleItemSelection`, `SaleItemExtra`, `Payment`, auditoría.                                                                                                                                  | `PosSalesIntegrationTests.CreateSale_PersistsSnapshot_And_Audit`.                                                                                                                             | Pago exige monto exacto al total; no hay soporte de pagos mixtos.                                                                       |
 | C2. Estado de venta (Completed/Cancelled)     | PARTIAL | `SaleStatus` existe (`Completed`, `Void`) y reportes/cierre filtran `Completed`.                                                                                                                                                                                                  | No hay test de transición a `Void` por API porque no existe endpoint de cancelación.                                                                                                          | Gap funcional importante para operación real de caja (anulaciones/devoluciones).                                                        |
 | C3. Relación venta-turno y expected de cierre | PARTIAL | `CreateSaleAsync` asigna `ShiftId` cuando hay turno abierto; `PosShiftService` calcula `Expected = Opening + CashSalesTotal`.                                                                                                                                                     | `CloseShift_ComputesExpected...` cubre fórmula y persistencia.                                                                                                                                | Selección de turno abierto usa `FirstOrDefault` sin orden explícito; riesgo si hay más de un turno abierto por inconsistencia de datos. |
-| D1. Compatibilidad SQLite / SQL Server        | PARTIAL | Ramas `IsSqlite()` en `PosShiftService` y `PosSalesService` para consultas críticas; DI soporta ambos proveedores.                                                                                                                                                                | Tests API corren sobre SQLite in-memory (`SmokeTests` factory), + tests de aplicación con SQLite.                                                                                             | Sin evidencia de ejecución automatizada equivalente sobre SQL Server real (riesgo de divergencias LINQ/SQL).                            |
+| D1. SQL Server release                        | DONE    | DI/runtime estandarizados a SQL Server; SQLite queda fuera del contrato Ruta A.                                                                                                                                                                                                     | Tests API requieren SQL Server real (`TESTS_USE_SQLSERVER=1`) y CI provee service container SQL Server.                                                                                        | Mantener docs antiguas marcadas como históricas; no reintroducir ramas SQLite.                                                           |
 | E1. Auditoría + correlación                   | DONE    | `AuditLogger` serializa before/after camelCase; `CorrelationIdMiddleware` inyecta/propaga `X-Correlation-Id`; controladores POS/Admin escriben eventos.                                                                                                                           | `AuditLoggerTests` + `AdminAuditIntegrationTests` + tests POS verifican audit rows.                                                                                                           | Cobertura parcial por endpoint; recomendable política uniforme de eventos de negocio críticos.                                          |
-| F1. Migraciones y drift                       | PARTIAL | Existe una sola migración `20260212230944_Initial` + snapshot, con tablas POS/Auth/Audit.                                                                                                                                                                                         | Sin test/check de drift automático.                                                                                                                                                           | Riesgo de drift en ambientes largos si se tocan entidades sin nueva migración.                                                          |
+| F1. Migraciones y drift                       | DONE    | Historial de migraciones vigente + migración no-op `20260514153113_F7PendingModelDrift` para alinear snapshot EF.                                                                                                                                                                  | CI ejecuta `--migrate-only` contra SQL Server sin `SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING`.                                                                                                 | La suppression queda solo como break-glass manual documentado.                                                                           |
 
 ---
 
@@ -189,15 +192,15 @@ No se encontró un plan maestro explícito (`PlanMaestro.md`, `ROADMAP.md`, back
    - Archivos: servicios de identidad/token + tests API.
    - Tests: refresh inválido, refresh reutilizado, refresh expirado.
 
-7. **DB-001 Pipeline dual-provider (SQLite + SQL Server)**
-   - Descripción: ejecutar suite crítica en ambos proveedores.
+7. **DB-001 Mantener pipeline SQL Server-only**
+   - Descripción: conservar suite crítica contra SQL Server real y evitar reintroducir SQLite.
    - Archivos: CI workflows + factory de tests.
    - Tests: smoke + POS sales/shifts + admin audit.
 
-8. **DB-002 Check automático de drift EF Core**
-   - Descripción: job que falle si snapshot/modelo divergen sin migración.
-   - Archivos: scripts CI, docs backend.
-   - Tests: validación de generación de migración vacía.
+8. **DB-002 Mantener check de drift EF Core**
+   - Descripción: `--migrate-only` debe fallar si snapshot/modelo divergen sin migración.
+   - Archivos: CI workflows + docs backend.
+   - Tests: validación de migración contra SQL Server sin suppression.
 
 9. **AUD-001 Cobertura de auditoría para eventos faltantes**
    - Descripción: asegurar que endpoints críticos escriban auditoría consistente.

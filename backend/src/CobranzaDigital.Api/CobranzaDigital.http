@@ -1,11 +1,12 @@
 @CobranzaDigital_HostAddress = http://localhost:5077
 
+# Demo/template endpoints are gated off in release by Release:EnableDemoEndpoints=false.
 GET {{CobranzaDigital_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
 
-# Protected endpoint (requires Admin role + scope=cobranza.read)
+# Demo protected endpoint (requires Release:EnableDemoEndpoints=true, Admin role + scope=cobranza.read)
 GET {{CobranzaDigital_HostAddress}}/api/v1/authorization/protected
 Accept: application/json
 Authorization: Bearer {{access_token}}

@@ -306,8 +306,8 @@ Notas:
 ### `data-testid` relevantes (v2)
 
 - KPIs: `kpi-gross-sales`, `kpi-tickets`, `kpi-avg-ticket`, `kpi-avg-items-per-ticket`, `kpi-void-rate`.
-- Mix por categorías: `mix-categories-table`, `mix-category-row-{i}`.
-- Mix por productos: `mix-products-table`, `mix-product-row-{i}`.
+- Mix por categorías: `mix-categories-table`, `mix-category-row-{categoryId}`.
+- Mix por productos: `mix-products-table`, `mix-product-row-{productId}`.
 - Add-ons: `addons-extras-table`, `addons-options-table`.
-- Control de caja: `cash-diff-table`, `cash-diff-row-{i}`.
+- Control de caja: `cash-diff-table`, `cash-diff-row-{shiftId}`.
 - Errores por bloque: `report-error-kpis`, `report-error-mixCategories`, `report-error-mixProducts`, `report-error-addonsExtras`, `report-error-addonsOptions`, `report-error-cashDifferences`.

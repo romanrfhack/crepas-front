@@ -1,5 +1,10 @@
 # SQL Server Standardization Report
 
+Estado vigente Fase 7 (2026-05-14): SQL Server es el único proveedor de runtime, CI y tests de
+integración API para Ruta A. La validación de migraciones corre sin
+`SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING`; el drift encontrado fue de snapshot EF y quedó cerrado
+con la migración no-op `20260514153113_F7PendingModelDrift`.
+
 ## 1) Hallazgos iniciales de SQLite (antes de la migración)
 
 Se detectaron rastros de SQLite / modo mixto en los siguientes puntos:

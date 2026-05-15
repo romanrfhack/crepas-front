@@ -51,6 +51,11 @@ import { PosShiftApiService } from '../services/pos-shift-api.service';
 import { PosTimezoneService } from '../services/pos-timezone.service';
 import { PosWholesaleApiService } from '../services/pos-wholesale-api.service';
 import { StoreContextService } from '../services/store-context.service';
+import {
+  buildZeroDenominationCounts,
+  createCloseShiftFormDefaults,
+  createVoidSaleFormDefaults,
+} from '../utils/pos-caja-form-defaults';
 import { roundMoney } from '../utils/pricing-rounding';
 import { applyQuoteResponseToCart } from '../utils/quote-mapping';
 
@@ -152,7 +157,7 @@ export class PosCajaPage implements OnDestroy {
       startWith(this.countControls.getRawValue()),
       map((counts) => this.normalizeCounts(counts)),
     ),
-    { initialValue: this.denominations.map(() => 0) },
+    { initialValue: buildZeroDenominationCounts(this.denominations) },
   );
 
   private readonly syncFormDisabledState = effect(() => {
@@ -344,11 +349,7 @@ export class PosCajaPage implements OnDestroy {
       });
       this.closePreview.set(this.normalizePreview(preview));
       this.closeResult.set(null);
-      this.closeShiftForm.reset({
-        reason: '',
-        evidence: '',
-        counts: this.denominations.map(() => 0),
-      });
+      this.closeShiftForm.reset(createCloseShiftFormDefaults(this.denominations));
       this.showCloseShiftModal.set(true);
     } catch {
       this.errorMessage.set('No se pudo obtener la vista previa del cierre de turno.');
@@ -604,11 +605,7 @@ export class PosCajaPage implements OnDestroy {
     }
 
     this.selectedSaleForVoid.set(sale);
-    this.voidForm.reset({
-      reasonCode: 'CashierError',
-      reasonText: '',
-      note: '',
-    });
+    this.voidForm.reset(createVoidSaleFormDefaults());
     this.showVoidModal.set(true);
     this.voidForbiddenError.set(false);
   }

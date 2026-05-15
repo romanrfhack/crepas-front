@@ -188,8 +188,8 @@
           </tr>
         </thead>
         <tbody>
-          @for (item of mixCategoriesRows(); track item.categoryId; let i = $index) {
-            <tr [attr.data-testid]="'mix-category-row-' + i">
+          @for (item of mixCategoriesRows(); track item.categoryId) {
+            <tr [attr.data-testid]="'mix-category-row-' + item.categoryId">
               <td>{{ item.categoryName }}</td>
               <td class="numeric">{{ item.quantity }}</td>
               <td class="numeric">{{ item.grossSales | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
@@ -228,8 +228,8 @@
           </tr>
         </thead>
         <tbody>
-          @for (item of mixProductsRows(); track item.productId; let i = $index) {
-            <tr [attr.data-testid]="'mix-product-row-' + i">
+          @for (item of mixProductsRows(); track item.productId) {
+            <tr [attr.data-testid]="'mix-product-row-' + item.productId">
               <td>{{ item.productName }}</td>
               <td class="numeric">{{ item.quantity }}</td>
               <td class="numeric">{{ item.grossSales | currency: 'MXN' : 'symbol' : '1.2-2' }}</td>
@@ -329,9 +329,9 @@
           </tr>
         </thead>
         <tbody>
-          @for (item of cashDifferenceShifts(); track item.shiftId; let i = $index) {
+          @for (item of cashDifferenceShifts(); track item.shiftId) {
             <tr
-              [attr.data-testid]="'cash-diff-row-' + i"
+              [attr.data-testid]="'cash-diff-row-' + item.shiftId"
               [class.is-alert]="shouldHighlightCashDifference(item)"
             >
               <td>{{ item.cashierUserName || item.cashierUserId }}</td>

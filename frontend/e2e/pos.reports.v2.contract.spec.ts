@@ -314,16 +314,12 @@ test('POS reports v2 UI-contract renders v2 blocks and forwards filters', async 
   await expect(page.getByTestId('cash-diff-table')).toBeVisible();
   await expect(page.getByTestId('report-error-mixCategories')).toHaveCount(0);
   await expect(page.getByTestId('report-error-mixProducts')).toHaveCount(0);
-  await expect(page.getByTestId('mix-category-row-0')).toBeVisible({ timeout: 20000 });
-  await expect(page.getByTestId('mix-product-row-0')).toBeVisible({ timeout: 20000 });
-  await expect(page.locator('[data-testid^="cash-diff-row-"]').first()).toBeVisible({
-    timeout: 20000,
-  });
+  await expect(page.getByTestId('mix-category-row-cat-1')).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId('mix-product-row-prod-1')).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId('cash-diff-row-shift-e2e')).toBeVisible({ timeout: 20000 });
 
   await expect(page.getByTestId('cash-diff-table').locator('thead')).not.toContainText('Turno');
-  await expect(page.locator('[data-testid^="cash-diff-row-"]').first()).toContainText(
-    'Cashier E2E',
-  );
+  await expect(page.getByTestId('cash-diff-row-shift-e2e')).toContainText('Cashier E2E');
   await expect(
     page.locator('[data-testid="reports-cashier"] option[value="cashier-e2e"]'),
   ).toHaveCount(1);

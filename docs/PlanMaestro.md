@@ -1,6 +1,8 @@
-# Plan Maestro (v0.1) — CobranzaDigital Backend (.NET)
+# Plan Maestro histórico (v0.1) — CobranzaDigital Backend (.NET)
 
 > Estado: **derivado del código actual** (no existía un Plan Maestro formal en el repo al momento del corte).
+> Este documento queda como histórico. Para release operativo vigente usar
+> `docs/release-config.md` y `docs/50-runbooks/deployment.md`.
 
 ## Objetivo de producto
 Consolidar un backend POS de caja para operación diaria con:
@@ -51,15 +53,15 @@ Consolidar un backend POS de caja para operación diaria con:
 ### Estado inferido
 **PARTIAL**: creación de venta y asociación a turno funcionan; no hay endpoint explícito de cancelación/void y la lógica de elección de turno abierto puede fortalecerse.
 
-## EPIC D — Compatibilidad SQLite / SQL Server
-**Meta:** consultas críticas funcionando en ambos proveedores.
+## EPIC D — SQL Server como proveedor release
 
 ### Alcance esperado
-- Evitar consultas LINQ frágiles por proveedor en reportes/cierres.
-- Pruebas automáticas de regresión para SQLite (tests) y SQL Server (pipeline/local).
+- Consultas críticas funcionando contra SQL Server real.
+- Tests de integración API y validación de migraciones contra SQL Server.
 
 ### Estado inferido
-**PARTIAL**: existen ramas específicas para SQLite en servicios clave; falta evidencia de suite equivalente contra SQL Server real.
+**DONE para Ruta A**: runtime, CI y tests de integración API usan SQL Server. SQLite no forma parte
+del contrato de release contenido.
 
 ## EPIC E — Auditoría, logging y correlación
 **Meta:** trazabilidad de operaciones administrativas y POS.
@@ -80,11 +82,13 @@ Consolidar un backend POS de caja para operación diaria con:
 - Check de drift (modelo vs snapshot vs DB real).
 
 ### Estado inferido
-**PARTIAL**: existe una migración inicial robusta; no hay evidencia de rutina automatizada de verificación de drift en CI.
+**DONE para Ruta A**: CI ejecuta `--migrate-only` contra SQL Server sin
+`SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING`. Fase 7 cerró el drift de snapshot con la migración
+no-op `20260514153113_F7PendingModelDrift`.
 
 ## Priorización macro sugerida
 1. Cerrar flujo de **cierre de turno E2E** (close-preview enriquecido + pruebas de contrato).
 2. Completar **estado de venta/cancelación** y su efecto en reportes/cierre.
 3. Fortalecer **autorización por rol** y pruebas negativas por endpoint.
-4. Automatizar **validación de migración/drift** y matriz SQLite/SQL Server.
+4. Mantener **validación de migración/drift** SQL Server en CI sin suppressions.
 5. Consolidar tickets de UX/API para carrito/personalizaciones y reportes operativos.

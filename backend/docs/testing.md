@@ -61,9 +61,11 @@ Variables requeridas en GitHub Actions (env del job):
 Además de los tests, CI valida migraciones reales ejecutando:
 
 ```bash
-SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING=1 \
 dotnet run --project src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release --no-build -- --migrate-only
 ```
+
+CI y release ejecutan esta validación sin `SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING`. La variable
+queda reservada solo para break-glass manual documentado en `docs/release-config.md`.
 
 ## Smoke de release local
 

@@ -55,7 +55,6 @@ dotnet tool install --global dotnet-ef
 4. **(Opcional) Valida migraciones con el mismo binario del release sin arrancar el servidor HTTP.**
 
     ```bash
-    export SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING=1
     dotnet run --project src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -- --migrate-only
     ```
 

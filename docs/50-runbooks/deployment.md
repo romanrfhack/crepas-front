@@ -92,7 +92,6 @@ El workflow valida que:
 3. Ejecuta migración formal:
 
 ```bash
-export SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING=1
 dotnet /var/www/cobranzadigital/api/releases/<releaseId>/CobranzaDigital.Api.dll --migrate-only
 ```
 
@@ -100,6 +99,10 @@ dotnet /var/www/cobranzadigital/api/releases/<releaseId>/CobranzaDigital.Api.dll
 5. Reinicia `cobranzadigital-api`.
 6. Conserva el release previo para rollback básico.
 7. Ejecuta `scripts/release-smoke.sh`.
+
+La migración formal no debe usar `SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING` en el camino normal.
+Fase 7 validó el caso el 2026-05-14 y cerró el drift como alineación de snapshot EF con la
+migración no-op `20260514153113_F7PendingModelDrift`.
 
 ## Qué hace el deploy WEB
 
@@ -266,6 +269,9 @@ Debe quedar verde:
 - `GET /api/v1/pos/shifts/current`
 - `GET /api/v1/pos/reports/daily-summary`
 
+El smoke de release es deliberadamente no mutante: valida health, login, catálogo, turno actual y
+reportes mínimos. No abre/cierra caja ni crea ventas en producción.
+
 Si el smoke falla:
 
 1. Anotar el `correlationPrefix` que imprime `scripts/release-smoke.sh`.
@@ -276,6 +282,7 @@ journalctl -u cobranzadigital-api -n 200 --no-pager
 ```
 
 3. Buscar el `X-Correlation-Id` o `CorrelationId=` emitido por el smoke.
+
 4. Confirmar si falló:
    - salud (`health/ready`)
    - autenticación/login

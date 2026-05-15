@@ -226,7 +226,7 @@ describe('PosReportesPage', () => {
     expect(cashDiffHeaderCells).not.toContain('Turno');
     expect(cashDiffHeaderCells[0]).toBe('Cajero');
 
-    const firstRowCells = compiled.querySelectorAll('[data-testid="cash-diff-row-0"] td');
+    const firstRowCells = compiled.querySelectorAll('[data-testid="cash-diff-row-shift-1"] td');
     expect(firstRowCells.item(0).textContent).toContain('Cajero Demo');
   });
 

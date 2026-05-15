@@ -86,10 +86,11 @@ Response:
 - Totales (`Subtotal`/`Total`) se calculan siempre server-side.
 - Auditoría: creación de venta genera `AuditLog` con `EntityType=Sale`, `Action=Create`, `EntityId`, `UserId`, `CorrelationId` y resumen JSON en `AfterJson`.
 
-## Notas SQLite para tests
+## Notas SQL Server para tests
 
-- SQLite puede fallar o comportarse distinto al ordenar directamente por `DateTimeOffset` en EF.
-- En pruebas, materializar resultados y ordenar en memoria cuando se requiera orden por fecha/hora offset.
+- Los tests de integración API corren contra SQL Server real con `TESTS_USE_SQLSERVER=1`.
+- Evitar reintroducir ramas o supuestos SQLite en el flujo POS; las diferencias de proveedor ya no
+  son parte del contrato de release Ruta A.
 
 
 ## Reportes operativos v1

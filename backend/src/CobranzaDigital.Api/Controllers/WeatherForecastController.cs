@@ -1,3 +1,5 @@
+using CobranzaDigital.Api.FeatureManagement;
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -5,6 +7,7 @@ namespace CobranzaDigital.Api.Controllers
 {
     [ApiController]
     [Authorize]
+    [FeatureFlag("Release:EnableDemoEndpoints")]
     [Route("api/[controller]")]
     public class WeatherForecastController : ControllerBase
     {

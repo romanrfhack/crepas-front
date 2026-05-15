@@ -1,5 +1,7 @@
 using Asp.Versioning;
 
+using CobranzaDigital.Api.FeatureManagement;
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,6 +9,7 @@ namespace CobranzaDigital.Api.Controllers;
 
 [ApiController]
 [ApiVersion("1.0")]
+[FeatureFlag("Release:EnableDemoEndpoints")]
 [Route("api/v{version:apiVersion}/authorization")]
 public sealed class AuthorizationDemoController : ControllerBase
 {

@@ -236,7 +236,7 @@ jobs:
             exit 1
           fi
 
-          sudo /bin/bash -lc "set -a && source '$env_file' && export SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING=1 && set +a && dotnet '$release_dir/CobranzaDigital.Api.dll' --migrate-only"
+          sudo /bin/bash -lc "set -a && source '$env_file' && set +a && dotnet '$release_dir/CobranzaDigital.Api.dll' --migrate-only"
 
           previous_release_id=""
           if [ -L "$current_link" ]; then

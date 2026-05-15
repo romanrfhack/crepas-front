@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 using CobranzaDigital.Application.Auditing;
@@ -67,7 +65,7 @@ public sealed class PosCatalogService : IPosCatalogService
         {
             Id = Guid.NewGuid(),
             CatalogTemplateId = catalogTemplateId,
-            CategoryCode = NormalizeCategoryCode(request.CategoryCode, request.Name),
+            CategoryCode = PosCatalogPureHelpers.NormalizeCategoryCode(request.CategoryCode, request.Name),
             Name = request.Name,
             SortOrder = request.SortOrder,
             IsActive = request.IsActive
@@ -77,7 +75,7 @@ public sealed class PosCatalogService : IPosCatalogService
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         return new CategoryDto(e.Id, e.CategoryCode, e.Name, e.SortOrder, e.IsActive);
     }
-    public async Task<CategoryDto> UpdateCategoryAsync(Guid id, UpsertCategoryRequest request, CancellationToken ct) { var e = await FindAsync(_db.Categories, id, ct).ConfigureAwait(false); var before = new { e.CategoryCode, e.Name, e.SortOrder, e.IsActive }; e.CategoryCode = NormalizeCategoryCode(request.CategoryCode, request.Name); e.Name = request.Name; e.SortOrder = request.SortOrder; e.IsActive = request.IsActive; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Category", "Update", id, before, new { e.CategoryCode, e.Name, e.SortOrder, e.IsActive }, ct).ConfigureAwait(false); return new(e.Id, e.CategoryCode, e.Name, e.SortOrder, e.IsActive); }
+    public async Task<CategoryDto> UpdateCategoryAsync(Guid id, UpsertCategoryRequest request, CancellationToken ct) { var e = await FindAsync(_db.Categories, id, ct).ConfigureAwait(false); var before = new { e.CategoryCode, e.Name, e.SortOrder, e.IsActive }; e.CategoryCode = PosCatalogPureHelpers.NormalizeCategoryCode(request.CategoryCode, request.Name); e.Name = request.Name; e.SortOrder = request.SortOrder; e.IsActive = request.IsActive; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Category", "Update", id, before, new { e.CategoryCode, e.Name, e.SortOrder, e.IsActive }, ct).ConfigureAwait(false); return new(e.Id, e.CategoryCode, e.Name, e.SortOrder, e.IsActive); }
     public async Task DeactivateCategoryAsync(Guid id, CancellationToken ct) { var e = await FindAsync(_db.Categories, id, ct).ConfigureAwait(false); var before = new { e.IsActive }; e.IsActive = false; await _db.SaveChangesAsync(ct).ConfigureAwait(false); await AuditAsync("Category", "Deactivate", id, before, new { e.IsActive }, ct).ConfigureAwait(false); }
 
     public async Task<IReadOnlyList<ProductDto>> GetProductsAsync(bool includeInactive, Guid? categoryId, CancellationToken ct)
@@ -1426,7 +1424,7 @@ public sealed class PosCatalogService : IPosCatalogService
             throw new ValidationException(new Dictionary<string, string[]> { ["lines"] = [$"lines is required and must be between 1 and {maxLines}."] });
         }
 
-        var requestHash = ComputeBatchRequestHash(request);
+        var requestHash = PosCatalogPureHelpers.ComputeInventoryBatchRequestHash(request);
         var existingBatch = await _db.CatalogInventoryBatchOperations.AsNoTracking()
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.StoreId == request.StoreId && x.BatchClientOperationId == request.BatchClientOperationId, ct)
             .ConfigureAwait(false);
@@ -1447,7 +1445,7 @@ public sealed class PosCatalogService : IPosCatalogService
         foreach (var line in request.Lines.OrderBy(x => x.LineNo))
         {
             var clampedDelta = decimal.Round(line.DeltaQty, 3, MidpointRounding.AwayFromZero);
-            var lineOperationId = (line.LineClientOperationId ?? DeriveLineClientOperationId(request.BatchClientOperationId, line.LineNo)).ToString("D");
+            var lineOperationId = (line.LineClientOperationId ?? PosCatalogPureHelpers.DeriveLineClientOperationId(request.BatchClientOperationId, line.LineNo)).ToString("D");
             var normalizedItemType = line.ItemType?.Trim() ?? string.Empty;
 
             if (line.LineNo <= 0 || clampedDelta == 0m)
@@ -1999,8 +1997,8 @@ public sealed class PosCatalogService : IPosCatalogService
             allowed.Where(a => a.ProductGroupOverrideId == o.Id).Select(a => a.OptionItemId).ToList()
         )).ToList();
 
-        var stamp = ComputeVersionStamp(categories.Count, products.Count, optionItems.Count, extras.Count);
-        var etagSeed = ComputeWeakEtag(stamp, tenantId, mapping.CatalogTemplateId.Value, resolvedStoreId);
+        var stamp = PosCatalogPureHelpers.ComputeVersionStamp(categories.Count, products.Count, optionItems.Count, extras.Count);
+        var etagSeed = PosCatalogPureHelpers.ComputeWeakEtag(stamp, tenantId, mapping.CatalogTemplateId.Value, resolvedStoreId);
         var timeZoneId = await _db.Stores.AsNoTracking()
             .Where(x => x.Id == resolvedStoreId)
             .Select(x => x.TimeZoneId)
@@ -2021,8 +2019,7 @@ public sealed class PosCatalogService : IPosCatalogService
         var stamp = await ComputeVersionStampFromDataAsync(tenantId, resolvedStoreId, mapping.CatalogTemplateId ?? Guid.Empty, ct).ConfigureAwait(false);
         var sections = new[] { stamp, resolvedStoreId.ToString("N"), (mapping.CatalogTemplateId ?? Guid.Empty).ToString("N") };
         var etagSeed = string.Join('\n', sections);
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(etagSeed));
-        return $"W/\"{Convert.ToHexString(bytes)}\"";
+        return PosCatalogPureHelpers.ComputeWeakEtagFromSeed(etagSeed);
     }
 
     private async Task<string> ComputeVersionStampFromDataAsync(Guid tenantId, Guid storeId, Guid catalogTemplateId, CancellationToken ct)
@@ -2258,46 +2255,11 @@ public sealed class PosCatalogService : IPosCatalogService
 
     private sealed record ValidationItemLookup(CatalogItemType ItemType, Guid ItemId, string? ExternalCode, string Name, bool IsInventoryTracked);
 
-    private static Guid DeriveLineClientOperationId(Guid batchClientOperationId, int lineNo)
-    {
-        var input = Encoding.UTF8.GetBytes($"{batchClientOperationId:D}:{lineNo}");
-        var hash = SHA256.HashData(input);
-        Span<byte> bytes = stackalloc byte[16];
-        hash[..16].CopyTo(bytes);
-        return new Guid(bytes);
-    }
-
-    private static string ComputeBatchRequestHash(CreateInventoryAdjustmentV2BatchRequest request)
-    {
-        var normalized = new
-        {
-            request.StoreId,
-            ReasonCode = request.ReasonCode.Trim(),
-            request.ReferenceType,
-            request.ReferenceId,
-            request.Note,
-            request.BatchClientOperationId,
-            Lines = request.Lines.OrderBy(x => x.LineNo).Select(x => new
-            {
-                x.LineNo,
-                ItemType = x.ItemType?.Trim(),
-                x.ExternalCode,
-                x.ItemId,
-                DeltaQty = decimal.Round(x.DeltaQty, 3, MidpointRounding.AwayFromZero),
-                x.LineClientOperationId
-            }).ToArray()
-        };
-        var json = JsonSerializer.Serialize(normalized);
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
-        return Convert.ToHexString(hash);
-    }
-
-
     private async Task<CatalogImportApplyResultDto> ApplyCategoryImportInternalAsync(CatalogCategoryImportApplyRequest request, CatalogImportValidationResultDto validation, CancellationToken ct)
     {
         var tenantId = RequireTenantId();
         var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
-        var requestHash = ComputeCatalogBatchRequestHash(request.BatchClientOperationId, "Categories", request.Lines);
+        var requestHash = PosCatalogPureHelpers.ComputeCatalogBatchRequestHash(request.BatchClientOperationId, "Categories", request.Lines);
         var existingBatch = await _db.CatalogImportBatchOperations.AsNoTracking()
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.CatalogTemplateId == catalogTemplateId && x.ImportType == "Categories" && x.BatchClientOperationId == request.BatchClientOperationId, ct).ConfigureAwait(false);
         if (existingBatch is not null)
@@ -2358,7 +2320,7 @@ public sealed class PosCatalogService : IPosCatalogService
     {
         var tenantId = RequireTenantId();
         var catalogTemplateId = await GetTenantCatalogTemplateIdAsync(ct).ConfigureAwait(false);
-        var requestHash = ComputeCatalogBatchRequestHash(request.BatchClientOperationId, "Products", request.Lines);
+        var requestHash = PosCatalogPureHelpers.ComputeCatalogBatchRequestHash(request.BatchClientOperationId, "Products", request.Lines);
         var existingBatch = await _db.CatalogImportBatchOperations.AsNoTracking()
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.CatalogTemplateId == catalogTemplateId && x.ImportType == "Products" && x.BatchClientOperationId == request.BatchClientOperationId, ct).ConfigureAwait(false);
         if (existingBatch is not null)
@@ -2423,22 +2385,6 @@ public sealed class PosCatalogService : IPosCatalogService
         return result;
     }
 
-    private static string NormalizeCategoryCode(string? code, string name)
-    {
-        if (!string.IsNullOrWhiteSpace(code)) return code.Trim();
-        var normalized = new string(name.Trim().ToLowerInvariant().Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
-        while (normalized.Contains("--", StringComparison.Ordinal)) normalized = normalized.Replace("--", "-", StringComparison.Ordinal);
-        return normalized.Trim('-');
-    }
-
-    private static string ComputeCatalogBatchRequestHash<TLine>(Guid batchClientOperationId, string importType, IReadOnlyList<TLine> lines)
-    {
-        var normalized = new { BatchClientOperationId = batchClientOperationId, ImportType = importType, Lines = lines };
-        var json = JsonSerializer.Serialize(normalized);
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
-        return Convert.ToHexString(hash);
-    }
-
     private Guid? GetCurrentUserId()
     {
         var raw = _httpContextAccessor.HttpContext?.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -2482,19 +2428,6 @@ public sealed class PosCatalogService : IPosCatalogService
         }
     }
 
-    private static string ComputeWeakEtag(string stamp, Guid tenantId, Guid templateId, Guid storeId)
-    {
-        var input = $"{stamp}|{tenantId:N}|{templateId:N}|{storeId:N}";
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return $"W/\"{Convert.ToHexString(bytes)}\"";
-    }
-
-    private static string ComputeVersionStamp(params object[] sections)
-    {
-        var input = string.Join('|', sections.Select(x => x.ToString()));
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(bytes);
-    }
 }
 
 

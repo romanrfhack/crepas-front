@@ -103,7 +103,6 @@ jobs:
         working-directory: backend
         env:
           ASPNETCORE_ENVIRONMENT: CI
-          SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING: "1"
           ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=CrepasDB_CI_Migrate_${{ github.run_id }}_${{ github.run_attempt }};User Id=sa;Password=${{ format('CiSqlRun{0}Try{1}!Aa1', github.run_id, github.run_attempt) }};Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;"
           Jwt__SigningKey: ${{ env.CI_JWT_SIGNING_KEY }}
           Jwt__Issuer: CobranzaDigital.CI

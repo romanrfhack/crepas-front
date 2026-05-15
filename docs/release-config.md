@@ -73,7 +73,6 @@ La migración formal del release se ejecuta explícitamente con el mismo binario
 ```bash
 set -a
 source /etc/cobranzadigital/api.env
-export SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING=1
 set +a
 dotnet /var/www/cobranzadigital/api/releases/<releaseId>/CobranzaDigital.Api.dll --migrate-only
 ```
@@ -82,6 +81,25 @@ Notas operativas:
 
 - `api.env` debe ser shell-compatible (`KEY=value`) porque el deploy la hace `source`.
 - si el archivo vive en otra ruta, `deploy-api.yml` admite `CD_API_ENV_FILE`.
+- Desde Fase 7, CI y deploy ejecutan `--migrate-only` sin
+  `SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING`.
+- Validación Fase 7 del 2026-05-14: se confirmó drift de snapshot EF y se cerró con la
+  migración no-op `20260514153113_F7PendingModelDrift`; no hubo DDL nuevo.
+- `SUPPRESS_EF_PENDING_MODEL_CHANGES_WARNING=1` queda solo como break-glass temporal si
+  producción está caída por un warning EF. Dueño: Release Owner. Expiración: retirar el mismo
+  día mediante forward-fix o antes del siguiente release. Alcance: solo ejecución manual de
+  `--migrate-only`, nunca CI ni deploy normal.
+
+## Superficie Ruta A
+
+- Ruta A de release contenido es single-tenant, single-store, single-caja y MVP no fiscal.
+- Inventario soportado en release: la superficie legacy/actual usada por POS y reportes mínimos.
+- Inventory V2 queda diferido: `inventory.v2.enabled=false` en backend y
+  `inventoryV2Enabled=false` en frontend productivo.
+- `/app/admin/pos/inventory-legacy` queda como compatibilidad controlada por
+  `legacyInventoryEnabled` o rol `SuperAdmin`; no es la ruta principal de release.
+- Endpoints demo/template (`AuthorizationDemoController`, `WeatherForecastController`) quedan
+  fuera del release normal y solo se publican si `Release:EnableDemoEndpoints=true`.
 
 ## Política de rollback de datos
 
