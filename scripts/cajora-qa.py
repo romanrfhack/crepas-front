@@ -132,7 +132,9 @@ class QA:
         email = input("Correo de SuperAdmin: ").strip()
         platform = self.login(email, getpass.getpass("Contraseña de SuperAdmin (oculta): "))
         self.call("GET", "/platform/verticals", platform)
-        self.call("GET", "/admin/users/options", platform)
+        # El listado existe en despliegues que aún no incluyen el formulario /options.
+        # Sólo comprobar acceso; no guardar ni mostrar los usuarios devueltos.
+        self.call("GET", "/admin/users?page=1&pageSize=1", platform)
         password = "Qa!" + secrets.token_urlsafe(24) + "9aA"
         credentials = self.directory / "credenciales-qa.txt"
         credentials.write_text("Contraseña EXCLUSIVA de los usuarios QA: " + password + "\n"
@@ -148,7 +150,7 @@ class QA:
                       {"storeId": other["storeId"], "itemType": "Product", "itemId": other["productId"],
                        "quantityDelta": 1, "reason": "Correction", "clientOperationId": str(uuid.uuid4())}, expected=(403, 404))
         self.check("Lectura y escritura cruzadas denegadas A/B", True)
-        self.call("GET", "/admin/users/options", ua["Cashier"], expected=(403,))
+        self.call("GET", "/admin/users?page=1&pageSize=1", ua["Cashier"], expected=(403,))
         self.check("Cajero sin administración de usuarios", True)
         self.call("GET", "/pos/shifts/current?storeId=" + a["storeId"], ua["Cashier"], expected=(204,))
         shift = self.call("POST", "/pos/shifts/open", ua["Cashier"],
