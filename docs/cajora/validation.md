@@ -31,3 +31,7 @@ SSH a `194.238.26.70:22` devolvió `Network is unreachable`; no se cambiaron arc
 ## Decisión
 
 Preparación apta para PR. No declarar Cajora publicado ni activar nuevos negocios hasta cerrar las puertas de `launch.md` y registrar la evidencia faltante. Mantener alta asistida, noindex y mensaje de preparación.
+
+## Bloqueo detectado por CI y corrección mínima
+
+El primer CI del PR falló en restore con NU1903 para Microsoft.OpenApi 2.3.10 (GHSA-v5pm-xwqc-g5wc). Se actualiza únicamente ese paquete a 2.7.5, versión corregida de la misma línea mayor según el [aviso del mantenedor](https://github.com/advisories/GHSA-v5pm-xwqc-g5wc). No se desactiva NuGet Audit ni warnings-as-errors. Compilación, migraciones y suite backend deben pasar nuevamente antes de declarar validado el cambio.
