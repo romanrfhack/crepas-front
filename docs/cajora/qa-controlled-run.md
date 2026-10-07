@@ -56,3 +56,11 @@ Auditoría reportada: servidor `194.238.26.70`, BD `CrepasDB`; Categories sin Ca
 `cajora-migrate.py` requiere a su lado la versión actual de `cajora-db-audit.py`. Sin argumentos sólo verifica BD destino, marcadores de DLL y colisiones que bloquearían el backfill/índices. `--apply` repite esos checks, crea un respaldo COPY_ONLY con CHECKSUM en el directorio predeterminado del servidor SQL, ejecuta RESTORE VERIFYONLY y sólo entonces llama `dotnet CobranzaDigital.Api.dll --migrate-only` con la conexión revisada. Verifica después columna e historial. No habilita V2, no reinicia el servicio, no borra QA ni aplica restauración automática. La ejecución del migrador puede bloquear tablas durante creación de índices; VERIFYONLY no acredita restauración integral. Si el backup, la validación o el migrador fallan, detenerse y analizar sin repetir automáticamente. Marcadores de DLL son un filtro previo, no una validación completa de ensamblados ni evidencia de migraciones aplicadas.
 
 Validación local: sintaxis Python y simulación de preflight de sólo lectura y fallo de backup que impide llegar al migrador. Pendiente ejecución real en VPS, respaldo, migración y continuación QA usando tenant A existente.
+
+## Migrador separado tras preflight de DLL
+
+VPS reportó `DLL no contiene --migrate-only` antes de toda modificación SQL. El filtro de marcadores sugiere una API anterior; no identifica su commit. No invocar esa DLL con una opción no confirmada ni modificar tablas aisladas para evadir el fallo.
+
+CI de PR #295 empaqueta ahora `api-migration-<headSha>` después de build, pruebas backend y migración contra SQL Server CI. Incluye migration-manifest.json con SHA de head, build y run. No modifica pipelines de despliegue de main ni despliega el artefacto. Para preflight separado, descargar el artifact de una ejecución CI exitosa y ejecutar `cajora-migrate.py --release-dir <directorio> --expected-sha <headSha>`. Sin --apply es sólo lectura. Con --apply usa la conexión revisada del servicio actual y el migrador descargado, conservando el servicio existente. Configuración DatabaseOptions:ConnectionStringName corregida para respetar el nombre configurado de conexión.
+
+La continuidad QA y el despliegue completo de API quedan pendientes hasta verificar respaldo y migraciones. No se han migrado datos desde este chat ni reemplazado la API activa.
