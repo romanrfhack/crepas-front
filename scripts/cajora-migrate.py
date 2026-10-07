@@ -3,6 +3,7 @@
 import argparse
 from datetime import datetime, timezone
 import importlib.util
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -20,13 +21,23 @@ def literal(value):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--release-dir", type=Path)
+    parser.add_argument("--expected-sha")
     args = parser.parse_args()
     context = AUDIT.connection_context()
     if context["database"] != "CrepasDB":
         raise RuntimeError("BD distinta de CrepasDB; detenido sin cambios")
     print("Destino:", context["server"], context["database"], flush=True)
-    api = context["cwd"] / "CobranzaDigital.Api.dll"
-    infrastructure = context["cwd"] / "CobranzaDigital.Infrastructure.dll"
+    release = args.release_dir.resolve() if args.release_dir else context["cwd"]
+    if args.release_dir:
+        if not args.expected_sha:
+            raise RuntimeError("El migrador separado requiere --expected-sha")
+        manifest = json.loads((release / "migration-manifest.json").read_text())
+        if manifest.get("kind") != "qa-migration-runner" or manifest.get("headSha") != args.expected_sha:
+            raise RuntimeError("Manifest del migrador no coincide con SHA esperado")
+        print("Migrador separado:", release, "SHA:", args.expected_sha, flush=True)
+    api = release / "CobranzaDigital.Api.dll"
+    infrastructure = release / "CobranzaDigital.Infrastructure.dll"
     def contains(path, value):
         raw = path.read_bytes()
         return value.encode() in raw or value.encode("utf-16-le") in raw
@@ -84,13 +95,13 @@ SELECT MigrationId FROM dbo.__EFMigrationsHistory ORDER BY MigrationId;
     print("Respaldo y VERIFYONLY: OK. Ejecutando migrador oficial.", flush=True)
     process_env = dict(os.environ)
     process_env.update(context["processenv"])
-    name = str(context["settings"].get("database__connectionstringname", "DefaultConnection"))
-    keys = ("database__connectionstringname", "connectionstrings__" + name.lower())
+    name = str(context["settings"].get("databaseoptions__connectionstringname", "DefaultConnection"))
+    keys = ("databaseoptions__connectionstringname", "connectionstrings__" + name.lower())
     process_env = {key: value for key, value in process_env.items() if key.lower() not in keys}
-    process_env["Database__ConnectionStringName"] = name
+    process_env["DatabaseOptions__ConnectionStringName"] = name
     process_env["ConnectionStrings__" + name] = context["settings"]["connectionstrings__" + name.lower()]
     result = subprocess.run(["dotnet", str(api), "--migrate-only"],
-                            cwd=context["cwd"], env=process_env, timeout=1800)
+                            cwd=release, env=process_env, timeout=1800)
     if result.returncode:
         raise RuntimeError("Migrador falló. Respaldo: " + backup_path + "; no repetir ni restaurar automáticamente")
     assertions = "SET NOCOUNT ON; IF COL_LENGTH(N'dbo.Categories',N'CategoryCode') IS NULL THROW 51000,'CategoryCode sigue ausente',1; "
