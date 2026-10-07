@@ -1,6 +1,6 @@
 # QA controlado de Cajora
 
-Estado: preparado; pendiente de ejecución contra la API desplegada y revisión visual.
+Estado: negocio A parcialmente creado y esquema reparado; pendiente continuar QA operativo y revisión visual.
 
 ## Ejecución
 
@@ -70,3 +70,9 @@ La continuidad QA y el despliegue completo de API quedan pendientes hasta verifi
 CI run `37573470687`, head `8cea6762424377d9ba744e61d356c32592137122`, completó exitosamente build, migraciones SQL CI, pruebas backend/frontend y publicación del artefacto QA. VPS descargó ese artefacto y pasó preflight de datos/DLL contra CrepasDB. Primer --apply se detuvo antes del migrador: SQL Express rechazó WITH COMPRESSION (1844) y la cuenta usada no pudo ejecutar VERIFYONLY (262, permiso CREATE DATABASE). Ruta del intento fallido: `/var/opt/mssql/data/CrepasDB-cajora-20261007T045827Z-8727a0cf.bak`; no se considera respaldo válido ni se borra automáticamente.
 
 Corrección: backup sin compresión, verificación en una llamada separada que sólo ocurre si BACKUP terminó bien, comprobación previa de privilegios de verificación y opción `--backup-admin` para credenciales de una cuenta SQL DBA existente. Se leen desde /dev/tty con contraseña oculta; no se guardan en archivos ni se pasan por argumentos. Sólo se usan en backup/verificación, no se otorgan permisos a la cuenta de aplicación. El migrador mantiene la conexión de aplicación original. Sigue pendiente respaldo válido y migración real. Reutilizar el artefacto binario aprobado de 8cea676; los cambios actuales son de script operativo.
+
+## Migración aplicada y continuación del negocio A
+
+Salida reportada desde VPS: respaldo válido `/var/opt/mssql/data/CrepasDB-cajora-20261007T050213Z-d537fa29.bak`, COPY_ONLY/CHECKSUM sin compresión; VERIFYONLY exitoso. Migrador separado de SHA 8cea6762424377d9ba744e61d356c32592137122 aplicó InventoryV2PerformanceGuardrails, InventoryBatchOperation, CatalogPhase1ImportV2, Ventas2SalesIndexes y F7PendingModelDrift. Historial y CategoryCode verificados, servicio active y health/ready Healthy. No se reinició ni reemplazó la API. VERIFYONLY no sustituye la prueba integral de restauración pendiente.
+
+Continuar mediante `python3 cajora-qa.py --resume-setup /root/cajora-qa/cajora-qa-bc15642e73ab`. Ese modo acepta únicamente un checkpoint failed con un solo negocio A, dos usuarios QA esperados y fallo inicial POST categorías 500 sin categoría/producto/turno/ventas registrados. Archiva resultado previo, reutiliza credenciales QA privadas y bloquea ejecuciones simultáneas del mismo directorio. Verifica catálogo y sucursal matriz actuales, categorías vacías y ausencia de turno antes de completar A; luego crea B de control y ejecuta el escenario completo. No reintentar automáticamente después de un nuevo fallo o avance. Validación local con simulación: no repite altas de tenant/usuarios A, no registra secretos y rechaza reutilizar un checkpoint con producto creado. QA API real aún pendiente.
