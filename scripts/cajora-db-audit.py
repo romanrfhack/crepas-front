@@ -52,7 +52,7 @@ def pairs(value):
     return result
 
 
-def main():
+def connection_context():
     pid = subprocess.check_output(["systemctl", "show", "cobranzadigital-api",
                                    "-p", "MainPID", "--value"], text=True).strip()
     if not pid.isdigit() or pid == "0":
@@ -105,7 +105,35 @@ def main():
                            if Path(p).is_file()), None)
     if not executable:
         raise RuntimeError("sqlcmd no instalado; no se instalará automáticamente")
-    print("Servidor:", server, "BD:", database, flush=True)
+    command_env = dict(os.environ)
+    command_env["SQLCMDPASSWORD"] = password
+    process_env = {}
+    for raw in (proc / "environ").read_bytes().split(b"\0"):
+        key, sep, value = raw.partition(b"=")
+        if sep:
+            process_env[key.decode()] = value.decode()
+    return {"server": server, "database": database, "user": user,
+            "sqlcmd": executable, "sqlenv": command_env,
+            "cwd": cwd, "processenv": process_env, "settings": settings}
+
+
+def run_sql(context, sql, capture=False, timeout=90):
+    result = subprocess.run([context["sqlcmd"], "-S", context["server"],
+                             "-d", context["database"], "-U", context["user"],
+                             "-C", "-b", "-l", "15", "-t", str(timeout),
+                             "-w", "200", "-h", "-1", "-W", "-Q", sql],
+                            env=context["sqlenv"], timeout=timeout + 30,
+                            capture_output=capture, text=True)
+    if result.returncode:
+        if capture:
+            print(result.stdout, result.stderr)
+        raise RuntimeError("Consulta SQL falló; revisar salida")
+    return result.stdout if capture else None
+
+
+def main():
+    context = connection_context()
+    print("Servidor:", context["server"], "BD:", context["database"], flush=True)
     sql = """
 SET NOCOUNT ON;
 SELECT DB_NAME() AS DatabaseName;
@@ -125,13 +153,7 @@ FROM sys.tables t JOIN sys.schemas s ON s.schema_id=t.schema_id
 JOIN sys.indexes i ON i.object_id=t.object_id
 WHERE t.name='Categories' ORDER BY s.name,i.name;
 """
-    command_env = dict(os.environ)
-    command_env["SQLCMDPASSWORD"] = password
-    result = subprocess.run([executable, "-S", server, "-d", database, "-U", user,
-                             "-C", "-b", "-l", "15", "-t", "30", "-w", "200", "-Q", sql],
-                            env=command_env, timeout=90)
-    if result.returncode:
-        raise RuntimeError("Consulta SQL falló; revisar salida sin cambiar la BD")
+    run_sql(context, sql)
 
 
 if __name__ == "__main__":
