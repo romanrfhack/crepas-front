@@ -115,6 +115,32 @@ jobs:
         working-directory: backend
         run: dotnet test -c Release --no-build
 
+      - name: Package QA migration runner
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/cajora-free-launch'
+        working-directory: backend
+        env:
+          QA_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p artifacts/api-migration
+          dotnet publish src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release --no-build -o artifacts/api-migration
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('artifacts/api-migration/migration-manifest.json').write_text(json.dumps({
+              'kind': 'qa-migration-runner', 'headSha': os.environ['QA_HEAD_SHA'],
+              'buildSha': os.environ['GITHUB_SHA'], 'runId': os.environ['GITHUB_RUN_ID']
+          }, indent=2))
+          PY
+
+      - name: Upload QA migration runner
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/cajora-free-launch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-migration-${{ github.event.pull_request.head.sha }}
+          path: backend/artifacts/api-migration/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Package API release artifact
         if: needs.changes.outputs.backend_release == 'true' && github.ref == 'refs/heads/main'
         working-directory: backend
