@@ -88,7 +88,7 @@ def connection_context():
                 sep = "="
             if sep:
                 settings[key.lower().replace(":", "__")] = value
-    name = str(settings.get("database__connectionstringname", "DefaultConnection"))
+    name = str(settings.get("databaseoptions__connectionstringname", "DefaultConnection"))
     connection = settings.get("connectionstrings__" + name.lower())
     if not isinstance(connection, str):
         raise RuntimeError("No se encontró la conexión; no se muestra configuración sensible")
