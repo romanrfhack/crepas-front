@@ -36,3 +36,9 @@ En el directorio de ejecución se crea `cajora-qa-<run>/resultado.json` con IDs,
 Ante un fallo el script se detiene y guarda lo completado. No ejecutarlo de nuevo automáticamente: puede haber altas parciales, ventas o un turno QA abierto. Revisar la evidencia y resolver el caso identificado antes de continuar. No elimina ni revierte operaciones automáticamente.
 
 Una ejecución `passed` acredita sólo las comprobaciones API enumeradas. Pendiente en navegador: acceso desde la landing, sesión de cajero QA, visualización de stock/ventas/anulación/cierre y comprobante; realizar un turno visual adicional separado sin mezclar sus resultados con este escenario. También siguen pendientes las pruebas de dispositivos, impresión y restauración de respaldo para el lanzamiento.
+
+## Preflight reportado el 6 de octubre de 2026
+
+Evidencia compartida desde VPS: login válido con claim SuperAdmin; `/platform/verticals` responde 200 tanto por HTTPS público como por `127.0.0.1:5005`; `/admin/users/options` responde 404 en ambas rutas. `appsettings.json` declara `Features:UserAdmin=true`, sin override `Features__UserAdmin` observado en el proceso; la DLL contiene `AdminUsersController`. Falta identificar por qué `/options` está inaccesible: estos datos no prueban la configuración efectiva ni la versión de API cargada.
+
+El script comprueba ahora acceso mediante `GET /admin/users?page=1&pageSize=1`, sin guardar ni mostrar los usuarios devueltos. Es una consulta previa de autorización independiente del endpoint auxiliar del formulario. Si falla, se detiene antes de crear negocios; no se cambian flags, roles o configuración de API. Las ejecuciones QA reportadas hasta este corte se detuvieron en consultas previas y no crearon negocios, usuarios QA ni turnos. Sigue pendiente el escenario completo.
