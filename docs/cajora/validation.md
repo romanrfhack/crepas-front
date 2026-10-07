@@ -1,7 +1,7 @@
 # Evidencia de preparación Cajora
 
-Fecha: 2026-10-06 (America/Mexico_City). Base: main `c7caa8d26ba2d1cd5935fcaeaa559156ea6e263c`.
-Estado: frontend y backend validados por CI; lanzamiento pendiente de validación operativa del host.
+Actualizado: 2026-10-07 (America/Mexico_City). Base: main `c7caa8d26ba2d1cd5935fcaeaa559156ea6e263c`.
+Estado: CI aprobado, landing HTTPS publicada y QA API operativo aprobado en VPS; lanzamiento pendiente de aceptación visual y puertas operativas restantes.
 
 ## Resultados locales
 
@@ -18,19 +18,24 @@ Playwright se ejecutó con Chromium 153 y configuración local temporal, sin agr
 
 La landing no simula un formulario exitoso ni anuncia acceso inmediato: remite al contacto existente para pedir alta asistida y avisa que el lanzamiento se está preparando.
 
+## Estado operativo actual
+
+- Landing en `https://cajora.leroa.com.mx` publicada con HTTPS; login redirige temporalmente al sitio existente.
+- CrepasDB respaldada COPY_ONLY/CHECKSUM y validada mediante VERIFYONLY; migraciones pendientes aplicadas y CategoryCode verificado. API reportada active/Healthy.
+- QA API real del run bc15642e73ab aprobado: ventas/pagos, idempotencia, anulación e inventario, cierre y persistencia tras login, aislamiento A/B. Evidencia y alcance en [qa-controlled-run.md](qa-controlled-run.md).
+- Son resultados reportados por el operador del VPS; el chat no tiene SSH al servidor ni leyó el JSON final.
+
 ## Validaciones pendientes
 
-- CI del PR aprobado para el commit 84d6ed0593fa872b7f4eb9d668daec164ffe2098: build, migraciones SQL Server, pruebas backend, build frontend, unit tests y UI-contract. Evidencia: https://github.com/romanrfhack/crepas-front/actions/runs/37553326018 . No sustituye la validación del host.
-- Nginx/TLS/DNS del nuevo hostname y smoke autenticado del servidor.
-- SHA backend actual, backups/restauración y ciclo con datos persistidos en entorno de prueba.
-- Operación con dos clientes aislados antes de ampliar Ruta A.
-- Impresión/equipos objetivo, recuperación de cuentas y canal de soporte.
+- Aceptación manual del navegador contra API real y prueba en dispositivos/impresión objetivo.
+- Prueba integral de restauración del respaldo (VERIFYONLY no la sustituye).
+- Recuperación de cuentas y canal de soporte.
+- Despliegue completo de la identidad Cajora, versión exacta de la API activa y cierre del endpoint auxiliar admin/users/options que sigue sin verificarse tras reparación de esquema.
+- Cerrar puertas restantes de launch.md antes de ampliar onboarding comercial; mantener alta asistida y lanzamiento controlado.
 
-SSH a `194.238.26.70:22` devolvió `Network is unreachable`; no se cambiaron archivos del VPS, datos comerciales, registros DNS ni certificados. No es un rechazo de aprobación: falta conectividad/acceso operativo.
+## Antecedentes de preparación
 
-## Decisión
-
-Preparación apta para PR. No declarar Cajora publicado ni activar nuevos negocios hasta cerrar las puertas de `launch.md` y registrar la evidencia faltante. Mantener alta asistida, noindex y mensaje de preparación.
+Las secciones siguientes registran los cortes anteriores de CI y restricciones de conectividad del chat; el estado vigente es el indicado arriba.
 
 ## Bloqueo detectado por CI y corrección mínima
 
@@ -42,6 +47,6 @@ CI del commit 3cc3133 pasó restore/build/migraciones; 10 pruebas de Application
 
 ## Cierre de validación CI
 
-Verificados los jobs backend_tests (112573740758) y frontend_tests (112573740765): restore, build, migraciones, tests backend, build Angular, unit y UI-contract en success. Al ser un PR, empaquetado y deploy se omiten deliberadamente. No se ha publicado Cajora.
+Verificados los jobs backend_tests (112573740758) y frontend_tests (112573740765): restore, build, migraciones, tests backend, build Angular, unit y UI-contract en success. Al ser un PR, empaquetado y deploy se omiten deliberadamente. En ese corte aún no se había publicado la landing de Cajora.
 
-La comprobación de acceso desde este entorno devuelve Network is unreachable al VPS por SSH y error de resolución DNS para los hostnames de Leroa. Este resultado no prueba que el dominio esté mal configurado; impide comprobarlo desde esta red. Publicación, backup/restore y smoke autenticado siguen pendientes.
+La comprobación de acceso desde este entorno devuelve Network is unreachable al VPS por SSH y error de resolución DNS para los hostnames de Leroa. Este resultado no prueba que el dominio esté mal configurado; impide comprobarlo desde esta red. En ese corte publicación, backup/restore y smoke autenticado seguían pendientes; el estado vigente está arriba.
