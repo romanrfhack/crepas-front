@@ -1,6 +1,6 @@
 # QA controlado de Cajora
 
-Estado: negocio A parcialmente creado y esquema reparado; pendiente continuar QA operativo y revisión visual.
+Estado: QA operativo de API aprobado en VPS; pendiente aceptación visual, dispositivos y restauración integral.
 
 ## Ejecución
 
@@ -76,3 +76,17 @@ Corrección: backup sin compresión, verificación en una llamada separada que s
 Salida reportada desde VPS: respaldo válido `/var/opt/mssql/data/CrepasDB-cajora-20261007T050213Z-d537fa29.bak`, COPY_ONLY/CHECKSUM sin compresión; VERIFYONLY exitoso. Migrador separado de SHA 8cea6762424377d9ba744e61d356c32592137122 aplicó InventoryV2PerformanceGuardrails, InventoryBatchOperation, CatalogPhase1ImportV2, Ventas2SalesIndexes y F7PendingModelDrift. Historial y CategoryCode verificados, servicio active y health/ready Healthy. No se reinició ni reemplazó la API. VERIFYONLY no sustituye la prueba integral de restauración pendiente.
 
 Continuar mediante `python3 cajora-qa.py --resume-setup /root/cajora-qa/cajora-qa-bc15642e73ab`. Ese modo acepta únicamente un checkpoint failed con un solo negocio A, dos usuarios QA esperados y fallo inicial POST categorías 500 sin categoría/producto/turno/ventas registrados. Archiva resultado previo, reutiliza credenciales QA privadas y bloquea ejecuciones simultáneas del mismo directorio. Verifica catálogo y sucursal matriz actuales, categorías vacías y ausencia de turno antes de completar A; luego crea B de control y ejecuta el escenario completo. No reintentar automáticamente después de un nuevo fallo o avance. Validación local con simulación: no repite altas de tenant/usuarios A, no registra secretos y rechaza reutilizar un checkpoint con producto creado. QA API real aún pendiente.
+
+## QA API aprobado — 7 de octubre de 2026
+
+Evidencia: salida de terminal compartida por el operador del VPS, ejecución reanudada con script del commit `9eac72d95be5410891aba65c4afc237c23974f55`, run `bc15642e73ab`. Resultado: `QA API APROBADO`; evidencia completa permanece en `/root/cajora-qa/cajora-qa-bc15642e73ab/resultado.json`. Este chat no ejecutó las peticiones directamente ni leyó ese JSON final.
+
+A existente se reutilizó sin duplicar tenant/usuarios; B se creó con catálogo propio. Lectura/escritura cruzadas A/B denegadas; cajero sin administración de usuarios. Pagos tarjeta/transferencia sin referencia rechazados sin consumir stock. Cuatro ventas $50 con efectivo, tarjeta, transferencia y mixto, importes/referencias persistidos y reintentos conservando saleId. Stock A: 20 → 16 → 17 al anular venta cash; repetir anulación no duplica devolución. Efectivo esperado antes de anular $170 y después $120. Desglose final: 3 ventas, cash $20/card $80/transfer $50. Cierre contado/esperado $120, diferencia $0. Nuevo login conserva venta/pago y cierre; B conserva stock 20 y no accede a venta A.
+
+Estado final del escenario: A sin turno abierto y stock 17; B stock 20. Pendiente QA real del navegador y dispositivos, restauración integral de respaldo, recuperación de cuenta y despliegue completo de Cajora. No repetir este escenario aprobado ni usar --resume-setup: su checkpoint ya contiene producto/ventas/cierre.
+
+## Siguiente aceptación visual
+
+Usar ventana privada desde la landing HTTPS y el usuario Cashier de A (`qa-cajora-bc15642e73ab-a-cashier@example.com`), con la contraseña del archivo privado del VPS. No compartirla. Confirmar historial de las ventas y anulación/cierre; consultar stock A=17 con TenantAdmin A si la vista de caja no muestra inventario.
+
+Realizar un segundo turno visual separado: abrir con $100, vender una unidad QA de $50 en efectivo (stock esperado 16, caja $150), refrescar para validar persistencia y anular esa venta con motivo (stock 17, caja $100). Cerrar contando $100, diferencia $0; refrescar y comprobar turno cerrado. No mezclar sus operaciones con las métricas del primer turno API aprobado. Verificar comprobante, legibilidad en móvil y destino de impresión real antes del lanzamiento.
