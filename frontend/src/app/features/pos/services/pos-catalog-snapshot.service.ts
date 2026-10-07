@@ -24,15 +24,18 @@ export class PosCatalogSnapshotService {
   private readonly cachePrefix = 'pos_catalog_snapshot_cache';
   private readonly snapshotState = signal<CatalogSnapshotDto | null>(null);
   private previousStoreId: string | null;
+  private previousSessionRevision: number;
 
   readonly snapshot = this.snapshotState.asReadonly();
 
   constructor() {
+    this.previousSessionRevision = this.storeContext.sessionRevision();
     this.previousStoreId = this.normalizeStoreId(this.storeContext.activeStoreId());
 
     effect(() => {
       const activeStoreId = this.normalizeStoreId(this.storeContext.activeStoreId());
-      if (activeStoreId === this.previousStoreId) {
+      const sessionRevision = this.storeContext.sessionRevision();
+      if (activeStoreId === this.previousStoreId && sessionRevision === this.previousSessionRevision) {
         return;
       }
 
@@ -41,6 +44,7 @@ export class PosCatalogSnapshotService {
       }
 
       this.snapshotState.set(null);
+      this.previousSessionRevision = sessionRevision;
       this.previousStoreId = activeStoreId;
     });
   }
@@ -51,14 +55,19 @@ export class PosCatalogSnapshotService {
   }
 
   private fetchSnapshot(storeId: string | null, forceRefresh: boolean): Observable<CatalogSnapshotDto> {
+    const sessionRevision = this.storeContext.sessionRevision();
     const scopedCacheKey = this.getScopedCacheKey(storeId);
     const cached = this.readCache(scopedCacheKey);
     const headers = this.buildHeaders(cached?.etag, forceRefresh);
     const url = this.buildUrl(storeId);
 
     return this.http.get<CatalogSnapshotDto>(url, { observe: 'response', headers }).pipe(
-      map((response) => this.handleSnapshotResponse(scopedCacheKey, response, cached)),
+      map((response) => {
+        this.assertCurrentSession(sessionRevision);
+        return this.handleSnapshotResponse(scopedCacheKey, response, cached);
+      }),
       catchError((error: unknown) => {
+        this.assertCurrentSession(sessionRevision);
         if (this.isNotModifiedError(error) && cached) {
           this.setSnapshotSignal(cached.snapshot);
           return of(cached.snapshot);
@@ -72,6 +81,12 @@ export class PosCatalogSnapshotService {
         throw error;
       }),
     );
+  }
+
+  private assertCurrentSession(revision: number): void {
+    if (revision !== this.storeContext.sessionRevision()) {
+      throw new Error('Catalog response belongs to a previous session.');
+    }
   }
 
   invalidate(storeId?: string) {

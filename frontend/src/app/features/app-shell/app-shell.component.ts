@@ -29,7 +29,7 @@ const SIDENAV_STORAGE_KEY = 'app-shell:sidenav';
       <header class="app-header">
         <div class="brand">
           <div class="brand-heading">
-            <span class="brand-title">Cobranza Digital</span>
+            <span class="brand-title">Cajora</span>
             @if (pageTitle()) {
               <span class="page-title">· {{ pageTitle() }}</span>
             }

@@ -9,6 +9,12 @@ const buildJwt = (roles: string[]) => {
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((token: string) => {
     localStorage.setItem('access_token', token);
+      // Seed a selection owned by this signed-in test session, rather than legacy state.
+      const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      localStorage.setItem('auth_session_context', JSON.stringify([
+        claims.sub ?? claims.email ?? null, claims.tenantId ?? null, claims.storeId ?? null,
+        [...(claims.roles ?? [])].sort(),
+      ]));
     localStorage.setItem('refresh_token', 'refresh-e2e');
     localStorage.setItem('platform_selected_tenant_id', 'tenant-1');
   }, buildJwt(['SuperAdmin']));

@@ -107,3 +107,7 @@ No se removieron rutas ni campos existentes (compatibilidad Release A/B preserva
 - Se introduce rol `AdminStore` como nombre objetivo del administrador de sucursal.
 - Cierre de transición: policies, guards, scoping y emisión de claims/scope ahora operan solo con el modelo final (`SuperAdmin`, `TenantAdmin`, `AdminStore`, `Manager`, `Cashier`).
 - Bootstrapping ejecuta backfill final seguro de usuarios legacy (`Admin` -> `AdminStore`) y elimina membresías `Admin` para evitar dependencia funcional posterior.
+
+## Cajora preparación — 2026-10-06: primer saldo V2 concurrente
+
+Dos operaciones Delta independientes que crean simultáneamente el primer CatalogInventoryBalance podían chocar con el índice único y devolver 500. Se reintenta únicamente el error SQL Server 2601/2627 del índice IX_CatalogInventoryBalances_StoreId_ItemType_ItemId dentro del presupuesto de intentos existente; se recarga el saldo antes de recalcular el delta. Si se agota el presupuesto, se devuelve CONCURRENCY_CONFLICT según el contrato existente. No se cambia DTO, ruta, aislamiento, idempotencia ni reglas de stock negativo. Se mantiene Inventory V2 deshabilitado para el lanzamiento básico. La regresión existente ahora comprueba dos movimientos y dos IDs de operación distintos, además del saldo final.

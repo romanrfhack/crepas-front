@@ -40,6 +40,7 @@ const buildJwt = (role: Role) => {
     JSON.stringify({
       sub: 'e2e-user',
       email: 'cashier@example.com',
+      storeId: 'store-e2e',
       roles: [role],
       exp: 4102444800,
     }),
@@ -51,6 +52,12 @@ const seedAuth = async (page: Page, role: Role) => {
   const token = buildJwt(role);
   await page.addInitScript((accessToken: string) => {
     localStorage.setItem('access_token', accessToken);
+      // Seed a selection owned by this signed-in test session, rather than legacy state.
+      const claims = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      localStorage.setItem('auth_session_context', JSON.stringify([
+        claims.sub ?? claims.email ?? null, claims.tenantId ?? null, claims.storeId ?? null,
+        [...(claims.roles ?? [])].sort(),
+      ]));
     localStorage.setItem('refresh_token', 'refresh-token-e2e');
     localStorage.setItem('pos_active_store_id', 'store-e2e');
   }, token);
@@ -819,4 +826,23 @@ test('J) MVP minimo no expone mayoreo en surface visible de caja', async ({ page
 
   await addSingleProductToCart(page);
   await expect(page.locator('body')).not.toContainText('Mayoreo aplicado');
+});
+
+test('K) Legacy browser store cannot override the logged-in cashier store', async ({ page }) => {
+  const captured = await setupFakePosApi(page, { role: 'Cashier' });
+  await page.addInitScript((token: string) => {
+    localStorage.setItem('access_token', token);
+    localStorage.setItem('refresh_token', 'refresh-token-e2e');
+    localStorage.setItem('pos_active_store_id', 'store-from-previous-account');
+    localStorage.setItem('platform_selected_tenant_id', 'tenant-from-previous-account');
+    localStorage.removeItem('auth_session_context');
+    localStorage.setItem('pos_catalog_snapshot_cache:store-from-previous-account', '{}');
+  }, buildJwt('Cashier'));
+  await openPosCaja(page);
+  await ensureShiftOpen(page);
+  expect(captured.openRequests.at(-1)?.['storeId']).toBe('store-e2e');
+  expect(await page.evaluate(() => localStorage.getItem('platform_selected_tenant_id'))).toBeNull();
+  expect(await page.evaluate(() =>
+    localStorage.getItem('pos_catalog_snapshot_cache:store-from-previous-account'),
+  )).toBeNull();
 });

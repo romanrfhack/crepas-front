@@ -18,6 +18,12 @@ const seedAuth = async (page: Page) => {
   const token = buildJwt('Manager');
   await page.addInitScript((accessToken: string) => {
     localStorage.setItem('access_token', accessToken);
+      // Seed a selection owned by this signed-in test session, rather than legacy state.
+      const claims = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      localStorage.setItem('auth_session_context', JSON.stringify([
+        claims.sub ?? claims.email ?? null, claims.tenantId ?? null, claims.storeId ?? null,
+        [...(claims.roles ?? [])].sort(),
+      ]));
     localStorage.setItem('refresh_token', 'refresh-token-e2e');
     localStorage.setItem('pos_active_store_id', 'store-e2e');
   }, token);

@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: ["main"]
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
 concurrency:
@@ -56,7 +58,7 @@ jobs:
 
   backend_tests:
     needs: changes
-    if: needs.changes.outputs.backend_tests == 'true'
+    if: needs.changes.outputs.backend_tests == 'true' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     env:
       CI_JWT_SIGNING_KEY: "CI_RELEASE_SIGNING_KEY_12345678901234567890"
@@ -113,8 +115,34 @@ jobs:
         working-directory: backend
         run: dotnet test -c Release --no-build
 
+      - name: Package QA migration runner
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/cajora-free-launch'
+        working-directory: backend
+        env:
+          QA_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p artifacts/api-migration
+          dotnet publish src/CobranzaDigital.Api/CobranzaDigital.Api.csproj -c Release --no-build -o artifacts/api-migration
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          Path('artifacts/api-migration/migration-manifest.json').write_text(json.dumps({
+              'kind': 'qa-migration-runner', 'headSha': os.environ['QA_HEAD_SHA'],
+              'buildSha': os.environ['GITHUB_SHA'], 'runId': os.environ['GITHUB_RUN_ID']
+          }, indent=2))
+          PY
+
+      - name: Upload QA migration runner
+        if: github.event_name == 'pull_request' && github.head_ref == 'feat/cajora-free-launch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-migration-${{ github.event.pull_request.head.sha }}
+          path: backend/artifacts/api-migration/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Package API release artifact
-        if: needs.changes.outputs.backend_release == 'true'
+        if: needs.changes.outputs.backend_release == 'true' && github.ref == 'refs/heads/main'
         working-directory: backend
         run: |
           set -euo pipefail
@@ -123,7 +151,7 @@ jobs:
           tar -C artifacts/api-publish -czf "artifacts/api-release-${GITHUB_SHA}.tar.gz" .
 
       - name: Upload API release artifact
-        if: needs.changes.outputs.backend_release == 'true'
+        if: needs.changes.outputs.backend_release == 'true' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: api-release-${{ github.sha }}
@@ -132,7 +160,7 @@ jobs:
 
   frontend_tests:
     needs: changes
-    if: needs.changes.outputs.frontend_tests == 'true'
+    if: needs.changes.outputs.frontend_tests == 'true' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -173,7 +201,7 @@ jobs:
         run: npm run e2e:contract
 
       - name: Detect build output
-        if: needs.changes.outputs.frontend_release == 'true'
+        if: needs.changes.outputs.frontend_release == 'true' && github.ref == 'refs/heads/main'
         working-directory: frontend
         shell: bash
         run: |
@@ -190,7 +218,7 @@ jobs:
           fi
 
       - name: Package WEB release artifact
-        if: needs.changes.outputs.frontend_release == 'true'
+        if: needs.changes.outputs.frontend_release == 'true' && github.ref == 'refs/heads/main'
         working-directory: frontend
         run: |
           set -euo pipefail
@@ -198,7 +226,7 @@ jobs:
           tar -C "$DIST_DIR" -czf "artifacts/web-release-${GITHUB_SHA}.tar.gz" .
 
       - name: Upload WEB release artifact
-        if: needs.changes.outputs.frontend_release == 'true'
+        if: needs.changes.outputs.frontend_release == 'true' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: web-release-${{ github.sha }}
@@ -221,7 +249,7 @@ jobs:
       - backend_tests
       - frontend_tests
     if: >
-      always() &&
+      always() && github.ref == 'refs/heads/main' &&
       (needs.backend_tests.result == 'success' || needs.backend_tests.result == 'skipped') &&
       (needs.frontend_tests.result == 'success' || needs.frontend_tests.result == 'skipped')
     runs-on: ubuntu-latest

@@ -162,4 +162,31 @@ describe('PosCatalogSnapshotService', () => {
     await expect(request).resolves.toEqual(snapshotFixture);
     expect(storeContext.getActiveStoreId()).toBeNull();
   });
+  it('clears the in-memory snapshot on session reset even with the same store', async () => {
+    const first = firstValueFrom(service.getSnapshot());
+    httpMock.expectOne(
+      `${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=context-store`,
+    ).flush(snapshotFixture, { headers: { ETag: '"old"' } });
+    await first;
+    expect(service.snapshot()).not.toBeNull();
+    storeContext.resetForSession();
+    storeContext.setActiveStoreId('context-store');
+    TestBed.flushEffects();
+    expect(service.snapshot()).toBeNull();
+    expect(localStorage.getItem('pos_catalog_snapshot_cache:context-store')).toBeNull();
+  });
+
+  it('does not repopulate a new session with a late catalog response', async () => {
+    const request = firstValueFrom(service.getSnapshot());
+    const assertion = expect(request).rejects.toThrow('previous session');
+    const pending = httpMock.expectOne(
+      `${environment.apiBaseUrl}/v1/pos/catalog/snapshot?storeId=context-store`,
+    );
+    storeContext.resetForSession();
+    storeContext.setActiveStoreId('new-store');
+    pending.flush(snapshotFixture, { headers: { ETag: '"old"' } });
+    await assertion;
+    expect(service.snapshot()).toBeNull();
+    expect(localStorage.getItem('pos_catalog_snapshot_cache:context-store')).toBeNull();
+  });
 });

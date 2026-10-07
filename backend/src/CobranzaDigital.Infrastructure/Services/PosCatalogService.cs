@@ -12,6 +12,7 @@ using CobranzaDigital.Infrastructure.Persistence;
 using FluentValidation;
 
 using Microsoft.AspNetCore.Http;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -1048,6 +1049,20 @@ public sealed class PosCatalogService : IPosCatalogService
                 catch (DbUpdateException dbEx) when (dbEx.InnerException?.Message.Contains("ClientOperationId", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     return await GetExistingByClientOperationAsync().ConfigureAwait(false);
+                }
+                catch (DbUpdateException dbEx) when (
+                    dbEx.InnerException is SqlException { Number: 2601 or 2627 } sqlEx
+                    && sqlEx.Message.Contains("IX_CatalogInventoryBalances_StoreId_ItemType_ItemId", StringComparison.OrdinalIgnoreCase)
+                    && attempt < deltaMaxAttempts)
+                {
+                    // Another request created the first balance. Reload it on the next attempt.
+                    continue;
+                }
+                catch (DbUpdateException dbEx) when (
+                    dbEx.InnerException is SqlException { Number: 2601 or 2627 } sqlEx
+                    && sqlEx.Message.Contains("IX_CatalogInventoryBalances_StoreId_ItemType_ItemId", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InventoryAdjustmentConflictException("CONCURRENCY_CONFLICT", "Balance version mismatch.");
                 }
             }
 
