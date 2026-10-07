@@ -6,6 +6,9 @@ const ACTIVE_STORE_KEY = 'pos_active_store_id';
 export class StoreContextService {
   private readonly activeStoreIdState = signal<string | null>(this.readStoreId());
 
+  private readonly sessionRevisionState = signal(0);
+  readonly sessionRevision = this.sessionRevisionState.asReadonly();
+
   readonly activeStoreId = this.activeStoreIdState.asReadonly();
 
   getActiveStoreId(): string | null {
@@ -23,6 +26,17 @@ export class StoreContextService {
     }
 
     localStorage.removeItem(ACTIVE_STORE_KEY);
+  }
+
+  resetForSession(): void {
+    this.setActiveStoreId(null);
+    const keys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index));
+    for (const key of keys) {
+      if (key === 'pos_catalog_snapshot_cache' || key?.startsWith('pos_catalog_snapshot_cache:')) {
+        localStorage.removeItem(key);
+      }
+    }
+    this.sessionRevisionState.update((revision) => revision + 1);
   }
 
   private readStoreId(): string | null {

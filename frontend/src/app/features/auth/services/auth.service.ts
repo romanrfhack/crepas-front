@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { tap } from 'rxjs';
 import { ApiClient } from '../../../core/services/api-client';
@@ -10,6 +10,10 @@ import {
   AuthTokensResponse,
 } from '../models/auth.models';
 
+import { StoreContextService } from '../../pos/services/store-context.service';
+import { PlatformTenantContextService } from '../../platform/services/platform-tenant-context.service';
+
+const SESSION_CONTEXT_KEY = 'auth_session_context';
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 const DEFAULT_POST_LOGIN_ROUTE = '/app/dashboard';
@@ -19,6 +23,8 @@ const CASHIER_POST_LOGIN_ROUTE = '/app/pos/caja';
 export class AuthService {
   private readonly apiClient = inject(ApiClient);
   private readonly router = inject(Router);
+  private readonly storeContext = inject(StoreContextService);
+  private readonly tenantContext = inject(PlatformTenantContextService);
   private readonly accessToken = signal<string | null>(localStorage.getItem(ACCESS_TOKEN_KEY));
   private readonly refreshToken = signal<string | null>(localStorage.getItem(REFRESH_TOKEN_KEY));
   private readonly parsedJwtPayload = computed(() => this.parseTokenPayload(this.accessToken()));
@@ -27,10 +33,27 @@ export class AuthService {
   readonly rolesSig = computed(() => this.extractRoles(this.parsedJwtPayload()));
   readonly sessionScopeSig = computed(() => this.extractSessionScope(this.parsedJwtPayload()));
 
+  constructor() {
+    const onStorage = (event: StorageEvent) => {
+      if (event.storageArea === localStorage && (event.key === ACCESS_TOKEN_KEY || event.key === null)
+          && localStorage.getItem(ACCESS_TOKEN_KEY) !== this.accessToken()) {
+        // Other tabs share tokens, but their in-memory screens belong to the old session.
+        this.reloadBrowserSession();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    inject(DestroyRef).onDestroy(() => window.removeEventListener('storage', onStorage));
+    const scope = this.contextScope(this.accessToken());
+    // Migrate unowned browser state from older releases on the first load.
+    if (!this.accessToken() || localStorage.getItem(SESSION_CONTEXT_KEY) !== scope) {
+      this.resetContext(this.accessToken());
+    }
+  }
+
   login(payload: AuthLoginRequest) {
     return this.apiClient
       .post<AuthTokensResponse>('/v1/auth/login', payload)
-      .pipe(tap((response) => this.storeTokens(this.normalizeTokens(response))));
+      .pipe(tap((response) => this.storeTokens(this.normalizeTokens(response), true)));
   }
 
   loginAndRedirect(payload: AuthLoginRequest, returnUrl?: string | null) {
@@ -45,7 +68,7 @@ export class AuthService {
   register(payload: AuthRegisterRequest) {
     return this.apiClient
       .post<AuthTokensResponse>('/v1/auth/register', payload)
-      .pipe(tap((response) => this.storeTokens(this.normalizeTokens(response))));
+      .pipe(tap((response) => this.storeTokens(this.normalizeTokens(response), true)));
   }
 
   refresh(payload: AuthRefreshRequest) {
@@ -59,6 +82,7 @@ export class AuthService {
     localStorage.removeItem(REFRESH_TOKEN_KEY);
     this.accessToken.set(null);
     this.refreshToken.set(null);
+    this.resetContext(null);
   }
 
   isAuthenticated() {
@@ -114,11 +138,43 @@ export class AuthService {
     return DEFAULT_POST_LOGIN_ROUTE;
   }
 
-  private storeTokens(tokens: AuthTokens) {
+  private storeTokens(tokens: AuthTokens, newSession = false) {
+    if (newSession || this.contextScope(tokens.accessToken) !== this.contextScope(this.accessToken())) {
+      this.resetContext(tokens.accessToken);
+    }
     localStorage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
     localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
     this.accessToken.set(tokens.accessToken);
     this.refreshToken.set(tokens.refreshToken);
+  }
+
+  private reloadBrowserSession(): void {
+    window.location.reload();
+  }
+
+  private contextScope(token: string | null): string {
+    const payload = this.parseTokenPayload(token);
+    return JSON.stringify([
+      payload?.['sub'] ?? payload?.['email'] ?? null,
+      payload?.['tenantId'] ?? null,
+      payload?.['storeId'] ?? null,
+      this.extractRoles(payload).sort(),
+    ]);
+  }
+
+  private resetContext(token: string | null): void {
+    this.tenantContext.setSelectedTenantId(null);
+    this.storeContext.resetForSession();
+    const payload = this.parseTokenPayload(token);
+    const storeId = this.extractGuidClaim(payload, [
+      'storeId', 'store_id', 'pos_store_id', 'default_store_id',
+    ]);
+    this.storeContext.setActiveStoreId(storeId);
+    if (token) {
+      localStorage.setItem(SESSION_CONTEXT_KEY, this.contextScope(token));
+    } else {
+      localStorage.removeItem(SESSION_CONTEXT_KEY);
+    }
   }
 
   private normalizeTokens(response: AuthTokensResponse): AuthTokens {
