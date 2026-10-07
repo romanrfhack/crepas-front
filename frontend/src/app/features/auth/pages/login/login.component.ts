@@ -25,6 +25,7 @@ interface LoginModel {
     <main class="auth-container">
       <section class="auth-card" aria-labelledby="login-title">
         <header class="auth-header">
+          <p class="auth-brand" data-testid="login-brand">Cajora <small>por Leroa</small></p>
           <h1 id="login-title">Iniciar sesión</h1>
           <p>Ingresa con tus credenciales para continuar.</p>
         </header>
@@ -156,6 +157,17 @@ interface LoginModel {
       background: rgba(255, 255, 255, 0.78);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
+    }
+
+    .auth-brand {
+      font-size: 1.7rem;
+      font-weight: 750;
+      color: var(--brand-cocoa);
+    }
+
+    .auth-brand small {
+      font-size: 0.8rem;
+      font-weight: 500;
     }
 
     .auth-header h1 {
