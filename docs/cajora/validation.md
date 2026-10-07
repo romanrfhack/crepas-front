@@ -35,3 +35,7 @@ Preparación apta para PR. No declarar Cajora publicado ni activar nuevos negoci
 ## Bloqueo detectado por CI y corrección mínima
 
 El primer CI del PR falló en restore con NU1903 para Microsoft.OpenApi 2.3.10 (GHSA-v5pm-xwqc-g5wc). Se actualiza únicamente ese paquete a 2.7.5, versión corregida de la misma línea mayor según el [aviso del mantenedor](https://github.com/advisories/GHSA-v5pm-xwqc-g5wc). No se desactiva NuGet Audit ni warnings-as-errors. Compilación, migraciones y suite backend deben pasar nuevamente antes de declarar validado el cambio.
+
+## Concurrencia detectada en SQL Server
+
+CI del commit 3cc3133 pasó restore/build/migraciones; 10 pruebas de Application y 162 de 163 pruebas API aprobaron. Falló InventoryV2_Adjustments_Delta_Concurrent_Requests_Eventually_Succeed (un ajuste devolvió 500). La revisión encontró falta de manejo de carrera al insertar el primer saldo bajo el índice único. Se agrega retry acotado a ese índice y se refuerza la regresión para comprobar saldo y movimientos sin duplicación. La siguiente ejecución debe confirmar la corrección. V2 continúa fuera del básico.

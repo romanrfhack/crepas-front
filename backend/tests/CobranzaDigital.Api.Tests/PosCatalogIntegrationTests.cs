@@ -973,7 +973,7 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         var product = await PostAsync<ProductResponse>("/api/v1/pos/admin/products", token, new { name = "V2 Delta Concurrency Product", externalCode = "DELTA-CON-V2", categoryId = category.Id, basePrice = 10m, isActive = true, isAvailable = true, isInventoryTracked = true });
         var snapshot = await GetSnapshotAsync(token);
 
-        async Task<HttpStatusCode> SendDeltaAsync(string clientOperationId)
+        async Task<(HttpStatusCode Status, string Body)> SendDeltaAsync(string clientOperationId)
         {
             using var req = CreateAuthorizedRequest(HttpMethod.Post, "/api/v2/pos/inventory/adjustments", token);
             req.Content = JsonContent.Create(new
@@ -987,14 +987,14 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
                 clientOperationId
             });
             using var resp = await _client.SendAsync(req);
-            return resp.StatusCode;
+            return (resp.StatusCode, await resp.Content.ReadAsStringAsync());
         }
 
         var responses = await Task.WhenAll(
             SendDeltaAsync(Guid.NewGuid().ToString("D")),
             SendDeltaAsync(Guid.NewGuid().ToString("D")));
 
-        Assert.All(responses, code => Assert.Equal(HttpStatusCode.OK, code));
+        Assert.All(responses, response => Assert.True(response.Status == HttpStatusCode.OK, response.Body));
 
         using var balancesReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v2/pos/inventory/balances?storeId={snapshot.StoreId:D}&q=DELTA-CON-V2", token);
         using var balancesResp = await _client.SendAsync(balancesReq);
@@ -1002,6 +1002,15 @@ public sealed class PosCatalogIntegrationTests : IClassFixture<CobranzaDigitalAp
         var balances = (await balancesResp.Content.ReadFromJsonAsync<PagedInventoryBalancesResponse>())!;
         var row = Assert.Single(balances.Items, x => x.ItemId == product.Id);
         Assert.Equal(2m, row.OnHandQty);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CobranzaDigitalDbContext>();
+        var movements = await db.CatalogInventoryAdjustments.AsNoTracking()
+            .Where(x => x.StoreId == snapshot.StoreId && x.ItemId == product.Id)
+            .ToListAsync();
+        Assert.Equal(2, movements.Count);
+        Assert.Equal(2m, movements.Sum(x => x.DeltaQty));
+        Assert.Equal(2, movements.Select(x => x.ClientOperationId).Distinct().Count());
     }
 
     [Fact]
