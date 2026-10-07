@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """QA controlado contra API existente. No usa SQL ni guarda tokens de sesión."""
 import getpass
+import argparse
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -19,8 +21,53 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class QA:
-    def __init__(self):
+    def __init__(self, resume_setup=None):
         os.umask(0o077)
+        self.resume_record = None
+        self.resume_password = None
+        if resume_setup:
+            self.directory = Path(resume_setup).resolve()
+            self.lock = (self.directory / "execution.lock").open("a")
+            fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            raw = (self.directory / "resultado.json").read_text()
+            self.report = json.loads(raw)
+            self.run = self.report["run"]
+            businesses = self.report.get("businesses", [])
+            last = self.report.get("requests", [])[-1]
+            if (self.report.get("status") != "failed" or self.report.get("base") != BASE
+                    or self.directory.name != "cajora-qa-" + self.run
+                    or len(businesses) != 1
+                    or (last.get("method"), last.get("path"), last.get("status"))
+                    != ("POST", "/pos/admin/categories", 500)):
+                raise RuntimeError("Checkpoint no elegible: sólo se retoma el fallo inicial de categoría")
+            record = businesses[0]
+            if (record.get("name") != "QA Cajora " + self.run + " A"
+                    or any(key in record for key in ("categoryId", "productId", "shiftId", "saleIds"))
+                    or len(record.get("users", [])) != 2):
+                raise RuntimeError("Checkpoint tiene avances distintos del alta inicial; no repetir operaciones")
+            for key in ("verticalId", "templateId", "tenantId", "storeId"):
+                uuid.UUID(record[key])
+            for role in ("TenantAdmin", "Cashier"):
+                matches = [u for u in record["users"] if u["role"] == role]
+                if len(matches) != 1 or matches[0]["email"] != f"qa-cajora-{self.run}-a-{role.lower()}@example.com":
+                    raise RuntimeError("Usuarios del checkpoint no coinciden con QA")
+                uuid.UUID(matches[0]["id"])
+            credentials = self.directory / "credenciales-qa.txt"
+            if credentials.stat().st_mode & 0o077:
+                raise RuntimeError("Credenciales QA deben tener permisos privados (chmod 600)")
+            first = credentials.read_text().splitlines()[0]
+            prefix = "Contraseña EXCLUSIVA de los usuarios QA: "
+            if not first.startswith(prefix) or not first[len(prefix):]:
+                raise RuntimeError("Archivo de credenciales QA no interpretable")
+            self.resume_password = first[len(prefix):]
+            self.resume_record = record
+            (self.directory / ("resultado-before-resume-" + uuid.uuid4().hex[:8] + ".json")).write_text(raw)
+            self.report["status"] = "running"
+            self.report.pop("error", None)
+            self.report["resumedFrom"] = "initial-category-failure"
+            self.opener = urllib.request.build_opener(NoRedirect())
+            self.save()
+            return
         self.run = uuid.uuid4().hex[:12]
         self.directory = Path.cwd() / ("cajora-qa-" + self.run)
         self.directory.mkdir(mode=0o700)
@@ -102,6 +149,22 @@ class QA:
             record.setdefault("users", []).append({"id": created["id"], "email": email, "role": role})
             self.save()
             users[role] = self.login(email, password)
+        return self.finish_catalog(record, users, label)
+
+    def resume_a(self, platform, password):
+        record = self.resume_record
+        details = self.call("GET", "/platform/tenants/" + record["tenantId"], platform)
+        self.check("A existente: mismo catálogo y sucursal matriz",
+                   details["catalogTemplateId"] == record["templateId"]
+                   and details["defaultStoreId"] == record["storeId"])
+        users = {u["role"]: self.login(u["email"], password) for u in record["users"]}
+        categories = self.call("GET", "/pos/admin/categories", users["TenantAdmin"])
+        self.check("Catálogo A sin categorías previas; alta puede continuar", len(categories) == 0)
+        self.call("GET", "/pos/shifts/current?storeId=" + record["storeId"], users["Cashier"], expected=(204,))
+        return self.finish_catalog(record, users, "A")
+
+    def finish_catalog(self, record, users, label):
+        prefix = record["name"]
         category = self.call("POST", "/pos/admin/categories", users["TenantAdmin"],
                              {"categoryCode": "QA-" + self.run + "-" + label, "name": prefix, "sortOrder": 1, "isActive": True})
         record["categoryId"] = category["id"]
@@ -126,7 +189,8 @@ class QA:
         return matches[0]["stockOnHandQty"]
 
     def execute(self):
-        print("Se crearán SOLO negocios nuevos QA, con catálogos y usuarios exclusivos.")
+        print("Se retomará el negocio A existente y se creará B de control." if self.resume_record
+              else "Se crearán SOLO negocios nuevos QA, con catálogos y usuarios exclusivos.")
         print("Aislamiento lógico en la BD existente. No se borra ningún dato al terminar.")
         print("Las operaciones QA pueden aparecer en los reportes globales del administrador.")
         email = input("Correo de SuperAdmin: ").strip()
@@ -135,11 +199,12 @@ class QA:
         # El listado existe en despliegues que aún no incluyen el formulario /options.
         # Sólo comprobar acceso; no guardar ni mostrar los usuarios devueltos.
         self.call("GET", "/admin/users?page=1&pageSize=1", platform)
-        password = "Qa!" + secrets.token_urlsafe(24) + "9aA"
+        password = self.resume_password or ("Qa!" + secrets.token_urlsafe(24) + "9aA")
         credentials = self.directory / "credenciales-qa.txt"
-        credentials.write_text("Contraseña EXCLUSIVA de los usuarios QA: " + password + "\n"
-                               "Correos/roles: consultar resultado.json. No compartir este archivo.\n")
-        a, ua = self.setup(platform, "A", password)
+        if not self.resume_record:
+            credentials.write_text("Contraseña EXCLUSIVA de los usuarios QA: " + password + "\n"
+                                   "Correos/roles: consultar resultado.json. No compartir este archivo.\n")
+        a, ua = self.resume_a(platform, password) if self.resume_record else self.setup(platform, "A", password)
         b, ub = self.setup(platform, "B", password)
         self.check("Inventario inicial A = 20", self.stock(a, ua["TenantAdmin"]) == 20)
         self.check("Inventario inicial B = 20", self.stock(b, ub["TenantAdmin"]) == 20)
@@ -226,7 +291,15 @@ class QA:
 
 
 if __name__ == "__main__":
-    qa = QA()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--resume-setup", type=Path,
+                        help="Directorio QA detenido exclusivamente en su primera categoría")
+    args = parser.parse_args()
+    try:
+        qa = QA(args.resume_setup)
+    except Exception as error:
+        print("NO INICIADO:", str(error) if isinstance(error, RuntimeError) else type(error).__name__)
+        sys.exit(1)
     try:
         qa.execute()
     except (Exception, KeyboardInterrupt) as error:
