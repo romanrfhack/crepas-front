@@ -37,8 +37,15 @@ export class AuthService {
     const onStorage = (event: StorageEvent) => {
       if (event.storageArea === localStorage && (event.key === ACCESS_TOKEN_KEY || event.key === null)
           && localStorage.getItem(ACCESS_TOKEN_KEY) !== this.accessToken()) {
-        // Other tabs share tokens, but their in-memory screens belong to the old session.
-        this.reloadBrowserSession();
+        const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+        if (token && this.contextScope(token) === this.contextScope(this.accessToken())) {
+          // A token refresh for the same account must not discard the cart.
+          this.accessToken.set(token);
+          this.refreshToken.set(localStorage.getItem(REFRESH_TOKEN_KEY));
+        } else {
+          // Screens from another account cannot keep operating with the shared new token.
+          this.reloadBrowserSession();
+        }
       }
     };
     window.addEventListener('storage', onStorage);

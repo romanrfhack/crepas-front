@@ -149,4 +149,19 @@ describe('AuthService', () => {
     expect(TestBed.inject(StoreContextService).getActiveStoreId()).toBe('selected-store');
     expect(TestBed.inject(PlatformTenantContextService).getSelectedTenantId()).toBe('selected-tenant');
   });
+  it('accepts token renewal from another tab without discarding the same account screen', () => {
+    const payload = { sub: 'same-user', storeId: 'same-store' };
+    localStorage.setItem('access_token', createToken(payload));
+    const service = setupAuthService(payload);
+    const reload = vi.spyOn(service as unknown as { reloadBrowserSession(): void }, 'reloadBrowserSession')
+      .mockImplementation(() => undefined);
+    const renewed = createToken({ ...payload, exp: 9999999999 });
+    localStorage.setItem('access_token', renewed);
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: 'access_token', storageArea: localStorage,
+    }));
+    expect(reload).not.toHaveBeenCalled();
+    expect(service.getAccessToken()).toBe(renewed);
+    expect(TestBed.inject(StoreContextService).getActiveStoreId()).toBe('same-store');
+  });
 });
