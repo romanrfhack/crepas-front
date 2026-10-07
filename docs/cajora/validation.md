@@ -1,7 +1,7 @@
 # Evidencia de preparación Cajora
 
 Fecha: 2026-10-06 (America/Mexico_City). Base: main `c7caa8d26ba2d1cd5935fcaeaa559156ea6e263c`.
-Estado: frontend validado localmente; lanzamiento pendiente de backend y host.
+Estado: frontend y backend validados por CI; lanzamiento pendiente de validación operativa del host.
 
 ## Resultados locales
 
@@ -20,7 +20,7 @@ La landing no simula un formulario exitoso ni anuncia acceso inmediato: remite a
 
 ## Validaciones pendientes
 
-- GitHub CI del PR, incluido backend con SQL Server y migraciones. No hay dotnet/Docker/SQL Server local en este entorno.
+- CI del PR aprobado para el commit 84d6ed0593fa872b7f4eb9d668daec164ffe2098: build, migraciones SQL Server, pruebas backend, build frontend, unit tests y UI-contract. Evidencia: https://github.com/romanrfhack/crepas-front/actions/runs/37553326018 . No sustituye la validación del host.
 - Nginx/TLS/DNS del nuevo hostname y smoke autenticado del servidor.
 - SHA backend actual, backups/restauración y ciclo con datos persistidos en entorno de prueba.
 - Operación con dos clientes aislados antes de ampliar Ruta A.
@@ -38,4 +38,10 @@ El primer CI del PR falló en restore con NU1903 para Microsoft.OpenApi 2.3.10 (
 
 ## Concurrencia detectada en SQL Server
 
-CI del commit 3cc3133 pasó restore/build/migraciones; 10 pruebas de Application y 162 de 163 pruebas API aprobaron. Falló InventoryV2_Adjustments_Delta_Concurrent_Requests_Eventually_Succeed (un ajuste devolvió 500). La revisión encontró falta de manejo de carrera al insertar el primer saldo bajo el índice único. Se agrega retry acotado a ese índice y se refuerza la regresión para comprobar saldo y movimientos sin duplicación. La siguiente ejecución debe confirmar la corrección. V2 continúa fuera del básico.
+CI del commit 3cc3133 pasó restore/build/migraciones; 10 pruebas de Application y 162 de 163 pruebas API aprobaron. Falló InventoryV2_Adjustments_Delta_Concurrent_Requests_Eventually_Succeed (un ajuste devolvió 500). La revisión encontró falta de manejo de carrera al insertar el primer saldo bajo el índice único. Se agrega retry acotado a ese índice y se refuerza la regresión para comprobar saldo y movimientos sin duplicación. El CI 37553326018 del commit 84d6ed0593fa872b7f4eb9d668daec164ffe2098 confirmó la corrección con backend_tests y frontend_tests aprobados. V2 continúa fuera del básico.
+
+## Cierre de validación CI
+
+Verificados los jobs backend_tests (112573740758) y frontend_tests (112573740765): restore, build, migraciones, tests backend, build Angular, unit y UI-contract en success. Al ser un PR, empaquetado y deploy se omiten deliberadamente. No se ha publicado Cajora.
+
+La comprobación de acceso desde este entorno devuelve Network is unreachable al VPS por SSH y error de resolución DNS para los hostnames de Leroa. Este resultado no prueba que el dominio esté mal configurado; impide comprobarlo desde esta red. Publicación, backup/restore y smoke autenticado siguen pendientes.
