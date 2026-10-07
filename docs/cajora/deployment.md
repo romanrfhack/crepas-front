@@ -1,6 +1,34 @@
 # Publicación de cajora.leroa.com.mx
 
-Estado: preparación; no aplicada. Reutiliza el backend existente solo después de aprobar aislamiento y operación.
+## Estado confirmado — 2026-10-06, America/Mexico_City
+
+Landing publicada por Román desde el commit ff22a1fbf9e634ca033c75a81e0236b41e58b39c. Evidencia aportada: salida de Certbot, curl y capturas de navegador. No equivale a despliegue del frontend Angular completo ni a validación funcional autenticada.
+
+- DNS A: cajora.leroa.com.mx → 194.238.26.70; consultas a 1.1.1.1 y 8.8.8.8 confirmadas.
+- Landing: /var/www/cajora/landing-releases/ff22a1fbf9e634ca033c75a81e0236b41e58b39c.
+- Archivos descargados: frontend/public/cajora/index.html y styles.css del commit indicado.
+- Nginx: /etc/nginx/sites-available/cajora, habilitado por enlace en sites-enabled.
+- HTTPS emitido por Certbot; certificado vence 2027-01-05, renovación automática configurada según su salida.
+- Raíz HTTPS: HTTP/2 200, text/html, 9105 bytes.
+- /cajora/styles.css: HTTP/2 200, text/css, 6861 bytes.
+- /login: redirección temporal 302 a https://cobranzadigital.site/login; comprobada por Román en navegador.
+- Landing mantiene mensaje de preparación y noindex. No se habilitan nuevos negocios todavía.
+- No se actualizaron API, BD ni aplicación Angular de CobranzaDigital. Frontend existente: c7caa8d, r344.
+
+Configuración inicial aplicada: landing estática en raíz, /login redirigido al dominio existente y restantes archivos mediante try_files $uri =404. Certbot agregó HTTPS/redirección HTTP. La plantilla ops/nginx/cajora-http.conf es para la siguiente fase con Angular completo; NO representa todavía la configuración aplicada.
+
+## Próxima fase
+
+1. Reconciliar versión API desplegada y disponibilidad de backup/restore.
+2. Preparar entorno/tenant de prueba aislado para operación, evitando ventas ficticias sobre datos comerciales.
+3. Validar login por rol, venta/pagos/referencias, idempotencia, anulación, inventario y cierre; probar aislamiento entre clientes.
+4. Publicar frontend Angular desde artefacto aprobado por CI y habilitar /api, /app y deep links en el nuevo hostname.
+5. Sustituir la redirección temporal /login, comprobar sesión por origen, health y smoke autenticado.
+6. Abrir altas asistidas únicamente tras cerrar puertas de lanzamiento.
+
+## Runbook previsto para aplicación completa
+
+Estado de esta fase: preparación; no aplicada. Reutiliza el backend existente solo después de aprobar aislamiento y operación.
 
 ## DNS y TLS
 
