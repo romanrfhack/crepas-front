@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Preflight por defecto; --apply respalda/verifica y ejecuta el migrador oficial."""
 import argparse
+import getpass
 from datetime import datetime, timezone
 import importlib.util
 import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import uuid
 
 SPEC = importlib.util.spec_from_file_location("audit", Path(__file__).with_name("cajora-db-audit.py"))
@@ -23,6 +25,8 @@ def main():
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--release-dir", type=Path)
     parser.add_argument("--expected-sha")
+    parser.add_argument("--backup-admin", action="store_true",
+                        help="Solicita credenciales SQL existentes sólo para backup/VERIFYONLY")
     args = parser.parse_args()
     context = AUDIT.connection_context()
     if context["database"] != "CrepasDB":
@@ -80,7 +84,29 @@ SELECT MigrationId FROM dbo.__EFMigrationsHistory ORDER BY MigrationId;
     if not args.apply:
         print("Sólo lectura. --apply crea respaldo COPY_ONLY, VERIFYONLY y ejecuta migraciones.")
         return
-    backup_dir = AUDIT.run_sql(context,
+    backup_context = context
+    if args.backup_admin:
+        backup_context = dict(context)
+        backup_context["sqlenv"] = dict(context["sqlenv"])
+        with open("/dev/tty") as terminal:
+            previous_stdin = sys.stdin
+            try:
+                sys.stdin = terminal
+                backup_context["user"] = input("Usuario administrador de SQL Server existente (no correo de Cajora): ").strip()
+                backup_context["sqlenv"]["SQLCMDPASSWORD"] = getpass.getpass("Contraseña SQL (oculta): ")
+            finally:
+                sys.stdin = previous_stdin
+        if not backup_context["user"] or not backup_context["sqlenv"]["SQLCMDPASSWORD"]:
+            raise RuntimeError("Credenciales SQL vacías; detenido sin respaldo ni migraciones")
+    AUDIT.run_sql(backup_context, """
+SET NOCOUNT ON;
+IF COALESCE(IS_SRVROLEMEMBER(N'sysadmin'),0)<>1
+   AND COALESCE(IS_SRVROLEMEMBER(N'dbcreator'),0)<>1
+   AND COALESCE(HAS_PERMS_BY_NAME(NULL,NULL,N'CREATE ANY DATABASE'),0)<>1
+    THROW 51000,'La cuenta SQL necesita permiso para VERIFYONLY; usar --backup-admin con una cuenta DBA existente',1;
+SELECT CONVERT(nvarchar(128),SERVERPROPERTY('Edition')) AS SqlEdition;
+""")
+    backup_dir = AUDIT.run_sql(backup_context,
         "SET NOCOUNT ON; SELECT CONVERT(nvarchar(4000),SERVERPROPERTY('InstanceDefaultBackupPath'));",
         capture=True).strip()
     if not backup_dir.startswith("/") or "\n" in backup_dir:
@@ -88,10 +114,11 @@ SELECT MigrationId FROM dbo.__EFMigrationsHistory ORDER BY MigrationId;
     backup_name = "CrepasDB-cajora-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8] + ".bak"
     backup_path = backup_dir.rstrip("/") + "/" + backup_name
     print("Respaldo en servidor SQL:", backup_path, flush=True)
-    AUDIT.run_sql(context,
+    AUDIT.run_sql(backup_context,
         "BACKUP DATABASE [CrepasDB] TO DISK=" + literal(backup_path) +
-        " WITH COPY_ONLY,CHECKSUM,COMPRESSION; RESTORE VERIFYONLY FROM DISK=" +
-        literal(backup_path) + " WITH CHECKSUM;", timeout=1800)
+        " WITH COPY_ONLY,CHECKSUM;", timeout=1800)
+    AUDIT.run_sql(backup_context,
+        "RESTORE VERIFYONLY FROM DISK=" + literal(backup_path) + " WITH CHECKSUM;", timeout=1800)
     print("Respaldo y VERIFYONLY: OK. Ejecutando migrador oficial.", flush=True)
     process_env = dict(os.environ)
     process_env.update(context["processenv"])
